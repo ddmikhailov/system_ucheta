@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Node / frontend
+node_modules/
+dist/
+frontend/.vite/
+backend/static/
+
+# DB / local artifacts
+*.db
+backend/_gen_tmp.db
+backend/_test_seed.db
+
+# Персональные данные (реальные ФИО студентов и кураторов) — репозиторий
+# публичный, эти файлы передаются на сервер отдельно, не через git.
+# См. backend/scripts/import/data/README.md.
+backend/scripts/import/data/*.csv
+
+# IDE
+.vscode/
+.idea/
+
+# Логи
+*.log
