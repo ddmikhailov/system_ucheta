@@ -1,0 +1,17 @@
+# Конфигурация развёртывания в Amvera Cloud.
+# Всё приложение (API + фронтенд + Telegram-бот + планировщик) — один образ,
+# см. README, раздел «Архитектура: почему единое приложение».
+# MySQL поднимается отдельным преднастроенным сервисом Amvera.
+meta:
+  environment: docker
+  toolchain:
+    name: docker
+
+build:
+  dockerfile: Dockerfile
+
+run:
+  containerPort: 8000
+  # Постоянное хранилище: сюда кладут выгрузки с ФИО (import/*.csv),
+  # их нет в публичном репозитории.
+  persistenceMount: /data

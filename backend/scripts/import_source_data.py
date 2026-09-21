@@ -29,7 +29,11 @@ from app.models import (
     User,
 )
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "import", "data")
+# На сервере CSV с реальными ФИО лежат не в репозитории (он публичный), а в
+# постоянном хранилище — путь задаётся IMPORT_DATA_DIR.
+DATA_DIR = os.environ.get("IMPORT_DATA_DIR") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "import", "data"
+)
 PILOT_DEPARTMENT_NAME = "Диджитал"
 
 # Дата начала занятий по заголовку исходных таблиц ("2026-09-01" в шапке ИТОГ).
