@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { api, ApiError } from "../../api/client";
-import type { StudentAdmin, StudyGroupAdmin } from "../../api/types";
+import type { DeleteResult, StudentAdmin, StudyGroupAdmin } from "../../api/types";
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -18,12 +18,19 @@ export default function StudentsTab({ canEdit }: { canEdit: boolean }) {
   const [groupId, setGroupId] = useState<number | null>(null);
   const [students, setStudents] = useState<StudentAdmin[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const [lastName, setLastName] = useState("");
   const [firstName, setFirstName] = useState("");
   const [middleName, setMiddleName] = useState("");
   const [enrolledAt, setEnrolledAt] = useState(todayIso());
+
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editLastName, setEditLastName] = useState("");
+  const [editFirstName, setEditFirstName] = useState("");
+  const [editMiddleName, setEditMiddleName] = useState("");
+  const [editGroupId, setEditGroupId] = useState<number | null>(null);
 
   useEffect(() => {
     api.get<StudyGroupAdmin[]>("/admin/groups").then((gs) => {
@@ -76,9 +83,57 @@ export default function StudentsTab({ canEdit }: { canEdit: boolean }) {
     }
   }
 
+  function splitFullName(full: string): [string, string, string] {
+    const parts = full.split(" ");
+    return [parts[0] ?? "", parts[1] ?? "", parts.slice(2).join(" ")];
+  }
+
+  function startEdit(s: StudentAdmin) {
+    const [last, first, middle] = splitFullName(s.full_name);
+    setEditingId(s.id);
+    setEditLastName(last);
+    setEditFirstName(first);
+    setEditMiddleName(middle);
+    setEditGroupId(s.study_group_id);
+  }
+
+  async function saveEdit(studentId: number) {
+    setError(null);
+    try {
+      await api.patch(`/admin/students/${studentId}`, {
+        last_name: editLastName,
+        first_name: editFirstName,
+        middle_name: editMiddleName || null,
+        study_group_id: editGroupId,
+      });
+      setEditingId(null);
+      loadStudents();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не удалось сохранить");
+    }
+  }
+
+  async function removeStudent(s: StudentAdmin) {
+    if (!window.confirm(`Удалить студента «${s.full_name}» насовсем?`)) return;
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await api.delete<DeleteResult>(`/admin/students/${s.id}`);
+      setNotice(res.detail);
+      loadStudents();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не удалось удалить");
+    }
+  }
+
   return (
     <div>
       {error && <div className="error-text">{error}</div>}
+      {notice && (
+        <div className="day-status submitted">
+          {notice} <button className="link-btn" onClick={() => setNotice(null)}>Скрыть</button>
+        </div>
+      )}
       <div className="toolbar">
         <select value={groupId ?? ""} onChange={(e) => setGroupId(Number(e.target.value))}>
           {groups.map((g) => (
@@ -93,15 +148,39 @@ export default function StudentsTab({ canEdit }: { canEdit: boolean }) {
         <thead>
           <tr>
             <th>ФИО</th>
+            <th>Группа</th>
             <th>Статус</th>
             <th>Зачислен</th>
             <th>Выбыл</th>
+            {canEdit && <th>Управление</th>}
           </tr>
         </thead>
         <tbody>
           {students.map((s) => (
             <tr key={s.id}>
-              <td>{s.full_name}</td>
+              {editingId === s.id ? (
+                <>
+                  <td>
+                    <input value={editLastName} onChange={(e) => setEditLastName(e.target.value)} placeholder="Фамилия" />
+                    <input value={editFirstName} onChange={(e) => setEditFirstName(e.target.value)} placeholder="Имя" />
+                    <input value={editMiddleName} onChange={(e) => setEditMiddleName(e.target.value)} placeholder="Отчество" />
+                  </td>
+                  <td>
+                    <select value={editGroupId ?? ""} onChange={(e) => setEditGroupId(Number(e.target.value))}>
+                      {groups.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.code}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                </>
+              ) : (
+                <>
+                  <td>{s.full_name}</td>
+                  <td>{groups.find((g) => g.id === s.study_group_id)?.code ?? "—"}</td>
+                </>
+              )}
               <td>
                 {canEdit ? (
                   <select value={s.status} onChange={(e) => changeStatus(s, e.target.value)}>
@@ -117,11 +196,36 @@ export default function StudentsTab({ canEdit }: { canEdit: boolean }) {
               </td>
               <td>{s.enrolled_at}</td>
               <td>{s.left_at ?? "—"}</td>
+              {canEdit && (
+                <td className="admin-row-actions">
+                  {editingId === s.id ? (
+                    <>
+                      <button className="link-btn" onClick={() => saveEdit(s.id)}>
+                        Сохранить
+                      </button>
+                      <button className="link-btn" onClick={() => setEditingId(null)}>
+                        Отмена
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button className="link-btn" onClick={() => startEdit(s)}>
+                        Изменить
+                      </button>
+                      {s.status !== "studying" && (
+                        <button className="link-btn" onClick={() => removeStudent(s)}>
+                          Удалить насовсем
+                        </button>
+                      )}
+                    </>
+                  )}
+                </td>
+              )}
             </tr>
           ))}
           {students.length === 0 && (
             <tr>
-              <td colSpan={4}>В группе нет студентов.</td>
+              <td colSpan={canEdit ? 6 : 5}>В группе нет студентов.</td>
             </tr>
           )}
         </tbody>

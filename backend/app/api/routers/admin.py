@@ -1,6 +1,7 @@
 import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_admin, require_management, require_reference_editor
@@ -23,6 +24,7 @@ from app.core.security import hash_password
 from app.schemas.admin import (
     CalendarDayUpsert,
     CuratorAssignmentCreate,
+    DeleteResult,
     DepartmentCreate,
     DepartmentRead,
     InvitationRead,
@@ -32,9 +34,11 @@ from app.schemas.admin import (
     SetPasswordResponse,
     StudentCreate,
     StudentRead,
+    StudentUpdate,
     StudentUpdateStatus,
     StudyGroupCreate,
     StudyGroupRead,
+    StudyGroupUpdate,
     UserCreate,
     UserRead,
     UserUpdate,
@@ -73,6 +77,25 @@ def create_department(payload: DepartmentCreate, db: Session = Depends(get_db)):
     return dept
 
 
+def _group_read(g: StudyGroup, today: datetime.date | None = None) -> StudyGroupRead:
+    today = today or datetime.date.today()
+    curator_assignment = next(
+        (a for a in g.curator_assignments if a.is_active_on(today) and a.role_type.value == "curator"),
+        None,
+    )
+    return StudyGroupRead(
+        id=g.id, code=g.code, course=g.course, department_id=g.department_id,
+        study_form=g.study_form, is_active=g.is_active,
+        curator_name=curator_assignment.user.full_name if curator_assignment else None,
+        curator_assignment_id=curator_assignment.id if curator_assignment else None,
+    )
+
+
+def _assert_can_manage_group(user: User, group: StudyGroup) -> None:
+    if RoleCode(user.role.code) == RoleCode.DEPT_HEAD and group.department_id != user.department_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Группа не относится к вашему отделению")
+
+
 @router.get("/groups", response_model=list[StudyGroupRead])
 def list_groups(
     department_id: int | None = None,
@@ -85,20 +108,7 @@ def list_groups(
     if scope is not None:
         q = q.filter(StudyGroup.department_id == scope)
     groups = q.order_by(StudyGroup.course, StudyGroup.code).all()
-
-    result = []
-    for g in groups:
-        curator = next(
-            (a.user.full_name for a in g.curator_assignments if a.is_active_on(today) and a.role_type.value == "curator"),
-            None,
-        )
-        result.append(
-            StudyGroupRead(
-                id=g.id, code=g.code, course=g.course, department_id=g.department_id,
-                study_form=g.study_form, is_active=g.is_active, curator_name=curator,
-            )
-        )
-    return result
+    return [_group_read(g, today) for g in groups]
 
 
 @router.post(
@@ -110,10 +120,69 @@ def create_group(payload: StudyGroupCreate, db: Session = Depends(get_db)):
     db.add(group)
     db.commit()
     db.refresh(group)
-    return StudyGroupRead(
-        id=group.id, code=group.code, course=group.course, department_id=group.department_id,
-        study_form=group.study_form, is_active=group.is_active, curator_name=None,
-    )
+    return _group_read(group)
+
+
+@router.patch("/groups/{group_id}", response_model=StudyGroupRead)
+def update_group(
+    group_id: int, payload: StudyGroupUpdate,
+    user: User = Depends(require_management), db: Session = Depends(get_db),
+):
+    group = db.get(StudyGroup, group_id)
+    if group is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Группа не найдена")
+    _assert_can_manage_group(user, group)
+
+    data = payload.model_dump(exclude_unset=True)
+    # Перенос группы в другое отделение — только администратор по колледжу.
+    if "department_id" in data and RoleCode(user.role.code) == RoleCode.DEPT_HEAD:
+        data.pop("department_id")
+
+    old_active = group.is_active
+    for field, value in data.items():
+        setattr(group, field, value)
+    if group.is_active != old_active:
+        log_action(
+            db, user, "group.archive" if not group.is_active else "group.restore",
+            "study_group", str(group.id),
+        )
+    else:
+        log_action(db, user, "group.update", "study_group", str(group.id))
+
+    db.commit()
+    db.refresh(group)
+    return _group_read(group)
+
+
+@router.delete("/groups/{group_id}", response_model=DeleteResult)
+def delete_group(
+    group_id: int,
+    user: User = Depends(require_management), db: Session = Depends(get_db),
+):
+    group = db.get(StudyGroup, group_id)
+    if group is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Группа не найдена")
+    _assert_can_manage_group(user, group)
+    if group.is_active:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Сначала переведите группу в архив (снимите «активна») — удалить можно только из архива",
+        )
+
+    try:
+        db.delete(group)
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "У группы есть история (студенты, посещаемость, назначения кураторов) — "
+            "удалить полностью нельзя, оставьте её в архиве",
+        )
+
+    log_action(db, user, "group.delete", "study_group", str(group_id))
+    db.commit()
+    return DeleteResult(deleted=True, anonymized=False, detail="Группа удалена")
 
 
 @router.get("/students", response_model=list[StudentRead])
@@ -137,6 +206,14 @@ def list_students(
         )
         for s in students
     ]
+
+
+def _assert_can_manage_student(db: Session, user: User, student: Student) -> None:
+    if RoleCode(user.role.code) != RoleCode.DEPT_HEAD:
+        return
+    group = db.get(StudyGroup, student.study_group_id)
+    if group is None or group.department_id != user.department_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Студент не из вашего отделения")
 
 
 @router.post(
@@ -171,6 +248,74 @@ def update_student_status(student_id: int, payload: StudentUpdateStatus, db: Ses
         id=student.id, full_name=student.full_name, study_group_id=student.study_group_id,
         status=student.status, enrolled_at=student.enrolled_at, left_at=student.left_at,
     )
+
+
+@router.patch("/students/{student_id}", response_model=StudentRead)
+def update_student(
+    student_id: int, payload: StudentUpdate,
+    user: User = Depends(require_management), db: Session = Depends(get_db),
+):
+    student = db.get(Student, student_id)
+    if student is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Студент не найден")
+    _assert_can_manage_student(db, user, student)
+
+    data = payload.model_dump(exclude_unset=True)
+    if "study_group_id" in data and data["study_group_id"] is not None:
+        target_group = db.get(StudyGroup, data["study_group_id"])
+        if target_group is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Группа назначения не найдена")
+        _assert_can_manage_group(user, target_group)
+    if "status" in data and data["status"] is not None:
+        data["status"] = StudentStatus(data["status"])
+
+    for field, value in data.items():
+        setattr(student, field, value)
+    log_action(db, user, "student.update", "student", str(student.id))
+    db.commit()
+    db.refresh(student)
+    return StudentRead(
+        id=student.id, full_name=student.full_name, study_group_id=student.study_group_id,
+        status=student.status, enrolled_at=student.enrolled_at, left_at=student.left_at,
+    )
+
+
+@router.delete("/students/{student_id}", response_model=DeleteResult)
+def delete_student(
+    student_id: int,
+    user: User = Depends(require_management), db: Session = Depends(get_db),
+):
+    student = db.get(Student, student_id)
+    if student is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Студент не найден")
+    _assert_can_manage_student(db, user, student)
+    if student.status == StudentStatus.STUDYING:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Сначала переведите студента в академ. отпуск или отчислите — удалить можно только архивного",
+        )
+
+    try:
+        db.delete(student)
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        # Есть отметки посещаемости — вместо удаления обезличиваем, чтобы не
+        # потерять статистику и историю группы (обновление 1.1: удаление не
+        # должно ломать базу и терять уже собранные данные).
+        student.last_name = "Удалённый"
+        student.first_name = "студент"
+        student.middle_name = None
+        log_action(db, user, "student.anonymize", "student", str(student_id))
+        db.commit()
+        return DeleteResult(
+            deleted=False, anonymized=True,
+            detail="У студента есть история посещаемости — данные обезличены, запись оставлена в архиве",
+        )
+
+    log_action(db, user, "student.delete", "student", str(student_id))
+    db.commit()
+    return DeleteResult(deleted=True, anonymized=False, detail="Студент удалён")
 
 
 @router.get("/mark-codes", response_model=list[MarkCodeRead], dependencies=[Depends(require_management)])
@@ -214,6 +359,27 @@ def create_curator_assignment(
     db.commit()
     db.refresh(assignment)
     return {"id": assignment.id}
+
+
+@router.post("/curator-assignments/{assignment_id}/end")
+def end_curator_assignment(
+    assignment_id: int,
+    user: User = Depends(require_management),
+    db: Session = Depends(get_db),
+):
+    """Снять куратора/заместителя с группы — назначение не удаляется, а
+    завершается датой, чтобы история «кто вёл группу когда» не терялась."""
+    assignment = db.get(CuratorAssignment, assignment_id)
+    if assignment is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Назначение не найдено")
+    _assert_can_manage_group(user, assignment.study_group)
+
+    today = datetime.date.today()
+    if assignment.end_date is None or assignment.end_date > today:
+        assignment.end_date = today
+    log_action(db, user, "curator_assignment.end", "curator_assignment", str(assignment.id))
+    db.commit()
+    return {"id": assignment.id, "end_date": assignment.end_date}
 
 
 def _user_read(u: User) -> UserRead:
@@ -302,9 +468,63 @@ def update_user(
     if payload.department_id is not None and RoleCode(admin.role.code) != RoleCode.DEPT_HEAD:
         target.department_id = payload.department_id
 
+    if payload.is_active is not None:
+        if target.id == admin.id and not payload.is_active:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Нельзя заблокировать самого себя")
+        if target.is_active != payload.is_active:
+            target.is_active = payload.is_active
+            log_action(
+                db, admin, "user.archive" if not payload.is_active else "user.restore",
+                "user", str(target.id),
+            )
+
     db.commit()
     db.refresh(target)
     return _user_read(target)
+
+
+@router.delete("/users/{user_id}", response_model=DeleteResult)
+def delete_user(
+    user_id: int,
+    admin: User = Depends(require_management), db: Session = Depends(get_db),
+):
+    target = db.get(User, user_id)
+    if target is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Пользователь не найден")
+    _assert_can_manage_user(admin, target)
+    if target.id == admin.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Нельзя удалить самого себя")
+    if target.is_active:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Сначала заблокируйте пользователя (снимите «активен») — удалить можно только из архива",
+        )
+
+    try:
+        db.delete(target)
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        # Есть история (отметки, сдачи дня, назначения на группы, журнал
+        # действий) — вместо удаления обезличиваем: имя и логин заменяются
+        # на плейсхолдер, но статистика и записи, которые он оставил,
+        # никуда не пропадают (обновление 1.1).
+        placeholder = f"deleted_{target.id}"
+        target.username = placeholder
+        target.full_name = "Удалённый пользователь"
+        target.password_hash = None
+        target.telegram_chat_id = None
+        target.telegram_linked_at = None
+        log_action(db, admin, "user.anonymize", "user", str(user_id))
+        db.commit()
+        return DeleteResult(
+            deleted=False, anonymized=True,
+            detail="У пользователя есть история действий — данные обезличены, запись оставлена в архиве",
+        )
+
+    log_action(db, admin, "user.delete", "user", str(user_id))
+    db.commit()
+    return DeleteResult(deleted=True, anonymized=False, detail="Пользователь удалён")
 
 
 @router.post("/users/{user_id}/set-password", response_model=SetPasswordResponse)

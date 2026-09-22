@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { api, ApiError } from "../../api/client";
-import type { DepartmentAdmin, SetPasswordResult, UserAdmin } from "../../api/types";
+import { useAuth } from "../../auth/AuthContext";
+import type { DeleteResult, DepartmentAdmin, SetPasswordResult, UserAdmin } from "../../api/types";
 
 const ROLE_LABELS: Record<string, string> = {
   curator: "Куратор",
@@ -12,6 +13,7 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 function statusLabel(u: UserAdmin): string {
+  if (!u.is_active) return "в архиве";
   if (u.is_locked) return "заблокирован";
   if (!u.has_password) return "нет пароля";
   if (u.must_change_password) return "ждёт смены пароля";
@@ -19,9 +21,11 @@ function statusLabel(u: UserAdmin): string {
 }
 
 export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; canCreate: boolean }) {
+  const { user: me } = useAuth();
   const [rows, setRows] = useState<UserAdmin[]>([]);
   const [departments, setDepartments] = useState<DepartmentAdmin[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const [fullName, setFullName] = useState("");
@@ -126,6 +130,29 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
     }
   }
 
+  async function toggleActive(u: UserAdmin) {
+    setError(null);
+    try {
+      await api.patch(`/admin/users/${u.id}`, { is_active: !u.is_active });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не удалось сохранить");
+    }
+  }
+
+  async function removeUser(u: UserAdmin) {
+    if (!window.confirm(`Удалить пользователя «${u.full_name}» насовсем?`)) return;
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await api.delete<DeleteResult>(`/admin/users/${u.id}`);
+      setNotice(res.detail);
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не удалось удалить");
+    }
+  }
+
   async function toggleLeadershipDigest(user: UserAdmin) {
     setError(null);
     try {
@@ -149,6 +176,12 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
           <button className="link-btn" onClick={() => setIssuedPassword(null)}>
             Скрыть
           </button>
+        </div>
+      )}
+
+      {notice && (
+        <div className="day-status submitted">
+          {notice} <button className="link-btn" onClick={() => setNotice(null)}>Скрыть</button>
         </div>
       )}
 
@@ -240,6 +273,19 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
                     <button className="link-btn" onClick={() => unlock(u.id)}>
                       Разблокировать
                     </button>
+                  )}
+
+                  {u.id !== me?.id && (
+                    <>
+                      <button className="link-btn" onClick={() => toggleActive(u)}>
+                        {u.is_active ? "В архив" : "Вернуть из архива"}
+                      </button>
+                      {!u.is_active && (
+                        <button className="link-btn" onClick={() => removeUser(u)}>
+                          Удалить насовсем
+                        </button>
+                      )}
+                    </>
                   )}
                 </td>
               )}

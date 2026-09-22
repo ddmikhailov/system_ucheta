@@ -21,6 +21,7 @@ class StudyGroupRead(BaseModel):
     study_form: str | None
     is_active: bool
     curator_name: str | None = None
+    curator_assignment_id: int | None = None
 
 
 class StudyGroupCreate(BaseModel):
@@ -28,6 +29,20 @@ class StudyGroupCreate(BaseModel):
     course: int
     department_id: int
     study_form: str | None = None
+
+
+class StudyGroupUpdate(BaseModel):
+    code: str | None = None
+    course: int | None = None
+    department_id: int | None = None
+    study_form: str | None = None
+    is_active: bool | None = None
+
+
+class DeleteResult(BaseModel):
+    deleted: bool
+    anonymized: bool
+    detail: str
 
 
 class StudentRead(BaseModel):
@@ -49,6 +64,15 @@ class StudentCreate(BaseModel):
 
 class StudentUpdateStatus(BaseModel):
     status: str
+    left_at: datetime.date | None = None
+
+
+class StudentUpdate(BaseModel):
+    last_name: str | None = None
+    first_name: str | None = None
+    middle_name: str | None = None
+    study_group_id: int | None = None
+    status: str | None = None
     left_at: datetime.date | None = None
 
 
@@ -103,11 +127,12 @@ class UserUpdateLeadershipDigest(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    """Редактирование логина/ФИО существующего пользователя администрацией."""
+    """Редактирование логина/ФИО/статуса существующего пользователя администрацией."""
 
     username: str | None = None
     full_name: str | None = None
     department_id: int | None = None
+    is_active: bool | None = None
 
 
 class SetPasswordRequest(BaseModel):

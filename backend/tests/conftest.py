@@ -2,7 +2,7 @@ import datetime
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
 import app.db.base as db_base
@@ -27,6 +27,17 @@ def test_engine(tmp_path):
     """Изолированная SQLite-БД на каждый тест — никакого общего состояния между тестами."""
     db_path = tmp_path / "test.db"
     engine = create_engine(f"sqlite:///{db_path}")
+
+    # SQLite не проверяет внешние ключи по умолчанию — в проде (MySQL/InnoDB)
+    # они enforced, и на этом строится безопасное удаление (см. admin.py:
+    # DELETE .../{id} ловит IntegrityError и обезличивает вместо удаления).
+    # Без этого тесты не заметили бы, если проверка вообще перестанет работать.
+    @event.listens_for(engine, "connect")
+    def _enable_sqlite_fk(dbapi_connection, _record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
     db_base.engine = engine
     db_base.SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
     db_base.Base.metadata.create_all(engine)

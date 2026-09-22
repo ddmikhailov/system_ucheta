@@ -137,6 +137,13 @@ export interface StudyGroupAdmin {
   study_form: string | null;
   is_active: boolean;
   curator_name: string | null;
+  curator_assignment_id: number | null;
+}
+
+export interface DeleteResult {
+  deleted: boolean;
+  anonymized: boolean;
+  detail: string;
 }
 
 export interface StudentAdmin {
