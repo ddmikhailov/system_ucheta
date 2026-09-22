@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import TelegramStatus from "./TelegramStatus";
 
 const MANAGEMENT_ROLES = ["dept_head", "edu_department", "admin"];
 const ADMIN_PANEL_ROLES = ["edu_department", "admin", "dept_head"];
@@ -36,7 +35,6 @@ export default function Layout({ children }: { children: ReactNode }) {
         <div className="app-header__user">
           {user && (
             <>
-              <TelegramStatus />
               <span>{user.full_name}</span>
               <NavLink to="/change-password">Сменить пароль</NavLink>
               <button onClick={logout}>Выйти</button>

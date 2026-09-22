@@ -531,16 +531,6 @@ select:hover {
   margin-top: 16px;
 }
 
-.telegram-badge {
-  font-size: 12px;
-  font-weight: 700;
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: var(--primary-light);
-  border-color: transparent;
-  color: var(--primary-dark);
-}
-
 .inline-form {
   display: flex;
   gap: 8px;
