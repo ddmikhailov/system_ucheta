@@ -19,6 +19,7 @@ from app.models import (
     StudyGroup,
     User,
 )
+from app.core.security import hash_password
 from app.schemas.admin import (
     CalendarDayUpsert,
     CuratorAssignmentCreate,
@@ -27,6 +28,8 @@ from app.schemas.admin import (
     InvitationRead,
     MarkCodeRead,
     MarkCodeUpdate,
+    SetPasswordRequest,
+    SetPasswordResponse,
     StudentCreate,
     StudentRead,
     StudentUpdateStatus,
@@ -34,10 +37,12 @@ from app.schemas.admin import (
     StudyGroupRead,
     UserCreate,
     UserRead,
+    UserUpdate,
     UserUpdateLeadershipDigest,
 )
 from app.services.audit_service import log_action
 from app.services.invitation_service import create_invitation
+from app.services.password_service import generate_temporary_password
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -211,22 +216,32 @@ def create_curator_assignment(
     return {"id": assignment.id}
 
 
+def _user_read(u: User) -> UserRead:
+    return UserRead(
+        id=u.id, username=u.username, full_name=u.full_name, role=u.role.code,
+        department_id=u.department_id, is_active=u.is_active,
+        telegram_linked=u.telegram_chat_id is not None,
+        has_password=u.password_hash is not None,
+        must_change_password=u.must_change_password,
+        is_locked=u.is_locked,
+        receives_leadership_digest=u.receives_leadership_digest,
+    )
+
+
+def _assert_can_manage_user(admin: User, target: User) -> None:
+    """Зав. отделением управляет логинами/паролями только внутри своего
+    отделения; воспитательный отдел и администратор — без ограничений."""
+    if RoleCode(admin.role.code) == RoleCode.DEPT_HEAD and target.department_id != admin.department_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Пользователь не относится к вашему отделению")
+
+
 @router.get("/users", response_model=list[UserRead])
 def list_users(user: User = Depends(require_management), db: Session = Depends(get_db)):
     q = db.query(User)
     if RoleCode(user.role.code) == RoleCode.DEPT_HEAD:
         q = q.filter(User.department_id == user.department_id)
     users = q.all()
-    return [
-        UserRead(
-            id=u.id, username=u.username, full_name=u.full_name, role=u.role.code,
-            department_id=u.department_id, is_active=u.is_active,
-            telegram_linked=u.telegram_chat_id is not None,
-            has_password=u.password_hash is not None,
-            receives_leadership_digest=u.receives_leadership_digest,
-        )
-        for u in users
-    ]
+    return [_user_read(u) for u in users]
 
 
 @router.post(
@@ -247,11 +262,7 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
-    return UserRead(
-        id=user.id, username=user.username, full_name=user.full_name, role=role.code,
-        department_id=user.department_id, is_active=user.is_active, telegram_linked=False,
-        has_password=False, receives_leadership_digest=False,
-    )
+    return _user_read(user)
 
 
 @router.patch(
@@ -265,20 +276,91 @@ def update_leadership_digest(user_id: int, payload: UserUpdateLeadershipDigest, 
     target.receives_leadership_digest = payload.receives_leadership_digest
     db.commit()
     db.refresh(target)
-    return UserRead(
-        id=target.id, username=target.username, full_name=target.full_name, role=target.role.code,
-        department_id=target.department_id, is_active=target.is_active,
-        telegram_linked=target.telegram_chat_id is not None,
-        has_password=target.password_hash is not None,
-        receives_leadership_digest=target.receives_leadership_digest,
-    )
+    return _user_read(target)
+
+
+@router.patch("/users/{user_id}", response_model=UserRead)
+def update_user(
+    user_id: int, payload: UserUpdate,
+    admin: User = Depends(require_management), db: Session = Depends(get_db),
+):
+    target = db.get(User, user_id)
+    if target is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Пользователь не найден")
+    _assert_can_manage_user(admin, target)
+
+    if payload.username is not None and payload.username != target.username:
+        if db.query(User).filter(User.username == payload.username, User.id != target.id).first():
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Логин уже занят")
+        old_username = target.username
+        target.username = payload.username
+        log_action(db, admin, "user.username_change", "user", str(target.id), old_value=old_username, new_value=payload.username)
+
+    if payload.full_name is not None:
+        target.full_name = payload.full_name
+
+    if payload.department_id is not None and RoleCode(admin.role.code) != RoleCode.DEPT_HEAD:
+        target.department_id = payload.department_id
+
+    db.commit()
+    db.refresh(target)
+    return _user_read(target)
+
+
+@router.post("/users/{user_id}/set-password", response_model=SetPasswordResponse)
+def set_password(
+    user_id: int, payload: SetPasswordRequest,
+    admin: User = Depends(require_management), db: Session = Depends(get_db),
+):
+    """Администратор/зав. отделением выдаёт временный пароль напрямую —
+    без одноразовой ссылки. При следующем входе пользователь обязан
+    задать свой пароль (см. POST /auth/change-password)."""
+    target = db.get(User, user_id)
+    if target is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Пользователь не найден")
+    _assert_can_manage_user(admin, target)
+
+    password = payload.password or generate_temporary_password()
+    target.password_hash = hash_password(password)
+    target.must_change_password = True
+    # Заодно снимаем блокировку — типовой сценарий обращения «не могу войти».
+    target.failed_login_attempts = 0
+    target.locked_until = None
+
+    log_action(db, admin, "user.password_set", "user", str(target.id))
+    db.commit()
+
+    return SetPasswordResponse(username=target.username, password=password)
+
+
+@router.post("/users/{user_id}/unlock", response_model=UserRead)
+def unlock_user(
+    user_id: int,
+    admin: User = Depends(require_management), db: Session = Depends(get_db),
+):
+    target = db.get(User, user_id)
+    if target is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Пользователь не найден")
+    _assert_can_manage_user(admin, target)
+
+    target.failed_login_attempts = 0
+    target.locked_until = None
+    log_action(db, admin, "user.unlock", "user", str(target.id))
+    db.commit()
+    db.refresh(target)
+    return _user_read(target)
 
 
 @router.post(
     "/users/{user_id}/invitations", response_model=InvitationRead,
     dependencies=[Depends(require_admin)],
+    include_in_schema=False,
 )
 def issue_invitation(user_id: int, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    # Оставлено ради обратной совместимости (принятые ранее ссылки и тесты);
+    # в интерфейсе администратора этот путь больше не используется — вместо
+    # него выдача временного пароля (POST /users/{id}/set-password), см.
+    # обновление 1.1.
     target = db.get(User, user_id)
     if target is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Пользователь не найден")

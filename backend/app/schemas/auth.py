@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class LoginRequest(BaseModel):
@@ -25,6 +25,12 @@ class MeResponse(BaseModel):
     groups: list[MeGroupInfo] = []
     dept_head_name: str | None = None
     telegram_linked: bool = False
+    must_change_password: bool = False
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str | None = None
+    new_password: str = Field(min_length=8)
 
 
 class AcceptInvitationRequest(BaseModel):

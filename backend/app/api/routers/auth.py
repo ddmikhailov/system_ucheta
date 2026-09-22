@@ -5,12 +5,13 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.config import get_settings
-from app.core.security import create_access_token, verify_password
+from app.core.security import create_access_token, hash_password, verify_password
 from app.core.time import utcnow
 from app.db.session import get_db
 from app.models import CuratorAssignment, Invitation, User
 from app.schemas.auth import (
     AcceptInvitationRequest,
+    ChangePasswordRequest,
     InvitationPreview,
     LoginRequest,
     MeGroupInfo,
@@ -18,6 +19,7 @@ from app.schemas.auth import (
     TelegramLinkResponse,
     TokenResponse,
 )
+from app.services.audit_service import log_action
 from app.services.invitation_service import accept_invitation
 from app.services.telegram_link_service import build_deep_link, create_link_token, unlink_telegram
 
@@ -90,7 +92,31 @@ def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
         groups=groups,
         dept_head_name=dept_head_name,
         telegram_linked=user.telegram_chat_id is not None,
+        must_change_password=user.must_change_password,
     )
+
+
+@router.post("/change-password", response_model=MeResponse)
+def change_password(
+    payload: ChangePasswordRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # Принудительная смена (после временного пароля от администратора) не
+    # требует ввода старого пароля — пользователь и так только что вошёл
+    # по нему. Добровольная смена своего пароля обязана его подтвердить.
+    if not user.must_change_password:
+        if payload.current_password is None or not verify_password(
+            payload.current_password, user.password_hash or ""
+        ):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Неверный текущий пароль")
+
+    user.password_hash = hash_password(payload.new_password)
+    user.must_change_password = False
+    log_action(db, user, "password.change", "user", str(user.id))
+    db.commit()
+
+    return me(user, db)
 
 
 @router.get("/invitations/{token}", response_model=InvitationPreview)

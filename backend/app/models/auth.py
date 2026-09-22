@@ -35,6 +35,11 @@ class User(Base):
     failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     locked_until: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
 
+    # Администратор/зав. отделением выдал временный пароль — при следующем
+    # входе пользователь обязан задать свой собственный (см. концепцию
+    # обновления 1.1: отказ от одноразовых пригласительных ссылок).
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
     # "Руководство" из раздела про бота — не отдельная роль с правами доступа,
     # а просто список получателей пятничного дайджеста (см. концепцию).
     receives_leadership_digest: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -50,6 +55,10 @@ class User(Base):
     @property
     def is_pending_invitation(self) -> bool:
         return self.password_hash is None
+
+    @property
+    def is_locked(self) -> bool:
+        return self.locked_until is not None and self.locked_until > utcnow()
 
 
 class Invitation(Base):

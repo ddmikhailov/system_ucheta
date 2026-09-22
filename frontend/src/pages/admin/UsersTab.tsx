@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { api, ApiError } from "../../api/client";
-import type { DepartmentAdmin, InvitationRead, UserAdmin } from "../../api/types";
+import type { DepartmentAdmin, SetPasswordResult, UserAdmin } from "../../api/types";
 
 const ROLE_LABELS: Record<string, string> = {
   curator: "Куратор",
@@ -11,17 +11,34 @@ const ROLE_LABELS: Record<string, string> = {
   admin: "Администратор",
 };
 
-export default function UsersTab({ canEdit }: { canEdit: boolean }) {
+function statusLabel(u: UserAdmin): string {
+  if (u.is_locked) return "заблокирован";
+  if (!u.has_password) return "нет пароля";
+  if (u.must_change_password) return "ждёт смены пароля";
+  return "активен";
+}
+
+export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; canCreate: boolean }) {
   const [rows, setRows] = useState<UserAdmin[]>([]);
   const [departments, setDepartments] = useState<DepartmentAdmin[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [invitation, setInvitation] = useState<{ userId: number; link: string } | null>(null);
 
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
   const [role, setRole] = useState("curator");
   const [departmentId, setDepartmentId] = useState<number | null>(null);
+
+  // Карточка с только что выданным паролем — показываем один раз, пока не закроют.
+  const [issuedPassword, setIssuedPassword] = useState<SetPasswordResult | null>(null);
+  // id пользователя, для которого сейчас открыта форма «свой пароль» (иначе — сразу генерируем).
+  const [customPasswordFor, setCustomPasswordFor] = useState<number | null>(null);
+  const [customPasswordValue, setCustomPasswordValue] = useState("");
+
+  // id пользователя, который сейчас редактируется (логин/ФИО).
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editUsername, setEditUsername] = useState("");
+  const [editFullName, setEditFullName] = useState("");
 
   function load() {
     api.get<UserAdmin[]>("/admin/users").then(setRows).catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка"));
@@ -50,13 +67,62 @@ export default function UsersTab({ canEdit }: { canEdit: boolean }) {
     }
   }
 
-  async function issueInvitation(userId: number) {
+  async function generatePassword(userId: number) {
     setError(null);
     try {
-      const res = await api.post<InvitationRead>(`/admin/users/${userId}/invitations`);
-      setInvitation({ userId, link: `${window.location.origin}${res.invitation_url_path}` });
+      const res = await api.post<SetPasswordResult>(`/admin/users/${userId}/set-password`, {});
+      setIssuedPassword(res);
+      setCustomPasswordFor(null);
+      load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось выпустить приглашение");
+      setError(err instanceof ApiError ? err.message : "Не удалось задать пароль");
+    }
+  }
+
+  async function submitCustomPassword(userId: number, e: FormEvent) {
+    e.preventDefault();
+    if (customPasswordValue.length < 8) {
+      setError("Пароль должен быть не короче 8 символов");
+      return;
+    }
+    setError(null);
+    try {
+      const res = await api.post<SetPasswordResult>(`/admin/users/${userId}/set-password`, {
+        password: customPasswordValue,
+      });
+      setIssuedPassword(res);
+      setCustomPasswordFor(null);
+      setCustomPasswordValue("");
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не удалось задать пароль");
+    }
+  }
+
+  async function unlock(userId: number) {
+    setError(null);
+    try {
+      await api.post(`/admin/users/${userId}/unlock`);
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не удалось снять блокировку");
+    }
+  }
+
+  function startEdit(u: UserAdmin) {
+    setEditingId(u.id);
+    setEditUsername(u.username);
+    setEditFullName(u.full_name);
+  }
+
+  async function saveEdit(userId: number) {
+    setError(null);
+    try {
+      await api.patch(`/admin/users/${userId}`, { username: editUsername, full_name: editFullName });
+      setEditingId(null);
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не удалось сохранить");
     }
   }
 
@@ -76,9 +142,13 @@ export default function UsersTab({ canEdit }: { canEdit: boolean }) {
     <div>
       {error && <div className="error-text">{error}</div>}
 
-      {invitation && (
+      {issuedPassword && (
         <div className="day-status submitted">
-          Ссылка-приглашение (передайте лично, действует ограниченное время): <code>{invitation.link}</code>
+          Пароль для <b>{issuedPassword.username}</b>: <code>{issuedPassword.password}</code> — передайте его
+          человеку лично, при первом входе система попросит его сменить.{" "}
+          <button className="link-btn" onClick={() => setIssuedPassword(null)}>
+            Скрыть
+          </button>
         </div>
       )}
 
@@ -92,16 +162,29 @@ export default function UsersTab({ canEdit }: { canEdit: boolean }) {
             <th title="Получает пятничный дайджест руководству из концепции — это не роль с правами, а просто отметка получателя">
               Дайджест рук-ва
             </th>
-            {canEdit && <th></th>}
+            {canEdit && <th>Управление</th>}
           </tr>
         </thead>
         <tbody>
           {rows.map((u) => (
             <tr key={u.id}>
-              <td>{u.full_name}</td>
-              <td>{u.username}</td>
+              {editingId === u.id ? (
+                <>
+                  <td>
+                    <input value={editFullName} onChange={(e) => setEditFullName(e.target.value)} />
+                  </td>
+                  <td>
+                    <input value={editUsername} onChange={(e) => setEditUsername(e.target.value)} />
+                  </td>
+                </>
+              ) : (
+                <>
+                  <td>{u.full_name}</td>
+                  <td>{u.username}</td>
+                </>
+              )}
               <td>{ROLE_LABELS[u.role] ?? u.role}</td>
-              <td>{u.has_password ? "активирован" : "ждёт приглашения"}</td>
+              <td>{statusLabel(u)}</td>
               <td>
                 <input
                   type="checkbox"
@@ -111,10 +194,51 @@ export default function UsersTab({ canEdit }: { canEdit: boolean }) {
                 />
               </td>
               {canEdit && (
-                <td>
-                  {!u.has_password && (
-                    <button className="link-btn" onClick={() => issueInvitation(u.id)}>
-                      Выдать ссылку
+                <td className="admin-row-actions">
+                  {editingId === u.id ? (
+                    <>
+                      <button className="link-btn" onClick={() => saveEdit(u.id)}>
+                        Сохранить
+                      </button>
+                      <button className="link-btn" onClick={() => setEditingId(null)}>
+                        Отмена
+                      </button>
+                    </>
+                  ) : (
+                    <button className="link-btn" onClick={() => startEdit(u)}>
+                      Изменить логин/ФИО
+                    </button>
+                  )}
+
+                  {customPasswordFor === u.id ? (
+                    <form className="inline-form" onSubmit={(e) => submitCustomPassword(u.id, e)}>
+                      <input
+                        type="text"
+                        placeholder="Свой пароль"
+                        value={customPasswordValue}
+                        onChange={(e) => setCustomPasswordValue(e.target.value)}
+                        minLength={8}
+                        required
+                      />
+                      <button type="submit">Задать</button>
+                      <button type="button" className="link-btn" onClick={() => setCustomPasswordFor(null)}>
+                        Отмена
+                      </button>
+                    </form>
+                  ) : (
+                    <>
+                      <button className="link-btn" onClick={() => generatePassword(u.id)}>
+                        {u.has_password ? "Сбросить пароль" : "Выдать пароль"}
+                      </button>
+                      <button className="link-btn" onClick={() => setCustomPasswordFor(u.id)}>
+                        Задать свой пароль
+                      </button>
+                    </>
+                  )}
+
+                  {u.is_locked && (
+                    <button className="link-btn" onClick={() => unlock(u.id)}>
+                      Разблокировать
                     </button>
                   )}
                 </td>
@@ -124,7 +248,7 @@ export default function UsersTab({ canEdit }: { canEdit: boolean }) {
         </tbody>
       </table>
 
-      {canEdit && (
+      {canCreate && (
         <form className="inline-form" onSubmit={handleCreate}>
           <input placeholder="ФИО" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
           <input placeholder="Логин" value={username} onChange={(e) => setUsername(e.target.value)} required />

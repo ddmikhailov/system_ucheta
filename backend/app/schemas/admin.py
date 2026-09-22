@@ -1,6 +1,6 @@
 import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class DepartmentRead(BaseModel):
@@ -93,11 +93,33 @@ class UserRead(BaseModel):
     is_active: bool
     telegram_linked: bool
     has_password: bool
+    must_change_password: bool
+    is_locked: bool
     receives_leadership_digest: bool
 
 
 class UserUpdateLeadershipDigest(BaseModel):
     receives_leadership_digest: bool
+
+
+class UserUpdate(BaseModel):
+    """Редактирование логина/ФИО существующего пользователя администрацией."""
+
+    username: str | None = None
+    full_name: str | None = None
+    department_id: int | None = None
+
+
+class SetPasswordRequest(BaseModel):
+    # Пусто — сгенерировать временный пароль самим, иначе — использовать
+    # заданный администратором. В обоих случаях выставляется
+    # must_change_password, чтобы человек задал свой пароль при входе.
+    password: str | None = Field(default=None, min_length=8)
+
+
+class SetPasswordResponse(BaseModel):
+    username: str
+    password: str
 
 
 class InvitationRead(BaseModel):

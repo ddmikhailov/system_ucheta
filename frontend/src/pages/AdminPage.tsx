@@ -10,13 +10,28 @@ import CalendarTab from "./admin/CalendarTab";
 type Tab = "departments" | "groups" | "students" | "mark-codes" | "users" | "calendar";
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<Tab>("groups");
   const { user } = useAuth();
+  const isDeptHead = user?.role === "dept_head";
+  const [tab, setTab] = useState<Tab>(isDeptHead ? "users" : "groups");
 
-  // Отделения/группы/студенты/пользователи — структурные операции, только администратор.
+  // Отделения/группы/студенты — структурные операции, только администратор
+  // (полное редактирование этих списков зав. отделением — следующий модуль).
   const isAdmin = user?.role === "admin";
   // Справочники (коды отметок, календарь) — зона воспитательного отдела и администратора.
   const isReferenceEditor = user?.role === "admin" || user?.role === "edu_department";
+  // Логины/пароли — администратор по всему колледжу, зав. отделением в своём.
+  const canManageUsers = isAdmin || isDeptHead;
+
+  // Зав. отделением заходит в админку только за управлением логинами/паролями
+  // своих кураторов — остальные вкладки пока не про него (см. модуль
+  // «полное управление списками»).
+  if (isDeptHead) {
+    return (
+      <div>
+        <UsersTab canEdit={canManageUsers} canCreate={false} />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -45,7 +60,7 @@ export default function AdminPage() {
       {tab === "groups" && <GroupsTab canEdit={isAdmin} />}
       {tab === "students" && <StudentsTab canEdit={isAdmin} />}
       {tab === "mark-codes" && <MarkCodesTab canEdit={isReferenceEditor} />}
-      {tab === "users" && <UsersTab canEdit={isAdmin} />}
+      {tab === "users" && <UsersTab canEdit={canManageUsers} canCreate={isAdmin} />}
       {tab === "calendar" && <CalendarTab canEdit={isReferenceEditor} />}
     </div>
   );

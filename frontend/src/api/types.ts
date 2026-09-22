@@ -12,6 +12,7 @@ export interface MeResponse {
   groups: MeGroupInfo[];
   dept_head_name: string | null;
   telegram_linked: boolean;
+  must_change_password: boolean;
 }
 
 export interface TelegramLinkResponse {
@@ -178,7 +179,14 @@ export interface UserAdmin {
   is_active: boolean;
   telegram_linked: boolean;
   has_password: boolean;
+  must_change_password: boolean;
+  is_locked: boolean;
   receives_leadership_digest: boolean;
+}
+
+export interface SetPasswordResult {
+  username: string;
+  password: string;
 }
 
 export interface InvitationRead {
