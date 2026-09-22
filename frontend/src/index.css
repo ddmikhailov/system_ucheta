@@ -312,6 +312,10 @@ select:hover {
 .auth-card img.auth-card__logo {
   height: 56px;
   width: auto;
+  /* .auth-card — flex-колонка с align-items: stretch по умолчанию, поэтому
+     без align-self картинка растягивалась на всю ширину карточки, теряя
+     исходные пропорции логотипа. */
+  align-self: flex-start;
   margin-bottom: 8px;
 }
 
