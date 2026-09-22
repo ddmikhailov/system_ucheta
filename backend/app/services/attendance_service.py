@@ -118,6 +118,19 @@ def get_roster(db: Session, study_group_id: int, date: datetime.date) -> dict:
             ).scalars().all()
             draft_marks = {row.student_id: row for row in rows}
 
+    actor_ids = {
+        actor_id
+        for mark in existing_marks.values()
+        for actor_id in (mark.updated_by_user_id, mark.created_by_user_id)
+        if actor_id is not None
+    }
+    actor_names: dict[int, str] = {}
+    if actor_ids:
+        actor_names = {
+            u.id: u.full_name
+            for u in db.execute(select(User).where(User.id.in_(actor_ids))).scalars()
+        }
+
     entries = []
     for student in active_students:
         mark = existing_marks.get(student.id)
@@ -130,6 +143,15 @@ def get_roster(db: Session, study_group_id: int, date: datetime.date) -> dict:
 
         risk_streak = consecutive_unexcused_count(db, student.id, date)
 
+        last_edited_by = None
+        last_edited_at = None
+        # Для черновика со вчера "кто менял" относится к вчерашней отметке —
+        # только запутает в журнале сегодняшнего дня, поэтому не показываем.
+        if mark is not None and not source_is_draft:
+            actor_id = mark.updated_by_user_id or mark.created_by_user_id
+            last_edited_by = actor_names.get(actor_id)
+            last_edited_at = mark.updated_at or mark.created_at
+
         entries.append(
             {
                 "student_id": student.id,
@@ -141,6 +163,8 @@ def get_roster(db: Session, study_group_id: int, date: datetime.date) -> dict:
                 "is_draft_suggestion": source_is_draft,
                 "is_locked": bool(mark and mark.source == MarkSource.PERIOD),
                 "risk_streak": risk_streak,
+                "last_edited_by": last_edited_by,
+                "last_edited_at": last_edited_at,
             }
         )
 

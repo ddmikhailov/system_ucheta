@@ -51,6 +51,28 @@ def test_submit_day_persists_exceptions_and_submission(imported, db, curator_gro
     assert mark.basis_deadline is None
 
 
+def test_roster_shows_who_last_edited_a_mark(imported, db, curator_group, curator_user):
+    students = attendance_service.get_active_students(db, curator_group.id, DAY1)
+    student = students[0]
+
+    attendance_service.submit_day(
+        db, curator_group.id, DAY1,
+        [{"student_id": student.id, "mark_code": "н", "comment": None, "basis_reference": None}],
+        curator_user, today=DAY1,
+    )
+
+    roster = attendance_service.get_roster(db, curator_group.id, DAY1)
+    entry = next(e for e in roster["entries"] if e["student_id"] == student.id)
+    assert entry["last_edited_by"] == curator_user.full_name
+    assert entry["last_edited_at"] is not None
+
+    # Черновик со вчера (день ещё не сдан) не должен показывать автора.
+    draft_roster = attendance_service.get_roster(db, curator_group.id, DAY2)
+    draft_entry = next(e for e in draft_roster["entries"] if e["student_id"] == student.id)
+    assert draft_entry["is_draft_suggestion"] is True
+    assert draft_entry["last_edited_by"] is None
+
+
 def test_submitting_without_document_requiring_code_needs_no_basis(imported, db, curator_group, curator_user):
     students = attendance_service.get_active_students(db, curator_group.id, DAY1)
     student = students[0]

@@ -4,7 +4,7 @@ import { api, ApiError } from "../../api/client";
 import AssignCuratorModal from "../../components/AssignCuratorModal";
 import type { DeleteResult, DepartmentAdmin, StudyGroupAdmin, UserAdmin } from "../../api/types";
 
-export default function GroupsTab({ canEdit }: { canEdit: boolean }) {
+export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; canCreate: boolean }) {
   const [rows, setRows] = useState<StudyGroupAdmin[]>([]);
   const [departments, setDepartments] = useState<DepartmentAdmin[]>([]);
   const [curators, setCurators] = useState<UserAdmin[]>([]);
@@ -199,7 +199,7 @@ export default function GroupsTab({ canEdit }: { canEdit: boolean }) {
         </tbody>
       </table>
 
-      {canEdit && (
+      {canCreate && (
         <form className="inline-form" onSubmit={handleCreate}>
           <input placeholder="Код группы" value={code} onChange={(e) => setCode(e.target.value)} required />
           <input

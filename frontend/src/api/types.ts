@@ -30,6 +30,8 @@ export interface RosterEntry {
   is_draft_suggestion: boolean;
   is_locked: boolean;
   risk_streak: number;
+  last_edited_by: string | null;
+  last_edited_at: string | null;
 }
 
 export interface RosterResponse {

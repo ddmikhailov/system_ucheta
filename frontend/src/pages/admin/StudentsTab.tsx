@@ -13,7 +13,7 @@ const STATUS_LABELS: Record<string, string> = {
   expelled: "Отчислен",
 };
 
-export default function StudentsTab({ canEdit }: { canEdit: boolean }) {
+export default function StudentsTab({ canEdit, canCreate }: { canEdit: boolean; canCreate: boolean }) {
   const [groups, setGroups] = useState<StudyGroupAdmin[]>([]);
   const [groupId, setGroupId] = useState<number | null>(null);
   const [students, setStudents] = useState<StudentAdmin[]>([]);
@@ -231,7 +231,7 @@ export default function StudentsTab({ canEdit }: { canEdit: boolean }) {
         </tbody>
       </table>
 
-      {canEdit && (
+      {canCreate && (
         <form className="inline-form" onSubmit={handleCreate}>
           <input placeholder="Фамилия" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
           <input placeholder="Имя" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />

@@ -13,6 +13,11 @@ class RosterEntry(BaseModel):
     is_draft_suggestion: bool
     is_locked: bool
     risk_streak: int
+    # Кто и когда последний раз вносил/менял отметку — для журнала группы
+    # у администрации (см. обновление 1.1). У куратора в его собственном
+    # кабинете эти поля есть, но не показываются.
+    last_edited_by: str | None = None
+    last_edited_at: datetime.datetime | None = None
 
 
 class RosterResponse(BaseModel):
