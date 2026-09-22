@@ -1,6 +1,6 @@
 import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class DayOverviewRow(BaseModel):
@@ -59,17 +59,3 @@ class StudentCard(BaseModel):
     history: list[StudentMarkHistoryEntry]
 
 
-class PendingBasisRow(BaseModel):
-    mark_id: int
-    student_id: int
-    full_name: str
-    group_code: str
-    date: datetime.date
-    mark_code: str
-    mark_name: str
-    basis_deadline: datetime.date | None
-    is_overdue: bool
-
-
-class ConfirmBasisRequest(BaseModel):
-    basis_reference: str = Field(min_length=1)

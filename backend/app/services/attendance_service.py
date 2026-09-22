@@ -26,6 +26,14 @@ class BackdateNotAllowed(Exception):
     pass
 
 
+def _compute_basis(basis_reference: str | None) -> tuple[BasisStatus, None]:
+    """Основание (номер приказа/справки) — необязательное дополнение к коду
+    отметки, а не обязательное условие (см. обновление 1.1: убран жёсткий
+    контроль дедлайна подтверждения — куратор может указать документ, но
+    его отсутствие ни к чему не обязывает и никого не блокирует)."""
+    return (BasisStatus.CONFIRMED if basis_reference else BasisStatus.NOT_REQUIRED), None
+
+
 def get_active_students(db: Session, study_group_id: int, as_of: datetime.date) -> list[Student]:
     stmt = (
         select(Student)
@@ -195,12 +203,7 @@ def submit_day(
             continue
 
         basis_reference = entry.get("basis_reference")
-        if mark_code.requires_document:
-            basis_status = BasisStatus.CONFIRMED if basis_reference else BasisStatus.PENDING
-            basis_deadline = date + datetime.timedelta(days=settings.basis_confirmation_deadline_days)
-        else:
-            basis_status = BasisStatus.NOT_REQUIRED
-            basis_deadline = None
+        basis_status, basis_deadline = _compute_basis(basis_reference)
 
         if existing is not None:
             old_code = existing.mark_code.code
@@ -285,12 +288,7 @@ def create_absence_period(
 
     study_days = calendar_service.study_days_between(db, date_from, date_to)
 
-    if mark_code.requires_document:
-        basis_status = BasisStatus.CONFIRMED if basis_reference else BasisStatus.PENDING
-        basis_deadline = date_to + datetime.timedelta(days=settings.basis_confirmation_deadline_days)
-    else:
-        basis_status = BasisStatus.NOT_REQUIRED
-        basis_deadline = None
+    basis_status, basis_deadline = _compute_basis(basis_reference)
 
     for day in study_days:
         existing = db.execute(

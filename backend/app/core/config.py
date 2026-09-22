@@ -24,9 +24,6 @@ class Settings(BaseSettings):
     # Правка задним числом: сколько предыдущих учебных дней куратор может редактировать сам.
     curator_backdate_days: int = 1
 
-    # Срок на внесение основания (номер приказа/справки) после проставления кода.
-    basis_confirmation_deadline_days: int = 3
-
     # Порог для подсветки риска: количество кодов "н" подряд.
     risk_threshold_consecutive_unexcused: int = 3
 

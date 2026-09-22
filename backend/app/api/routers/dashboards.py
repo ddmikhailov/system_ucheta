@@ -5,21 +5,17 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import require_management
 from app.core.config import get_settings
-from app.core.time import utcnow
 from app.db.session import get_db
-from app.models import AttendanceMark, BasisStatus, RoleCode, Student, User
+from app.models import AttendanceMark, RoleCode, Student, User
 from app.schemas.dashboards import (
-    ConfirmBasisRequest,
     CuratorDisciplineRow,
     DayOverviewRow,
     DynamicsPoint,
-    PendingBasisRow,
     RiskStudentRow,
     StudentCard,
     StudentMarkHistoryEntry,
 )
 from app.services import stats_service
-from app.services.audit_service import log_action
 
 router = APIRouter(prefix="/dashboards", tags=["dashboards"])
 settings = get_settings()
@@ -131,64 +127,5 @@ def student_card(
     )
 
 
-@router.get("/pending-basis", response_model=list[PendingBasisRow])
-def pending_basis(
-    department_id: int | None = None,
-    user: User = Depends(require_management),
-    db: Session = Depends(get_db),
-):
-    scope = _scope_department_id(user, department_id)
-    today = datetime.date.today()
-
-    q = (
-        db.query(AttendanceMark)
-        .join(Student, Student.id == AttendanceMark.student_id)
-        .filter(AttendanceMark.basis_status == BasisStatus.PENDING)
-    )
-    if scope is not None:
-        q = q.join(Student.study_group).filter_by(department_id=scope)
-
-    rows = []
-    for mark in q.all():
-        rows.append(
-            PendingBasisRow(
-                mark_id=mark.id,
-                student_id=mark.student_id,
-                full_name=mark.student.full_name,
-                group_code=mark.student.study_group.code,
-                date=mark.date,
-                mark_code=mark.mark_code.code,
-                mark_name=mark.mark_code.name,
-                basis_deadline=mark.basis_deadline,
-                is_overdue=bool(mark.basis_deadline and mark.basis_deadline < today),
-            )
-        )
-    return rows
 
 
-@router.patch("/pending-basis/{mark_id}")
-def confirm_basis(
-    mark_id: int,
-    payload: ConfirmBasisRequest,
-    user: User = Depends(require_management),
-    db: Session = Depends(get_db),
-):
-    mark = db.get(AttendanceMark, mark_id)
-    if mark is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Отметка не найдена")
-
-    if RoleCode(user.role.code) == RoleCode.DEPT_HEAD:
-        if mark.student.study_group.department_id != user.department_id:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Студент не из вашего отделения")
-
-    old_reference = mark.basis_reference
-    mark.basis_reference = payload.basis_reference
-    mark.basis_status = BasisStatus.CONFIRMED
-    mark.updated_by_user_id = user.id
-    mark.updated_at = utcnow()
-    log_action(
-        db, user, "basis.confirm", "attendance_mark", str(mark.id),
-        old_value=old_reference, new_value=payload.basis_reference,
-    )
-    db.commit()
-    return {"mark_id": mark.id, "basis_reference": mark.basis_reference, "basis_status": mark.basis_status}

@@ -121,18 +121,6 @@ export interface StudentCard {
   history: StudentMarkHistoryEntry[];
 }
 
-export interface PendingBasisRow {
-  mark_id: number;
-  student_id: number;
-  full_name: string;
-  group_code: string;
-  date: string;
-  mark_code: string;
-  mark_name: string;
-  basis_deadline: string | null;
-  is_overdue: boolean;
-}
-
 // --- Admin ---
 
 export interface DepartmentAdmin {

@@ -6,7 +6,6 @@ import type {
   CuratorDisciplineRow,
   DayOverviewRow,
   DynamicsPoint,
-  PendingBasisRow,
   RiskStudentRow,
   StudentCard,
   StudyGroupAdmin,
@@ -23,7 +22,7 @@ function daysAgoIso(n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-type Tab = "day" | "dynamics" | "risk" | "discipline" | "basis" | "vacant";
+type Tab = "day" | "dynamics" | "risk" | "discipline" | "vacant";
 
 export default function DashboardsPage() {
   const [tab, setTab] = useState<Tab>("day");
@@ -38,8 +37,6 @@ export default function DashboardsPage() {
 
   const [riskRows, setRiskRows] = useState<RiskStudentRow[]>([]);
   const [disciplineRows, setDisciplineRows] = useState<CuratorDisciplineRow[]>([]);
-  const [pendingBasisRows, setPendingBasisRows] = useState<PendingBasisRow[]>([]);
-  const [basisDrafts, setBasisDrafts] = useState<Record<number, string>>({});
 
   const [courseFilter, setCourseFilter] = useState<number | "all">("all");
   const [openStudentId, setOpenStudentId] = useState<number | null>(null);
@@ -90,13 +87,6 @@ export default function DashboardsPage() {
       .catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка загрузки"));
   }, [tab, dateFrom, dateTo]);
 
-  function loadPendingBasis() {
-    api
-      .get<PendingBasisRow[]>("/dashboards/pending-basis")
-      .then(setPendingBasisRows)
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка загрузки"));
-  }
-
   function loadVacantGroups() {
     api.get<StudyGroupAdmin[]>("/admin/groups").then(setGroups).catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка загрузки"));
     api
@@ -106,28 +96,10 @@ export default function DashboardsPage() {
   }
 
   useEffect(() => {
-    // Грузим сразу, чтобы счётчики в вкладках были видны и без переключения на них.
-    loadPendingBasis();
+    // Грузим сразу, чтобы счётчик в вкладке был виден и без переключения на неё.
     loadVacantGroups();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  async function confirmBasis(markId: number) {
-    const reference = (basisDrafts[markId] ?? "").trim();
-    if (!reference) return;
-    setError(null);
-    try {
-      await api.patch(`/dashboards/pending-basis/${markId}`, { basis_reference: reference });
-      setBasisDrafts((prev) => {
-        const next = { ...prev };
-        delete next[markId];
-        return next;
-      });
-      loadPendingBasis();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось подтвердить основание");
-    }
-  }
 
   return (
     <div>
@@ -143,9 +115,6 @@ export default function DashboardsPage() {
         </button>
         <button className={tab === "discipline" ? "active" : ""} onClick={() => setTab("discipline")}>
           Дисциплина кураторов
-        </button>
-        <button className={tab === "basis" ? "active" : ""} onClick={() => setTab("basis")}>
-          Контроль оснований{pendingBasisRows.length > 0 ? ` (${pendingBasisRows.length})` : ""}
         </button>
         <button className={tab === "vacant" ? "active" : ""} onClick={() => setTab("vacant")}>
           Вакантные группы{vacantGroups.length > 0 ? ` (${vacantGroups.length})` : ""}
@@ -299,64 +268,6 @@ export default function DashboardsPage() {
             ))}
           </tbody>
         </table>
-      )}
-
-      {tab === "basis" && (
-        <>
-          <p className="hint">
-            Отметка не превращается в «н» автоматически, даже если основание так и не принесли — это решение
-            человека. Здесь видно расхождение и можно внести номер и дату приказа/справки/заявления, когда
-            документ принесут.
-          </p>
-          <table className="dash-table">
-            <thead>
-              <tr>
-                <th>Студент</th>
-                <th>Группа</th>
-                <th>Дата</th>
-                <th>Код</th>
-                <th>Срок</th>
-                <th>Основание</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {pendingBasisRows.map((r) => (
-                <tr key={r.mark_id} className={r.is_overdue ? "risk-row" : ""}>
-                  <td>
-                    <button className="link-btn" onClick={() => setOpenStudentId(r.student_id)}>
-                      {r.full_name}
-                    </button>
-                  </td>
-                  <td>{r.group_code}</td>
-                  <td>{r.date}</td>
-                  <td>{r.mark_name}</td>
-                  <td>
-                    {r.basis_deadline ?? "—"}
-                    {r.is_overdue && <span className="risk-badge">просрочено</span>}
-                  </td>
-                  <td>
-                    <input
-                      placeholder="№ приказа / справки / заявления"
-                      value={basisDrafts[r.mark_id] ?? ""}
-                      onChange={(e) => setBasisDrafts((prev) => ({ ...prev, [r.mark_id]: e.target.value }))}
-                    />
-                  </td>
-                  <td>
-                    <button onClick={() => confirmBasis(r.mark_id)} disabled={!(basisDrafts[r.mark_id] ?? "").trim()}>
-                      Подтвердить
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {pendingBasisRows.length === 0 && (
-                <tr>
-                  <td colSpan={7}>Неподтверждённых оснований нет.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </>
       )}
 
       {tab === "vacant" && (
