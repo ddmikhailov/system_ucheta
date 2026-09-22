@@ -32,3 +32,6 @@ backend/scripts/import/data/*.csv
 
 # Логи
 *.log
+
+# Локальные настройки инструментов разработки
+.claude/
