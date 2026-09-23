@@ -3,8 +3,8 @@ import { NavLink } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import NotificationBell from "./NotificationBell";
 
-const MANAGEMENT_ROLES = ["dept_head", "edu_department", "admin"];
-const ADMIN_PANEL_ROLES = ["edu_department", "admin", "dept_head"];
+const MANAGEMENT_ROLES = ["dept_head", "edu_department", "admin", "tutor"];
+const ADMIN_PANEL_ROLES = ["edu_department", "admin", "dept_head", "tutor"];
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();

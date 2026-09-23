@@ -7,6 +7,11 @@ class RoleCode(str, enum.Enum):
     DEPT_HEAD = "dept_head"
     EDU_DEPARTMENT = "edu_department"
     ADMIN = "admin"
+    # Полный доступ по всему колледжу, как у admin (см. обновление 1.2) —
+    # отдельная роль, а не просто звание, в отличие от display_title у
+    # dept_head: тьютору нужны реально те же права, что у администратора,
+    # а не только другая подпись.
+    TUTOR = "tutor"
 
 
 class StudentStatus(str, enum.Enum):

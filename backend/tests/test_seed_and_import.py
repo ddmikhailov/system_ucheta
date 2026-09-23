@@ -4,7 +4,7 @@ VACANT_GROUPS = {"ИИ132", "СА332", "ИСП452д"}
 
 
 def test_seed_creates_reference_data(seeded, db):
-    assert db.query(Role).count() == 5
+    assert db.query(Role).count() == 6
     assert db.query(MarkCode).count() == 8
     assert db.query(Department).count() == 1
     assert db.query(Department).one().name == "Диджитал"
@@ -15,7 +15,7 @@ def test_seed_is_idempotent(seeded, db):
     import scripts.seed as seed_script
 
     seed_script.run()
-    assert db.query(Role).count() == 5
+    assert db.query(Role).count() == 6
     assert db.query(MarkCode).count() == 8
     assert db.query(Department).count() == 1
 

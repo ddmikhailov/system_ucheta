@@ -133,6 +133,7 @@ class UserUpdate(BaseModel):
 
     username: str | None = None
     full_name: str | None = None
+    role: str | None = None
     department_id: int | None = None
     is_active: bool | None = None
     display_title: str | None = None

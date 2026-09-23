@@ -15,10 +15,10 @@ export default function AdminPage() {
   const isDeptHead = user?.role === "dept_head";
   const [tab, setTab] = useState<Tab>(isDeptHead ? "journal" : "groups");
 
-  // Отделения и справочники (коды отметок, календарь) — зона воспитательного
-  // отдела и администратора по всему колледжу, не зав. отделением.
-  const isAdmin = user?.role === "admin";
-  const isReferenceEditor = user?.role === "admin" || user?.role === "edu_department";
+  // Тьютор — второй полноценный администратор по всему колледжу (обновление
+  // 1.2): везде, где раньше был только admin, теперь и он.
+  const isAdmin = user?.role === "admin" || user?.role === "tutor";
+  const isReferenceEditor = isAdmin || user?.role === "edu_department";
   // Группы/студенты/пользователи — администратор по колледжу и зав.
   // отделением в своём отделении (бэкенд сам ограничивает область видимости).
   const canManageStructure = isAdmin || isDeptHead;

@@ -402,6 +402,23 @@ def _assert_can_manage_user(admin: User, target: User) -> None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Пользователь не относится к вашему отделению")
 
 
+# Роли с правами на весь колледж — их назначение доверено только тем, у кого
+# они уже есть (обновление 1.2: смена ролей). Зав. отделением/советник может
+# менять роль только в границах "куратор ⇄ заместитель ⇄ зав. отделением" —
+# иначе он мог бы сам себя или кого угодно назначить администратором.
+_FULL_ACCESS_ROLES = {RoleCode.ADMIN.value, RoleCode.TUTOR.value}
+_DEPT_HEAD_ASSIGNABLE_ROLES = {RoleCode.CURATOR.value, RoleCode.DEPUTY_CURATOR.value, RoleCode.DEPT_HEAD.value}
+
+
+def _assert_can_assign_role(admin: User, new_role_code: str) -> None:
+    admin_role = RoleCode(admin.role.code)
+    if admin_role in (RoleCode.ADMIN, RoleCode.TUTOR):
+        return
+    if admin_role == RoleCode.DEPT_HEAD and new_role_code in _DEPT_HEAD_ASSIGNABLE_ROLES:
+        return
+    raise HTTPException(status.HTTP_403_FORBIDDEN, "Недостаточно прав для назначения этой роли")
+
+
 @router.get("/users", response_model=list[UserRead])
 def list_users(user: User = Depends(require_management), db: Session = Depends(get_db)):
     q = db.query(User)
@@ -456,6 +473,17 @@ def update_user(
     if target is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Пользователь не найден")
     _assert_can_manage_user(admin, target)
+
+    if payload.role is not None and payload.role != target.role.code:
+        if target.id == admin.id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Нельзя менять свою собственную роль")
+        _assert_can_assign_role(admin, payload.role)
+        new_role = db.query(Role).filter(Role.code == payload.role).one_or_none()
+        if new_role is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Неизвестная роль")
+        old_role = target.role.code
+        target.role_id = new_role.id
+        log_action(db, admin, "user.role_change", "user", str(target.id), old_value=old_role, new_value=payload.role)
 
     if payload.username is not None and payload.username != target.username:
         if db.query(User).filter(User.username == payload.username, User.id != target.id).first():

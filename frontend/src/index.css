@@ -566,6 +566,17 @@ select:hover {
   color: var(--muted);
 }
 
+.admin-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: center;
+}
+
+.admin-row-actions .inline-form {
+  margin-top: 0;
+}
+
 .roster-table tbody tr:hover,
 .dash-table tbody tr:hover {
   background: var(--primary-light);
@@ -638,14 +649,23 @@ select:hover {
   max-width: 640px;
 }
 
-/* --- Percent bar --- */
+/* --- Percent bar ---
+   Минималистичная тонкая полоса на токенах --ok/--warn/--danger — так же,
+   как остальные статусы на сайте, а не самостоятельные цвета "заливка +
+   белый текст поверх". Число — рядом, а не поверх полосы. */
 
 .percent-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.percent-bar__track {
   position: relative;
-  width: 100px;
-  height: 18px;
-  background: #eeecf6;
-  border-radius: 5px;
+  width: 72px;
+  height: 6px;
+  background: var(--border);
+  border-radius: 999px;
   overflow: hidden;
 }
 
@@ -654,18 +674,15 @@ select:hover {
   left: 0;
   top: 0;
   bottom: 0;
+  border-radius: 999px;
   transition: width 0.2s ease;
 }
 
-.percent-bar span {
-  position: relative;
-  z-index: 1;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 18px;
-  padding-left: 4px;
-  mix-blend-mode: difference;
-  color: white;
+.percent-bar__value {
+  min-width: 44px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 /* --- Modal --- */
@@ -678,6 +695,7 @@ select:hover {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 16px;
   z-index: 10;
 }
 
@@ -703,14 +721,99 @@ select:hover {
 }
 
 @media (max-width: 640px) {
+  .app-main {
+    padding: 14px;
+  }
+
   .app-header {
     flex-direction: column;
     align-items: flex-start;
+    gap: 12px;
+    padding: 10px 14px;
   }
 
-  .roster-table,
+  .app-header__nav {
+    width: 100%;
+  }
+
+  .app-header__user {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+
+  /* Отчётные таблицы (витрины, справочники в админке) — читаем со свайпом
+     вбок, не пытаемся втиснуть все колонки в экран телефона. */
   .dash-table {
     display: block;
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Журнал группы — то, что реально проставляет куратор на телефоне, поэтому
+     не просто скроллим вбок, а превращаем строку в карточку: имя, статус,
+     комментарий друг под другом, подписанные, как в форме. */
+  .roster-table thead {
+    display: none;
+  }
+
+  .roster-table,
+  .roster-table tbody,
+  .roster-table tr,
+  .roster-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .roster-table tr {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 10px;
+    padding: 10px 12px;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .roster-table td {
+    padding: 6px 0;
+    border-bottom: none;
+  }
+
+  .roster-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin-bottom: 3px;
+  }
+
+  .roster-table td select,
+  .roster-table td input {
+    width: 100%;
+    margin-bottom: 6px;
+  }
+
+  /* Touch-цели покрупнее — за пределами этого пункта размеры не трогаем,
+     чтобы плотные таблицы на десктопе не "разъезжались". */
+  button,
+  input,
+  select {
+    min-height: 40px;
+  }
+
+  button.link-btn {
+    min-height: auto;
+  }
+
+  .notification-bell__panel {
+    width: calc(100vw - 32px);
+    max-width: 360px;
+    right: -8px;
+  }
+
+  .modal {
+    max-width: 100%;
   }
 }

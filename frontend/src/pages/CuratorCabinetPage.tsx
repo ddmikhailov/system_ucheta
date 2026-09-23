@@ -181,8 +181,8 @@ export default function CuratorCabinetPage() {
                 const risky = entry.risk_streak >= 3;
                 return (
                   <tr key={entry.student_id} className={risky ? "risk-row" : ""}>
-                    <td>{entry.full_name}</td>
-                    <td>
+                    <td data-label="ФИО">{entry.full_name}</td>
+                    <td data-label="Статус">
                       {entry.is_locked ? (
                         <span className="locked-badge" title={entry.basis_reference ?? ""}>
                           {entry.mark_name}
@@ -205,7 +205,7 @@ export default function CuratorCabinetPage() {
                       )}
                       {risky && <span className="risk-badge">риск: {entry.risk_streak} дн. подряд</span>}
                     </td>
-                    <td>
+                    <td data-label="Комментарий / основание">
                       {!entry.is_locked && code && (
                         <>
                           <input

@@ -52,7 +52,7 @@ def can_edit_date(user: User, target_date: datetime.date, today: datetime.date) 
     правка задним числом больше чем на 48 часов просто уведомляет зав.
     отделением, см. notify_if_late_edit, а не блокируется). Будущее
     по-прежнему недоступно никому — отмечать то, чего ещё не было, нельзя."""
-    if user.role.code in (RoleCode.DEPT_HEAD, RoleCode.EDU_DEPARTMENT, RoleCode.ADMIN):
+    if user.role.code in (RoleCode.DEPT_HEAD, RoleCode.EDU_DEPARTMENT, RoleCode.ADMIN, RoleCode.TUTOR):
         return True
     return target_date <= today
 

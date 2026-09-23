@@ -9,7 +9,7 @@ import CuratorCabinetPage from "./pages/CuratorCabinetPage";
 import DashboardsPage from "./pages/DashboardsPage";
 import AdminPage from "./pages/AdminPage";
 
-const MANAGEMENT_ROLES = ["dept_head", "edu_department", "admin"];
+const MANAGEMENT_ROLES = ["dept_head", "edu_department", "admin", "tutor"];
 
 function RequireAuth({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
@@ -34,7 +34,7 @@ function RequireAdminAccess({ children }: { children: ReactElement }) {
   // Зав. отделением тоже пускаем в админку — ему там доступна пока только
   // вкладка «Пользователи» (управление логинами/паролями кураторов своего
   // отделения), см. AdminPage.
-  if (!user || !["admin", "edu_department", "dept_head"].includes(user.role)) return <Navigate to="/" replace />;
+  if (!user || !["admin", "edu_department", "dept_head", "tutor"].includes(user.role)) return <Navigate to="/" replace />;
   return children;
 }
 

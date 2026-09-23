@@ -388,11 +388,16 @@ function StudentCardModal({
 }
 
 function PercentBar({ value }: { value: number }) {
-  const color = value >= 95 ? "#2e7d32" : value >= 85 ? "#f9a825" : "#c62828";
+  const color = value >= 95 ? "var(--ok)" : value >= 85 ? "var(--warn)" : "var(--danger)";
+  const textColor = value >= 95 ? "var(--ok)" : value >= 85 ? "var(--warn-ink)" : "var(--danger)";
   return (
     <div className="percent-bar">
-      <div className="percent-bar__fill" style={{ width: `${Math.min(value, 100)}%`, background: color }} />
-      <span>{value.toFixed(1)}%</span>
+      <div className="percent-bar__track">
+        <div className="percent-bar__fill" style={{ width: `${Math.min(value, 100)}%`, background: color }} />
+      </div>
+      <span className="percent-bar__value" style={{ color: textColor }}>
+        {value.toFixed(1)}%
+      </span>
     </div>
   );
 }

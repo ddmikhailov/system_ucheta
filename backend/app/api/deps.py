@@ -39,11 +39,15 @@ def require_roles(*roles: RoleCode):
     return dependency
 
 
-require_management = require_roles(RoleCode.DEPT_HEAD, RoleCode.EDU_DEPARTMENT, RoleCode.ADMIN)
+require_management = require_roles(RoleCode.DEPT_HEAD, RoleCode.EDU_DEPARTMENT, RoleCode.ADMIN, RoleCode.TUTOR)
 # Справочники (коды отметок, календарь, сроки сдачи) — зона воспитательного
 # отдела, а не зав. отделением (см. таблицу ролей в концепции).
-require_reference_editor = require_roles(RoleCode.EDU_DEPARTMENT, RoleCode.ADMIN)
-require_admin = require_roles(RoleCode.ADMIN)
+require_reference_editor = require_roles(RoleCode.EDU_DEPARTMENT, RoleCode.ADMIN, RoleCode.TUTOR)
+# Тьютор — второй полноценный администратор по всему колледжу (обновление
+# 1.2), не отдельная урезанная роль: везде, где раньше был только admin,
+# теперь и он. Имя оставлено как есть, чтобы не переименовывать во всех
+# вызовах — по смыслу это "require_full_access".
+require_admin = require_roles(RoleCode.ADMIN, RoleCode.TUTOR)
 
 
 def get_curator_group_ids(db: Session, user: User, on_date: datetime.date) -> list[int]:
@@ -58,7 +62,7 @@ def get_curator_group_ids(db: Session, user: User, on_date: datetime.date) -> li
 
 def assert_can_access_group(db: Session, user: User, study_group_id: int, on_date: datetime.date) -> None:
     role = RoleCode(user.role.code)
-    if role in (RoleCode.DEPT_HEAD, RoleCode.EDU_DEPARTMENT, RoleCode.ADMIN):
+    if role in (RoleCode.DEPT_HEAD, RoleCode.EDU_DEPARTMENT, RoleCode.ADMIN, RoleCode.TUTOR):
         if role == RoleCode.DEPT_HEAD:
             group = db.get(StudyGroup, study_group_id)
             if group is None or group.department_id != user.department_id:

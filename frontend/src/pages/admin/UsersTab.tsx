@@ -10,6 +10,7 @@ const ROLE_LABELS: Record<string, string> = {
   dept_head: "Зав. отделением",
   edu_department: "Воспитательный отдел",
   admin: "Администратор",
+  tutor: "Тьютор",
 };
 
 // Права роли dept_head одни и те же для всех — это просто разные подписи
@@ -18,6 +19,15 @@ const DEPT_HEAD_TITLE_PRESETS = ["Зав. отделением", "Советни
 
 function roleDisplay(u: UserAdmin): string {
   return u.display_title || ROLE_LABELS[u.role] || u.role;
+}
+
+// Кто какую роль может назначить — зеркалит ограничение на бэкенде
+// (_assert_can_assign_role в admin.py): зав. отделением/советник не может
+// сам себя или кого угодно сделать администратором.
+function assignableRoles(myRole: string | undefined): string[] {
+  if (myRole === "admin" || myRole === "tutor") return Object.keys(ROLE_LABELS);
+  if (myRole === "dept_head") return ["curator", "deputy_curator", "dept_head"];
+  return [];
 }
 
 function statusLabel(u: UserAdmin): string {
@@ -52,6 +62,7 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editUsername, setEditUsername] = useState("");
   const [editFullName, setEditFullName] = useState("");
+  const [editRole, setEditRole] = useState("curator");
   const [editDisplayTitle, setEditDisplayTitle] = useState(DEPT_HEAD_TITLE_PRESETS[0]);
 
   function load() {
@@ -131,15 +142,16 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
     setEditingId(u.id);
     setEditUsername(u.username);
     setEditFullName(u.full_name);
+    setEditRole(u.role);
     setEditDisplayTitle(u.display_title || DEPT_HEAD_TITLE_PRESETS[0]);
   }
 
-  async function saveEdit(userId: number, role: string) {
+  async function saveEdit(userId: number) {
     setError(null);
     try {
       await api.patch(`/admin/users/${userId}`, {
-        username: editUsername, full_name: editFullName,
-        ...(role === "dept_head" ? { display_title: editDisplayTitle === DEPT_HEAD_TITLE_PRESETS[0] ? "" : editDisplayTitle } : {}),
+        username: editUsername, full_name: editFullName, role: editRole,
+        ...(editRole === "dept_head" ? { display_title: editDisplayTitle === DEPT_HEAD_TITLE_PRESETS[0] ? "" : editDisplayTitle } : {}),
       });
       setEditingId(null);
       load();
@@ -235,14 +247,25 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
                 </>
               )}
               <td>
-                {editingId === u.id && u.role === "dept_head" ? (
-                  <select value={editDisplayTitle} onChange={(e) => setEditDisplayTitle(e.target.value)}>
-                    {DEPT_HEAD_TITLE_PRESETS.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
+                {editingId === u.id && u.id !== me?.id ? (
+                  <>
+                    <select value={editRole} onChange={(e) => setEditRole(e.target.value)}>
+                      {Array.from(new Set([u.role, ...assignableRoles(me?.role)])).map((r) => (
+                        <option key={r} value={r}>
+                          {ROLE_LABELS[r] ?? r}
+                        </option>
+                      ))}
+                    </select>
+                    {editRole === "dept_head" && (
+                      <select value={editDisplayTitle} onChange={(e) => setEditDisplayTitle(e.target.value)}>
+                        {DEPT_HEAD_TITLE_PRESETS.map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </>
                 ) : (
                   roleDisplay(u)
                 )}
@@ -260,7 +283,7 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
                 <td className="admin-row-actions">
                   {editingId === u.id ? (
                     <>
-                      <button className="link-btn" onClick={() => saveEdit(u.id, u.role)}>
+                      <button className="link-btn" onClick={() => saveEdit(u.id)}>
                         Сохранить
                       </button>
                       <button className="link-btn" onClick={() => setEditingId(null)}>
