@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routers import admin, auth, curator, dashboards, export
+from app.api.routers import admin, auth, curator, dashboards, export, notifications
 from app.core.config import get_settings
 
 logging.basicConfig(level=logging.INFO)
@@ -66,6 +66,7 @@ app.include_router(curator.router)
 app.include_router(dashboards.router)
 app.include_router(admin.router)
 app.include_router(export.router)
+app.include_router(notifications.router)
 
 
 @app.get("/health")

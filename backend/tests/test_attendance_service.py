@@ -111,10 +111,53 @@ def test_draft_copies_yesterdays_exceptions_but_does_not_persist(imported, db, c
     assert by_id2[s1.id]["mark_code"] is None
 
 
-def test_curator_cannot_backdate_beyond_window(imported, db, curator_group, curator_user):
+def test_curator_can_now_backdate_any_past_day(imported, db, curator_group, curator_user):
+    # Обновление 1.1: куратор больше не ограничен "вчера" — правка любого
+    # прошедшего дня разрешена, дальше это вопрос уведомления, не запрета.
     far_future = DAY3 + datetime.timedelta(days=5)
+    attendance_service.submit_day(db, curator_group.id, DAY1, [], curator_user, today=far_future)
+    roster = attendance_service.get_roster(db, curator_group.id, DAY1)
+    assert roster["is_submitted"] is True
+
+
+def test_curator_cannot_edit_future_day(imported, db, curator_group, curator_user):
     with pytest.raises(attendance_service.BackdateNotAllowed):
-        attendance_service.submit_day(db, curator_group.id, DAY1, [], curator_user, today=far_future)
+        attendance_service.submit_day(db, curator_group.id, DAY3, [], curator_user, today=DAY1)
+
+
+def test_late_edit_notifies_dept_head(imported, db, curator_group, curator_user, dept_head_user):
+    from app.models import InAppNotification
+
+    far_future = DAY1 + datetime.timedelta(days=3)  # 72 ч спустя — больше 48
+    attendance_service.submit_day(db, curator_group.id, DAY1, [], curator_user, today=far_future)
+
+    notif = (
+        db.query(InAppNotification)
+        .filter(InAppNotification.user_id == dept_head_user.id, InAppNotification.kind == "late_edit")
+        .one()
+    )
+    assert curator_user.full_name in notif.message
+    assert curator_group.code in notif.message
+
+
+def test_edit_within_48_hours_does_not_notify(imported, db, curator_group, curator_user, dept_head_user):
+    from app.models import InAppNotification
+
+    next_day = DAY1 + datetime.timedelta(days=1)  # ровно "вчера" — в пределах 48ч
+    attendance_service.submit_day(db, curator_group.id, DAY1, [], curator_user, today=next_day)
+
+    count = db.query(InAppNotification).filter(InAppNotification.kind == "late_edit").count()
+    assert count == 0
+
+
+def test_management_late_edit_does_not_notify(imported, db, curator_group, dept_head_user):
+    from app.models import InAppNotification
+
+    far_future = DAY1 + datetime.timedelta(days=3)
+    attendance_service.submit_day(db, curator_group.id, DAY1, [], dept_head_user, today=far_future)
+
+    count = db.query(InAppNotification).filter(InAppNotification.kind == "late_edit").count()
+    assert count == 0
 
 
 def test_dept_head_can_backdate_freely(imported, db, curator_group, dept_head_user):

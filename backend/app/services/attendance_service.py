@@ -3,7 +3,6 @@ import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
 from app.core.time import utcnow
 from app.models import (
     AbsencePeriod,
@@ -12,14 +11,14 @@ from app.models import (
     DaySubmission,
     MarkCode,
     MarkSource,
+    RoleCode,
     Student,
     StudentStatus,
+    StudyGroup,
     User,
 )
-from app.services import calendar_service
+from app.services import calendar_service, in_app_notification_service
 from app.services.audit_service import log_action
-
-settings = get_settings()
 
 
 class BackdateNotAllowed(Exception):
@@ -47,13 +46,29 @@ def get_active_students(db: Session, study_group_id: int, as_of: datetime.date) 
     return list(db.execute(stmt).scalars().all())
 
 
-def can_backdate(user: User, target_date: datetime.date, today: datetime.date) -> bool:
-    from app.models.enums import RoleCode
-
+def can_edit_date(user: User, target_date: datetime.date, today: datetime.date) -> bool:
+    """Куратор правит посещаемость за любой прошедший день без ограничения
+    (обновление 1.1: раньше было только «вчера», теперь — весь период;
+    правка задним числом больше чем на 48 часов просто уведомляет зав.
+    отделением, см. notify_if_late_edit, а не блокируется). Будущее
+    по-прежнему недоступно никому — отмечать то, чего ещё не было, нельзя."""
     if user.role.code in (RoleCode.DEPT_HEAD, RoleCode.EDU_DEPARTMENT, RoleCode.ADMIN):
         return True
-    earliest_editable = today - datetime.timedelta(days=settings.curator_backdate_days)
-    return earliest_editable <= target_date <= today
+    return target_date <= today
+
+
+def notify_if_late_edit(
+    db: Session, group: StudyGroup, user: User, date: datetime.date, today: datetime.date | None = None,
+) -> None:
+    if user.role.code not in (RoleCode.CURATOR, RoleCode.DEPUTY_CURATOR):
+        return
+    today = today or datetime.date.today()
+    # Дневная гранулярность, как и everywhere в этом модуле (can_edit_date,
+    # is_on_time): "больше 48 часов" здесь — день до вчерашнего и раньше.
+    # Ровно "вчера" (до 48 ч) уведомление не создаёт.
+    hours_late = (today - date).days * 24
+    if hours_late > 48:
+        in_app_notification_service.notify_late_edit(db, group, user, date, hours_late)
 
 
 def get_mark_codes(db: Session) -> dict[str, MarkCode]:
@@ -187,11 +202,8 @@ def submit_day(
     today: datetime.date | None = None,
 ) -> DaySubmission:
     today = today or datetime.date.today()
-    if not can_backdate(user, date, today):
-        raise BackdateNotAllowed(
-            f"Правка за {date} недоступна: куратор редактирует только текущий и "
-            f"предыдущий учебный день, дальше — через зав. отделением."
-        )
+    if not can_edit_date(user, date, today):
+        raise BackdateNotAllowed(f"Правка за {date} недоступна: это ещё не наступивший день.")
 
     mark_codes = get_mark_codes(db)
     active_students = get_active_students(db, study_group_id, date)
@@ -281,6 +293,10 @@ def submit_day(
         submission.submitted_at = utcnow()
         submission.is_on_time = is_on_time
         log_action(db, user, "day.resubmit", "day_submission", f"{study_group_id}:{date}")
+
+    group = db.get(StudyGroup, study_group_id)
+    if group is not None:
+        notify_if_late_edit(db, group, user, date, today=today)
 
     db.commit()
     return submission

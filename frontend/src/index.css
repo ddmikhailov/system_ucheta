@@ -232,6 +232,97 @@ select:hover {
   font-weight: 600;
 }
 
+.notification-bell {
+  position: relative;
+}
+
+.notification-bell__toggle {
+  position: relative;
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+}
+
+.notification-bell__badge {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  background: #c62828;
+  color: white;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 5px;
+  line-height: 1.4;
+}
+
+.notification-bell__panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 320px;
+  max-height: 400px;
+  overflow-y: auto;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  z-index: 20;
+  padding: 12px;
+  text-align: left;
+  color: var(--text);
+}
+
+.notification-bell__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.notification-bell__empty {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.notification-bell__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.notification-bell__list li {
+  padding: 8px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.notification-bell__list li.unread {
+  background: var(--primary-light);
+  font-weight: 600;
+}
+
+.notification-bell__list li.read {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.notification-bell__list time {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
 .app-main {
   padding: 24px;
   max-width: 1160px;

@@ -31,6 +31,28 @@ class TelegramLinkToken(Base):
         return self.used_at is None and self.expires_at > utcnow()
 
 
+class InAppNotification(Base):
+    """Уведомления внутри платформы — колокольчик в шапке (обновление 1.1).
+
+    Пока это единственный канал: Telegram скрыт из интерфейса, значит
+    события вроде «куратор отредактировал день задним числом» должны быть
+    видны где-то ещё, иначе зав. отделением о них просто не узнает.
+    """
+
+    __tablename__ = "in_app_notifications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    message: Mapped[str] = mapped_column(String(500), nullable=False)
+    entity_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    entity_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    read_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
+
+    user: Mapped["User"] = relationship()
+
+
 class NotificationLog(Base):
     """Кому и когда что отправлено — планировщик сверяется с этим перед
     отправкой, чтобы перезапуск не задвоил напоминание и не нарушил лимит

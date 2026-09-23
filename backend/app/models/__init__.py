@@ -10,7 +10,7 @@ from app.models.enums import (
     StudentStatus,
 )
 from app.models.marks import AbsencePeriod, AttendanceMark, DaySubmission, MarkCode
-from app.models.notifications import NotificationLog, TelegramLinkToken
+from app.models.notifications import InAppNotification, NotificationLog, TelegramLinkToken
 from app.models.org import Department, StudyGroup
 from app.models.people import CuratorAssignment, Student
 
@@ -25,6 +25,7 @@ __all__ = [
     "DaySubmission",
     "DayType",
     "Department",
+    "InAppNotification",
     "Invitation",
     "MarkCode",
     "MarkSource",

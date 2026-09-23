@@ -196,3 +196,13 @@ export interface CalendarDay {
   date: string;
   day_type: string;
 }
+
+export interface NotificationItem {
+  id: number;
+  kind: string;
+  message: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  created_at: string;
+  read_at: string | null;
+}

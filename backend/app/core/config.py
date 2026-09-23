@@ -21,9 +21,6 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:5173"]
 
-    # Правка задним числом: сколько предыдущих учебных дней куратор может редактировать сам.
-    curator_backdate_days: int = 1
-
     # Порог для подсветки риска: количество кодов "н" подряд.
     risk_threshold_consecutive_unexcused: int = 3
 
