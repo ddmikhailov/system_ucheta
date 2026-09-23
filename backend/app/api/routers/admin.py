@@ -385,6 +385,7 @@ def end_curator_assignment(
 def _user_read(u: User) -> UserRead:
     return UserRead(
         id=u.id, username=u.username, full_name=u.full_name, role=u.role.code,
+        display_title=u.display_title,
         department_id=u.department_id, is_active=u.is_active,
         telegram_linked=u.telegram_chat_id is not None,
         has_password=u.password_hash is not None,
@@ -424,6 +425,7 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)):
     user = User(
         username=payload.username, full_name=payload.full_name,
         role_id=role.id, department_id=payload.department_id, password_hash=None,
+        display_title=payload.display_title,
     )
     db.add(user)
     db.commit()
@@ -464,6 +466,9 @@ def update_user(
 
     if payload.full_name is not None:
         target.full_name = payload.full_name
+
+    if payload.display_title is not None:
+        target.display_title = payload.display_title or None
 
     if payload.department_id is not None and RoleCode(admin.role.code) != RoleCode.DEPT_HEAD:
         target.department_id = payload.department_id

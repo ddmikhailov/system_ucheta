@@ -106,6 +106,7 @@ class UserCreate(BaseModel):
     username: str
     role: str
     department_id: int | None = None
+    display_title: str | None = None
 
 
 class UserRead(BaseModel):
@@ -113,6 +114,7 @@ class UserRead(BaseModel):
     username: str
     full_name: str
     role: str
+    display_title: str | None
     department_id: int | None
     is_active: bool
     telegram_linked: bool
@@ -133,6 +135,7 @@ class UserUpdate(BaseModel):
     full_name: str | None = None
     department_id: int | None = None
     is_active: bool | None = None
+    display_title: str | None = None
 
 
 class SetPasswordRequest(BaseModel):

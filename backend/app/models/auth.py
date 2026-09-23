@@ -28,6 +28,13 @@ class User(Base):
     role_id: Mapped[int] = mapped_column(ForeignKey("roles.id"), nullable=False)
     department_id: Mapped[int | None] = mapped_column(ForeignKey("departments.id"), nullable=True)
 
+    # Отображаемое звание/должность — не роль с правами (те по-прежнему
+    # определяются role_id), а просто подпись в интерфейсе. Пример из
+    # обновления 1.1: сотрудник с правами зав. отделением, но должность
+    # по штату — «Советник директора по воспитанию». Пусто — показываем
+    # стандартное название роли.
+    display_title: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
     telegram_chat_id: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     telegram_linked_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
 

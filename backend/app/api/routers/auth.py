@@ -88,6 +88,7 @@ def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
         id=user.id,
         full_name=user.full_name,
         role=user.role.code,
+        display_title=user.display_title,
         department_name=user.department.name if user.department else None,
         groups=groups,
         dept_head_name=dept_head_name,

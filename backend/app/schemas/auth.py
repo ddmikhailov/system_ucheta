@@ -21,6 +21,7 @@ class MeResponse(BaseModel):
     id: int
     full_name: str
     role: str
+    display_title: str | None = None
     department_name: str | None = None
     groups: list[MeGroupInfo] = []
     dept_head_name: str | None = None

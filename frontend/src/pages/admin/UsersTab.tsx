@@ -12,6 +12,14 @@ const ROLE_LABELS: Record<string, string> = {
   admin: "Администратор",
 };
 
+// Права роли dept_head одни и те же для всех — это просто разные подписи
+// в интерфейсе для одной и той же должности по факту (см. обновление 1.1).
+const DEPT_HEAD_TITLE_PRESETS = ["Зав. отделением", "Советник директора по воспитанию"];
+
+function roleDisplay(u: UserAdmin): string {
+  return u.display_title || ROLE_LABELS[u.role] || u.role;
+}
+
 function statusLabel(u: UserAdmin): string {
   if (!u.is_active) return "в архиве";
   if (u.is_locked) return "заблокирован";
@@ -32,6 +40,7 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
   const [username, setUsername] = useState("");
   const [role, setRole] = useState("curator");
   const [departmentId, setDepartmentId] = useState<number | null>(null);
+  const [displayTitle, setDisplayTitle] = useState(DEPT_HEAD_TITLE_PRESETS[0]);
 
   // Карточка с только что выданным паролем — показываем один раз, пока не закроют.
   const [issuedPassword, setIssuedPassword] = useState<SetPasswordResult | null>(null);
@@ -43,6 +52,7 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editUsername, setEditUsername] = useState("");
   const [editFullName, setEditFullName] = useState("");
+  const [editDisplayTitle, setEditDisplayTitle] = useState(DEPT_HEAD_TITLE_PRESETS[0]);
 
   function load() {
     api.get<UserAdmin[]>("/admin/users").then(setRows).catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка"));
@@ -60,9 +70,13 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
     setBusy(true);
     setError(null);
     try {
-      await api.post("/admin/users", { full_name: fullName, username, role, department_id: departmentId });
+      await api.post("/admin/users", {
+        full_name: fullName, username, role, department_id: departmentId,
+        display_title: role === "dept_head" && displayTitle !== DEPT_HEAD_TITLE_PRESETS[0] ? displayTitle : null,
+      });
       setFullName("");
       setUsername("");
+      setDisplayTitle(DEPT_HEAD_TITLE_PRESETS[0]);
       load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Не удалось создать пользователя");
@@ -117,12 +131,16 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
     setEditingId(u.id);
     setEditUsername(u.username);
     setEditFullName(u.full_name);
+    setEditDisplayTitle(u.display_title || DEPT_HEAD_TITLE_PRESETS[0]);
   }
 
-  async function saveEdit(userId: number) {
+  async function saveEdit(userId: number, role: string) {
     setError(null);
     try {
-      await api.patch(`/admin/users/${userId}`, { username: editUsername, full_name: editFullName });
+      await api.patch(`/admin/users/${userId}`, {
+        username: editUsername, full_name: editFullName,
+        ...(role === "dept_head" ? { display_title: editDisplayTitle === DEPT_HEAD_TITLE_PRESETS[0] ? "" : editDisplayTitle } : {}),
+      });
       setEditingId(null);
       load();
     } catch (err) {
@@ -216,7 +234,19 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
                   <td>{u.username}</td>
                 </>
               )}
-              <td>{ROLE_LABELS[u.role] ?? u.role}</td>
+              <td>
+                {editingId === u.id && u.role === "dept_head" ? (
+                  <select value={editDisplayTitle} onChange={(e) => setEditDisplayTitle(e.target.value)}>
+                    {DEPT_HEAD_TITLE_PRESETS.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  roleDisplay(u)
+                )}
+              </td>
               <td>{statusLabel(u)}</td>
               <td>
                 <input
@@ -230,7 +260,7 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
                 <td className="admin-row-actions">
                   {editingId === u.id ? (
                     <>
-                      <button className="link-btn" onClick={() => saveEdit(u.id)}>
+                      <button className="link-btn" onClick={() => saveEdit(u.id, u.role)}>
                         Сохранить
                       </button>
                       <button className="link-btn" onClick={() => setEditingId(null)}>
@@ -305,6 +335,15 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
               </option>
             ))}
           </select>
+          {role === "dept_head" && (
+            <select value={displayTitle} onChange={(e) => setDisplayTitle(e.target.value)}>
+              {DEPT_HEAD_TITLE_PRESETS.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          )}
           <select value={departmentId ?? ""} onChange={(e) => setDepartmentId(Number(e.target.value))}>
             {departments.map((d) => (
               <option key={d.id} value={d.id}>

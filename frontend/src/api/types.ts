@@ -8,6 +8,7 @@ export interface MeResponse {
   id: number;
   full_name: string;
   role: string;
+  display_title: string | null;
   department_name: string | null;
   groups: MeGroupInfo[];
   dept_head_name: string | null;
@@ -172,6 +173,7 @@ export interface UserAdmin {
   username: string;
   full_name: string;
   role: string;
+  display_title: string | null;
   department_id: number | null;
   is_active: boolean;
   telegram_linked: boolean;
