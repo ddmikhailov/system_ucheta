@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { api, ApiError } from "../../api/client";
 import { useAuth } from "../../auth/AuthContext";
+import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { DeleteResult, DepartmentAdmin, SetPasswordResult, UserAdmin } from "../../api/types";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -41,6 +42,7 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
   const [rows, setRows] = useState<UserAdmin[]>([]);
   const [departments, setDepartments] = useState<DepartmentAdmin[]>([]);
   const [error, setError] = useState<string | null>(null);
+  useScrollToTopOnChange(error);
   const [page, setPage] = useState(0);
 
   const [fullName, setFullName] = useState("");
@@ -50,6 +52,9 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
   const [busy, setBusy] = useState(false);
 
   const [profileId, setProfileId] = useState<number | null>(null);
+  // Архивные (удалённые/заблокированные насовсем оставленные в архиве)
+  // пользователи не мешаются в основном списке — их можно найти отдельно.
+  const [showArchived, setShowArchived] = useState(false);
 
   function load() {
     api.get<UserAdmin[]>("/admin/users").then(setRows).catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка"));
@@ -78,8 +83,10 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
     }
   }
 
-  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
-  const pageRows = rows.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+  const visibleRows = showArchived ? rows : rows.filter((u) => u.is_active);
+  const archivedCount = rows.length - rows.filter((u) => u.is_active).length;
+  const pageCount = Math.max(1, Math.ceil(visibleRows.length / PAGE_SIZE));
+  const pageRows = visibleRows.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
   const profileUser = rows.find((u) => u.id === profileId) ?? null;
 
   return (
@@ -165,6 +172,20 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
           onClose={() => setProfileId(null)}
           onChanged={load}
         />
+      )}
+
+      {archivedCount > 0 && (
+        <p className="hint archive-toggle">
+          <button
+            className="link-btn"
+            onClick={() => {
+              setShowArchived((v) => !v);
+              setPage(0);
+            }}
+          >
+            {showArchived ? "Скрыть архив" : `Архив (${archivedCount})`}
+          </button>
+        </p>
       )}
     </div>
   );

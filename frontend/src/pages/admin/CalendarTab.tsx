@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../../api/client";
+import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { CalendarDay, GroupCalendarOverride, StudyGroupAdmin } from "../../api/types";
 
 function todayIso(): string {
@@ -25,6 +26,7 @@ export default function CalendarTab({ canEdit }: { canEdit: boolean }) {
   const [dateTo, setDateTo] = useState(monthsAheadIso(3));
   const [rows, setRows] = useState<CalendarDay[]>([]);
   const [error, setError] = useState<string | null>(null);
+  useScrollToTopOnChange(error);
 
   const [newDate, setNewDate] = useState(todayIso());
   const [newType, setNewType] = useState("holiday");

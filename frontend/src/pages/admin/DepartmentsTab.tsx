@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { api, ApiError } from "../../api/client";
+import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { DepartmentAdmin } from "../../api/types";
 
 export default function DepartmentsTab({ canEdit }: { canEdit: boolean }) {
   const [rows, setRows] = useState<DepartmentAdmin[]>([]);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  useScrollToTopOnChange(error);
   const [busy, setBusy] = useState(false);
 
   function load() {

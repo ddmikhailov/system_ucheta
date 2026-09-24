@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "../../api/client";
+import { scrollToTop } from "../../utils/scroll";
 import type { MarkCodeOption, MonthDayStatus, RosterResponse, StudyGroupAdmin } from "../../api/types";
 
 function todayIso(): string {
@@ -121,8 +122,10 @@ export default function GroupJournalTab() {
           };
       const updated = await api.post<RosterResponse>(path, body);
       setRoster(updated);
+      scrollToTop();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Не удалось сохранить день");
+      scrollToTop();
     } finally {
       setBusy(false);
     }
@@ -274,6 +277,7 @@ export default function GroupJournalTab() {
           onSaved={() => {
             setShowPeriodForm(null);
             loadRoster();
+            scrollToTop();
           }}
         />
       )}

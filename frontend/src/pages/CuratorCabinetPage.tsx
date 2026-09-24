@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
+import { scrollToTop } from "../utils/scroll";
 import type { GroupSummary, MarkCodeOption, MonthDayStatus, RosterResponse } from "../api/types";
 
 function todayIso(): string {
@@ -117,8 +118,10 @@ export default function CuratorCabinetPage() {
           };
       const updated = await api.post<RosterResponse>(path, body);
       setRoster(updated);
+      scrollToTop();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Не удалось сдать день");
+      scrollToTop();
     } finally {
       setBusy(false);
     }
@@ -259,6 +262,7 @@ export default function CuratorCabinetPage() {
           onSaved={() => {
             setShowPeriodForm(null);
             loadRoster();
+            scrollToTop();
           }}
         />
       )}

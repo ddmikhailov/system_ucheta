@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { api, ApiError } from "../../api/client";
+import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { DeleteResult, StudentAdmin, StudyGroupAdmin } from "../../api/types";
 
 function todayIso(): string {
@@ -19,6 +20,7 @@ export default function StudentsTab({ canEdit, canCreate }: { canEdit: boolean; 
   const [students, setStudents] = useState<StudentAdmin[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  useScrollToTopOnChange(error, notice);
   const [busy, setBusy] = useState(false);
 
   const [lastName, setLastName] = useState("");
@@ -31,6 +33,9 @@ export default function StudentsTab({ canEdit, canCreate }: { canEdit: boolean; 
   const [editFirstName, setEditFirstName] = useState("");
   const [editMiddleName, setEditMiddleName] = useState("");
   const [editGroupId, setEditGroupId] = useState<number | null>(null);
+
+  // Отчисленные/в академе не мешаются в основном списке группы.
+  const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
     api.get<StudyGroupAdmin[]>("/admin/groups").then((gs) => {
@@ -126,6 +131,9 @@ export default function StudentsTab({ canEdit, canCreate }: { canEdit: boolean; 
     }
   }
 
+  const visibleStudents = showArchived ? students : students.filter((s) => s.status === "studying");
+  const archivedCount = students.length - students.filter((s) => s.status === "studying").length;
+
   return (
     <div>
       {error && <div className="error-text">{error}</div>}
@@ -156,7 +164,7 @@ export default function StudentsTab({ canEdit, canCreate }: { canEdit: boolean; 
           </tr>
         </thead>
         <tbody>
-          {students.map((s) => (
+          {visibleStudents.map((s) => (
             <tr key={s.id}>
               {editingId === s.id ? (
                 <>
@@ -223,7 +231,7 @@ export default function StudentsTab({ canEdit, canCreate }: { canEdit: boolean; 
               )}
             </tr>
           ))}
-          {students.length === 0 && (
+          {visibleStudents.length === 0 && (
             <tr>
               <td colSpan={canEdit ? 6 : 5}>В группе нет студентов.</td>
             </tr>
@@ -241,6 +249,14 @@ export default function StudentsTab({ canEdit, canCreate }: { canEdit: boolean; 
             Добавить студента
           </button>
         </form>
+      )}
+
+      {archivedCount > 0 && (
+        <p className="hint archive-toggle">
+          <button className="link-btn" onClick={() => setShowArchived((v) => !v)}>
+            {showArchived ? "Скрыть архив" : `Архив (${archivedCount})`}
+          </button>
+        </p>
       )}
     </div>
   );

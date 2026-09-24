@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../../api/client";
+import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { MarkCodeAdmin } from "../../api/types";
 
 type FlagField = "counts_as_present" | "is_excused" | "requires_document" | "is_active";
@@ -7,6 +8,7 @@ type FlagField = "counts_as_present" | "is_excused" | "requires_document" | "is_
 export default function MarkCodesTab({ canEdit }: { canEdit: boolean }) {
   const [rows, setRows] = useState<MarkCodeAdmin[]>([]);
   const [error, setError] = useState<string | null>(null);
+  useScrollToTopOnChange(error);
 
   function load() {
     api.get<MarkCodeAdmin[]>("/admin/mark-codes").then(setRows).catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка"));

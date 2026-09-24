@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { api, ApiError } from "../../api/client";
 import AssignCuratorModal from "../../components/AssignCuratorModal";
+import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { DeleteResult, DepartmentAdmin, StudyGroupAdmin, UserAdmin } from "../../api/types";
 
 export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; canCreate: boolean }) {
@@ -10,6 +11,7 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
   const [curators, setCurators] = useState<UserAdmin[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  useScrollToTopOnChange(error, notice);
   const [busy, setBusy] = useState(false);
   const [assigning, setAssigning] = useState<number | null>(null);
 
@@ -22,6 +24,9 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
   const [editCode, setEditCode] = useState("");
   const [editCourse, setEditCourse] = useState(1);
   const [editStudyForm, setEditStudyForm] = useState("");
+
+  // Архивные группы не мешаются в основном списке — их можно найти отдельно.
+  const [showArchived, setShowArchived] = useState(false);
 
   function load() {
     api.get<StudyGroupAdmin[]>("/admin/groups").then(setRows).catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка"));
@@ -109,6 +114,9 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
     }
   }
 
+  const visibleRows = showArchived ? rows : rows.filter((g) => g.is_active);
+  const archivedCount = rows.length - rows.filter((g) => g.is_active).length;
+
   return (
     <div>
       {error && <div className="error-text">{error}</div>}
@@ -129,7 +137,7 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
           </tr>
         </thead>
         <tbody>
-          {rows.map((g) => (
+          {visibleRows.map((g) => (
             <tr key={g.id} className={!g.curator_name ? "not-submitted-row" : ""}>
               {editingId === g.id ? (
                 <>
@@ -234,6 +242,14 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
             load();
           }}
         />
+      )}
+
+      {archivedCount > 0 && (
+        <p className="hint archive-toggle">
+          <button className="link-btn" onClick={() => setShowArchived((v) => !v)}>
+            {showArchived ? "Скрыть архив" : `Архив (${archivedCount})`}
+          </button>
+        </p>
       )}
     </div>
   );
