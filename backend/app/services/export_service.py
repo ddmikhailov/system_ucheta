@@ -82,9 +82,10 @@ def build_summary_workbook(
 
 
 def _add_group_sheets(wb: Workbook, db: Session, groups: list[StudyGroup], date_from: datetime.date, date_to: datetime.date) -> None:
-    study_days = calendar_service.study_days_between(db, date_from, date_to)
-
     for group in groups:
+        study_days = calendar_service.study_days_between(
+            db, date_from, date_to, study_group_id=group.id, course=group.course
+        )
         sheet_name = group.code[:31]
         ws = wb.create_sheet(sheet_name)
         ws.append(["№", "ФИО"] + [d.strftime("%d.%m") for d in study_days])

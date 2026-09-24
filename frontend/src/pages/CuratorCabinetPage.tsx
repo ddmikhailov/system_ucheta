@@ -147,8 +147,12 @@ export default function CuratorCabinetPage() {
             key={d.date}
             title={d.date}
             className={`month-dot ${
-              d.day_type === "weekend" ? "weekend" : d.is_submitted ? (d.is_on_time ? "ok" : "late") : "missing"
-            } ${d.date === date ? "selected" : ""}`}
+              ["weekend", "holiday", "vacation"].includes(d.day_type)
+                ? "weekend"
+                : d.is_submitted
+                  ? (d.is_on_time ? "ok" : "late")
+                  : "missing"
+            } ${d.day_type === "remote" ? "remote-day" : ""} ${d.date === date ? "selected" : ""}`}
             onClick={() => setDate(d.date)}
           />
         ))}

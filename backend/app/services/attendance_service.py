@@ -81,7 +81,11 @@ def consecutive_unexcused_count(
 ) -> int:
     """Сколько учебных дней подряд перед as_of_date (не включая) стоит код 'н'."""
     window_start = as_of_date - datetime.timedelta(days=lookback_days)
-    study_days = calendar_service.study_days_between(db, window_start, as_of_date - datetime.timedelta(days=1))
+    student = db.get(Student, student_id)
+    study_group_id = student.study_group_id if student else None
+    study_days = calendar_service.study_days_between(
+        db, window_start, as_of_date - datetime.timedelta(days=1), study_group_id=study_group_id
+    )
     if not study_days:
         return 0
     study_days.sort(reverse=True)
@@ -124,7 +128,7 @@ def get_roster(db: Session, study_group_id: int, date: datetime.date) -> dict:
     draft_marks: dict[int, AttendanceMark] = {}
     is_draft = submission is None
     if is_draft and student_ids:
-        prev_day = calendar_service.previous_study_day(db, date)
+        prev_day = calendar_service.previous_study_day(db, date, study_group_id=study_group_id)
         if prev_day is not None:
             rows = db.execute(
                 select(AttendanceMark).where(
@@ -326,7 +330,10 @@ def create_absence_period(
     db.add(period)
     db.flush()
 
-    study_days = calendar_service.study_days_between(db, date_from, date_to)
+    student = db.get(Student, student_id)
+    study_days = calendar_service.study_days_between(
+        db, date_from, date_to, study_group_id=student.study_group_id if student else None
+    )
 
     basis_status, basis_deadline = _compute_basis(basis_reference)
 

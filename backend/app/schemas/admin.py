@@ -160,3 +160,15 @@ class InvitationRead(BaseModel):
 class CalendarDayUpsert(BaseModel):
     date: datetime.date
     day_type: str
+
+
+class GroupCalendarOverrideRead(BaseModel):
+    study_group_id: int
+    date: datetime.date
+    day_type: str
+
+
+class GroupCalendarOverrideUpsert(BaseModel):
+    study_group_id: int
+    date: datetime.date
+    day_type: str

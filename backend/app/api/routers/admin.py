@@ -12,6 +12,7 @@ from app.models import (
     CuratorAssignment,
     Department,
     DayType,
+    GroupCalendarOverride,
     MarkCode,
     Role,
     RoleCode,
@@ -27,6 +28,8 @@ from app.schemas.admin import (
     DeleteResult,
     DepartmentCreate,
     DepartmentRead,
+    GroupCalendarOverrideRead,
+    GroupCalendarOverrideUpsert,
     InvitationRead,
     MarkCodeRead,
     MarkCodeUpdate,
@@ -402,17 +405,17 @@ def _assert_can_manage_user(admin: User, target: User) -> None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Пользователь не относится к вашему отделению")
 
 
-# Роли с правами на весь колледж — их назначение доверено только тем, у кого
-# они уже есть (обновление 1.2: смена ролей). Зав. отделением/советник может
-# менять роль только в границах "куратор ⇄ заместитель ⇄ зав. отделением" —
-# иначе он мог бы сам себя или кого угодно назначить администратором.
-_FULL_ACCESS_ROLES = {RoleCode.ADMIN.value, RoleCode.TUTOR.value}
+# Смену ролей могут выполнять только администратор и зав. отделением
+# (обновление 1.3) — больше никто, включая тьютора и воспитательный отдел,
+# к этому доступа не имеет. Зав. отделением при этом ограничен назначением
+# только "куратор ⇄ заместитель ⇄ зав. отделением" — иначе он мог бы сам
+# себя или кого угодно назначить администратором.
 _DEPT_HEAD_ASSIGNABLE_ROLES = {RoleCode.CURATOR.value, RoleCode.DEPUTY_CURATOR.value, RoleCode.DEPT_HEAD.value}
 
 
 def _assert_can_assign_role(admin: User, new_role_code: str) -> None:
     admin_role = RoleCode(admin.role.code)
-    if admin_role in (RoleCode.ADMIN, RoleCode.TUTOR):
+    if admin_role == RoleCode.ADMIN:
         return
     if admin_role == RoleCode.DEPT_HEAD and new_role_code in _DEPT_HEAD_ASSIGNABLE_ROLES:
         return
@@ -647,3 +650,70 @@ def upsert_calendar_day(payload: CalendarDayUpsert, user: User = Depends(require
     log_action(db, user, "calendar.upsert", "academic_calendar", str(payload.date), old_value=old_value, new_value=payload.day_type)
     db.commit()
     return {"date": row.date, "day_type": row.day_type}
+
+
+@router.get(
+    "/calendar/group-overrides", response_model=list[GroupCalendarOverrideRead],
+    dependencies=[Depends(require_management)],
+)
+def list_group_calendar_overrides(
+    study_group_id: int, date_from: datetime.date, date_to: datetime.date, db: Session = Depends(get_db),
+):
+    rows = (
+        db.query(GroupCalendarOverride)
+        .filter(
+            GroupCalendarOverride.study_group_id == study_group_id,
+            GroupCalendarOverride.date >= date_from,
+            GroupCalendarOverride.date <= date_to,
+        )
+        .all()
+    )
+    return [{"study_group_id": r.study_group_id, "date": r.date, "day_type": r.day_type} for r in rows]
+
+
+@router.put(
+    "/calendar/group-overrides", response_model=GroupCalendarOverrideRead,
+    dependencies=[Depends(require_reference_editor)],
+)
+def upsert_group_calendar_override(
+    payload: GroupCalendarOverrideUpsert, user: User = Depends(require_reference_editor), db: Session = Depends(get_db),
+):
+    group = db.get(StudyGroup, payload.study_group_id)
+    if group is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Группа не найдена")
+    key = (payload.study_group_id, payload.date)
+    row = db.get(GroupCalendarOverride, key)
+    old_value = row.day_type if row else None
+    if row is None:
+        row = GroupCalendarOverride(
+            study_group_id=payload.study_group_id, date=payload.date, day_type=DayType(payload.day_type)
+        )
+        db.add(row)
+    else:
+        row.day_type = DayType(payload.day_type)
+    log_action(
+        db, user, "calendar.group_override.upsert", "academic_calendar_group_override",
+        f"{payload.study_group_id}:{payload.date}", old_value=old_value, new_value=payload.day_type,
+    )
+    db.commit()
+    return {"study_group_id": row.study_group_id, "date": row.date, "day_type": row.day_type}
+
+
+@router.delete(
+    "/calendar/group-overrides", response_model=DeleteResult,
+    dependencies=[Depends(require_reference_editor)],
+)
+def delete_group_calendar_override(
+    study_group_id: int, date: datetime.date,
+    user: User = Depends(require_reference_editor), db: Session = Depends(get_db),
+):
+    row = db.get(GroupCalendarOverride, (study_group_id, date))
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Переопределение не найдено")
+    db.delete(row)
+    log_action(
+        db, user, "calendar.group_override.delete", "academic_calendar_group_override",
+        f"{study_group_id}:{date}", old_value=row.day_type,
+    )
+    db.commit()
+    return DeleteResult(deleted=True, anonymized=False, detail="Переопределение удалено, действует общий календарь")

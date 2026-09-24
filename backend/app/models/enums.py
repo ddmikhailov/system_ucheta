@@ -30,6 +30,9 @@ class DayType(str, enum.Enum):
     WEEKEND = "weekend"
     HOLIDAY = "holiday"
     VACATION = "vacation"
+    # Электронная форма обучения — дистанционный учебный день: считается
+    # учебным для посещаемости, но отдельно помечается в календаре.
+    REMOTE = "remote"
 
 
 class MarkSource(str, enum.Enum):

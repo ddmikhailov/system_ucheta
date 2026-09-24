@@ -1,6 +1,6 @@
 from app.models.audit import AuditLog
 from app.models.auth import Invitation, Role, User
-from app.models.calendar import AcademicCalendarDay
+from app.models.calendar import AcademicCalendarDay, GroupCalendarOverride
 from app.models.enums import (
     AssignmentRole,
     BasisStatus,
@@ -25,6 +25,7 @@ __all__ = [
     "DaySubmission",
     "DayType",
     "Department",
+    "GroupCalendarOverride",
     "InAppNotification",
     "Invitation",
     "MarkCode",

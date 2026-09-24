@@ -199,6 +199,12 @@ export interface CalendarDay {
   day_type: string;
 }
 
+export interface GroupCalendarOverride {
+  study_group_id: number;
+  date: string;
+  day_type: string;
+}
+
 export interface NotificationItem {
   id: number;
   kind: string;

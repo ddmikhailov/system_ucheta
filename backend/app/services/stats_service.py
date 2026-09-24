@@ -66,7 +66,12 @@ def compute_period_stats(
     if not students:
         return PeriodStats()
 
-    study_days = calendar_service.study_days_between(db, date_from, date_to)
+    effective_group_id = study_group_id
+    if effective_group_id is None and student_id is not None and len(students) == 1:
+        effective_group_id = students[0].study_group_id
+    study_days = calendar_service.study_days_between(
+        db, date_from, date_to, study_group_id=effective_group_id, course=course
+    )
     if not study_days:
         return PeriodStats()
 
@@ -148,7 +153,9 @@ def dynamics(
     study_group_id: int | None = None,
     student_id: int | None = None,
 ) -> list[dict]:
-    study_days = calendar_service.study_days_between(db, date_from, date_to)
+    study_days = calendar_service.study_days_between(
+        db, date_from, date_to, study_group_id=study_group_id, course=course
+    )
     result = []
     for day in study_days:
         stats = compute_period_stats(db, day, day, department_id, course, study_group_id, student_id)
@@ -166,10 +173,12 @@ def curator_discipline(
     if department_id is not None:
         stmt = stmt.where(StudyGroup.department_id == department_id)
     groups = list(db.execute(stmt.order_by(StudyGroup.course, StudyGroup.code)).scalars().all())
-    study_days = calendar_service.study_days_between(db, date_from, date_to)
 
     rows = []
     for group in groups:
+        study_days = calendar_service.study_days_between(
+            db, date_from, date_to, study_group_id=group.id, course=group.course
+        )
         submissions = db.execute(
             select(DaySubmission).where(
                 DaySubmission.study_group_id == group.id,

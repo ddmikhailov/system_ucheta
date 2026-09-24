@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import assert_can_access_group, get_current_user, get_curator_group_ids
 from app.db.session import get_db
-from app.models import DaySubmission, MarkCode, Student, User
+from app.models import DaySubmission, DayType, MarkCode, Student, StudyGroup, User
 from app.schemas.curator import (
     AbsencePeriodCreate,
     GroupSummary,
@@ -91,6 +91,7 @@ def month_status(
     db: Session = Depends(get_db),
 ):
     assert_can_access_group(db, user, study_group_id, datetime.date(year, month, 1))
+    group = db.get(StudyGroup, study_group_id)
 
     date_from = datetime.date(year, month, 1)
     if month == 12:
@@ -112,12 +113,15 @@ def month_status(
     result = []
     current = date_from
     while current <= date_to:
-        is_study = calendar_service.is_study_day(db, current)
+        resolved_type = calendar_service.resolve_day_type(
+            db, current, study_group_id=study_group_id, course=group.course if group else None
+        )
+        is_study = resolved_type in (DayType.STUDY_DAY, DayType.REMOTE)
         submission = submissions.get(current)
         result.append(
             MonthDayStatus(
                 date=current,
-                day_type="study_day" if is_study else "weekend",
+                day_type=resolved_type.value,
                 is_submitted=(submission is not None) if is_study else None,
                 is_on_time=submission.is_on_time if submission else None,
             )

@@ -117,3 +117,16 @@ def test_role_change_rejects_unknown_role(client, admin_headers, imported, db):
     curator = db.query(User).filter(User.role_id == curator_role.id).first()
     r = client.patch(f"/admin/users/{curator.id}", headers=admin_headers, json={"role": "nonexistent"})
     assert r.status_code == 400
+
+
+def test_tutor_cannot_change_roles(client, imported, db):
+    """Обновление 1.3: менять роли могут только admin и dept_head — тьютор,
+    несмотря на полный доступ к остальному, роль поменять не может."""
+    from app.models import Role, User
+
+    tutor_headers = _make_tutor(db, client)
+    curator_role = db.query(Role).filter(Role.code == "curator").one()
+    curator = db.query(User).filter(User.role_id == curator_role.id).first()
+
+    r = client.patch(f"/admin/users/{curator.id}", headers=tutor_headers, json={"role": "dept_head"})
+    assert r.status_code == 403

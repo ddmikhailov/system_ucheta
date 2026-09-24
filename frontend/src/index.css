@@ -509,6 +509,11 @@ select:hover {
   cursor: default;
 }
 
+.month-dot.remote-day {
+  border-color: var(--primary);
+  border-style: dashed;
+}
+
 .month-dot.selected {
   outline: 2px solid var(--brand-purple);
   outline-offset: 1px;
