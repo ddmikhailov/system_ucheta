@@ -1,6 +1,6 @@
 import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.time import utcnow
@@ -104,6 +104,25 @@ def consecutive_unexcused_count(
         else:
             break
     return streak
+
+
+def count_manual_exceptions(db: Session, study_group_id: int, date: datetime.date) -> int:
+    """Сколько ручных отметок на этот день будет молча стёрто, если вызвать
+    submit_day с пустым списком исключений ("Все присутствуют") — см.
+    TODO.md 1.8. Отметки из длительных периодов (MarkSource.PERIOD) сюда не
+    входят: submit_day их и так не трогает."""
+    active_ids = {s.id for s in get_active_students(db, study_group_id, date)}
+    if not active_ids:
+        return 0
+    return db.execute(
+        select(func.count())
+        .select_from(AttendanceMark)
+        .where(
+            AttendanceMark.student_id.in_(active_ids),
+            AttendanceMark.date == date,
+            AttendanceMark.source == MarkSource.MANUAL,
+        )
+    ).scalar_one()
 
 
 def get_roster(db: Session, study_group_id: int, date: datetime.date) -> dict:

@@ -151,12 +151,6 @@ class SetPasswordResponse(BaseModel):
     password: str
 
 
-class InvitationRead(BaseModel):
-    token: str
-    expires_at: datetime.datetime
-    invitation_url_path: str
-
-
 class CalendarDayUpsert(BaseModel):
     date: datetime.date
     day_type: str

@@ -1,18 +1,18 @@
 import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.config import get_settings
+from app.core.password_policy import validate_password_strength
+from app.core.rate_limit import check_rate_limit, client_ip
 from app.core.security import create_access_token, hash_password, verify_password
 from app.core.time import utcnow
 from app.db.session import get_db
-from app.models import CuratorAssignment, Invitation, User
+from app.models import CuratorAssignment, User
 from app.schemas.auth import (
-    AcceptInvitationRequest,
     ChangePasswordRequest,
-    InvitationPreview,
     LoginRequest,
     MeGroupInfo,
     MeResponse,
@@ -20,7 +20,6 @@ from app.schemas.auth import (
     TokenResponse,
 )
 from app.services.audit_service import log_action
-from app.services.invitation_service import accept_invitation
 from app.services.telegram_link_service import build_deep_link, create_link_token, unlink_telegram
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -28,7 +27,15 @@ settings = get_settings()
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
+    # По IP, а не по логину — иначе перебор паролей просто размазывается по
+    # разным существующим учёткам и никогда не упирается в лимит (см.
+    # TODO.md 2). Порог заметно выше, чем per-account лимит блокировки ниже,
+    # чтобы не мешать обычным опечаткам нескольких разных людей из одной сети.
+    ip = client_ip(request)
+    if not check_rate_limit(f"login:{ip}", max_attempts=30, window_seconds=300):
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Слишком много попыток входа — попробуйте позже")
+
     user = db.query(User).filter(User.username == payload.username).one_or_none()
 
     generic_error = HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный логин или пароль")
@@ -59,7 +66,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     user.locked_until = None
     db.commit()
 
-    token = create_access_token(user.id, user.role.code)
+    token = create_access_token(user.id, user.role.code, user.token_version)
     return TokenResponse(access_token=token)
 
 
@@ -112,38 +119,25 @@ def change_password(
         ):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Неверный текущий пароль")
 
-    user.password_hash = hash_password(payload.new_password)
-    user.must_change_password = False
-    log_action(db, user, "password.change", "user", str(user.id))
-    db.commit()
-
-    return me(user, db)
-
-
-@router.get("/invitations/{token}", response_model=InvitationPreview)
-def preview_invitation(token: str, db: Session = Depends(get_db)):
-    invitation = db.query(Invitation).filter(Invitation.token == token).one_or_none()
-    if invitation is None or not invitation.is_usable:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ссылка недействительна или срок её действия истёк")
-
-    user = invitation.user
-    assignments = db.query(CuratorAssignment).filter(CuratorAssignment.user_id == user.id).all()
-    return InvitationPreview(
-        full_name=user.full_name,
-        role=user.role.code,
-        groups=[a.study_group.code for a in assignments],
-    )
-
-
-@router.post("/invitations/{token}/accept", response_model=TokenResponse)
-def accept_invitation_route(token: str, payload: AcceptInvitationRequest, db: Session = Depends(get_db)):
     try:
-        user = accept_invitation(db, token, payload.password)
+        validate_password_strength(payload.new_password, user.username)
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
 
-    token_value = create_access_token(user.id, user.role.code)
-    return TokenResponse(access_token=token_value)
+    user.password_hash = hash_password(payload.new_password)
+    user.must_change_password = False
+    # Отзывает все ранее выданные токены этого пользователя (см. TODO.md 2:
+    # раньше украденный/оставленный где-то токен продолжал работать все 12ч
+    # после смены пароля). Токен, которым выполнен сам этот запрос, тоже
+    # становится недействителен — поэтому ниже выдаём новый и возвращаем
+    # его же, чтобы не разлогинить только что сменившего пароль человека.
+    user.token_version += 1
+    log_action(db, user, "password.change", "user", str(user.id))
+    db.commit()
+
+    response = me(user, db)
+    response.access_token = create_access_token(user.id, user.role.code, user.token_version)
+    return response
 
 
 @router.post("/telegram/link", response_model=TelegramLinkResponse)

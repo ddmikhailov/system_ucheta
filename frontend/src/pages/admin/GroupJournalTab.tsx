@@ -105,13 +105,13 @@ export default function GroupJournalTab() {
     }));
   }
 
-  async function submitDay(allPresent: boolean) {
+  async function submitDay(allPresent: boolean, confirmed = false) {
     if (!groupId) return;
     setBusy(true);
     setError(null);
     try {
       const path = allPresent
-        ? `/curator/groups/${groupId}/day/mark-all-present?date=${date}`
+        ? `/curator/groups/${groupId}/day/mark-all-present?date=${date}${confirmed ? "&confirm=true" : ""}`
         : `/curator/groups/${groupId}/day/submit?date=${date}`;
       const body = allPresent
         ? undefined
@@ -127,7 +127,18 @@ export default function GroupJournalTab() {
       setRoster(updated);
       scrollToTop();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось сохранить день");
+      // Сервер отказывает с 409, если "Все присутствуют" стёрло бы уже
+      // внесённые отметки (см. TODO.md 1.8) — переспрашиваем вместо того,
+      // чтобы просто показать ошибку.
+      if (err instanceof ApiError && err.status === 409 && allPresent && !confirmed) {
+        if (window.confirm(`${err.message}\n\nВсё равно отметить всех присутствующими?`)) {
+          setBusy(false);
+          await submitDay(true, true);
+          return;
+        }
+      } else {
+        setError(err instanceof ApiError ? err.message : "Не удалось сохранить день");
+      }
       scrollToTop();
     } finally {
       setBusy(false);

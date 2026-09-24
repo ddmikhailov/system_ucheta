@@ -4,18 +4,12 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import assert_can_access_group, get_current_user, require_management
+from app.api.deps import assert_can_access_group, get_current_user, require_management, scope_department_id
 from app.db.session import get_db
-from app.models import RoleCode, User
+from app.models import User
 from app.services import export_service
 
 router = APIRouter(prefix="/export", tags=["export"])
-
-
-def _scope_department_id(user: User, requested: int | None) -> int | None:
-    if RoleCode(user.role.code) == RoleCode.DEPT_HEAD:
-        return user.department_id
-    return requested
 
 
 @router.get("/excel")
@@ -26,7 +20,7 @@ def export_excel(
     user: User = Depends(require_management),
     db: Session = Depends(get_db),
 ):
-    scope = _scope_department_id(user, department_id)
+    scope = scope_department_id(user, department_id)
     content = export_service.build_summary_workbook(db, date_from, date_to, scope)
     filename = f"itog_{date_from}_{date_to}.xlsx"
     return Response(

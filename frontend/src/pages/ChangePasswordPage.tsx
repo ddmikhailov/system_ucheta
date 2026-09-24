@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, ApiError } from "../api/client";
+import { api, ApiError, setToken } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import type { MeResponse } from "../api/types";
 
@@ -25,10 +25,14 @@ export default function ChangePasswordPage() {
     }
     setBusy(true);
     try {
-      await api.post<MeResponse>("/auth/change-password", {
+      const result = await api.post<MeResponse>("/auth/change-password", {
         current_password: forced ? undefined : currentPassword,
         new_password: newPassword,
       });
+      // Смена пароля отзывает все ранее выданные токены (см. TODO.md 2),
+      // включая тот, которым выполнен этот самый запрос — сервер сразу
+      // возвращает новый, иначе следующий же запрос (refresh ниже) получит 401.
+      if (result.access_token) setToken(result.access_token);
       await refresh();
       navigate("/");
     } catch (err) {
@@ -78,7 +82,7 @@ export default function ChangePasswordPage() {
               onChange={(e) => setNewPassword(e.target.value)}
               autoFocus={forced}
               required
-              minLength={8}
+              minLength={10}
             />
           </label>
 
@@ -89,7 +93,7 @@ export default function ChangePasswordPage() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
-              minLength={8}
+              minLength={10}
             />
           </label>
 

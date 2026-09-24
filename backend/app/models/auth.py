@@ -47,6 +47,12 @@ class User(Base):
     # обновления 1.1: отказ от одноразовых пригласительных ссылок).
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    # Увеличивается при сбросе/смене пароля, смене роли и архивации — уже
+    # выданные JWT со старым значением в claim "tv" перестают приниматься
+    # немедленно, а не только через 12 часов по истечении срока (см.
+    # TODO.md 2: раньше отозвать выданный токен было нечем).
+    token_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
     # "Руководство" из раздела про бота — не отдельная роль с правами доступа,
     # а просто список получателей пятничного дайджеста (см. концепцию).
     receives_leadership_digest: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

@@ -27,14 +27,14 @@ def get_responsible_user(db: Session, group: StudyGroup, date: datetime.date) ->
         db.query(CuratorAssignment).filter(CuratorAssignment.study_group_id == group.id).all()
     )
     deputy = next(
-        (a for a in assignments if a.role_type == AssignmentRole.DEPUTY and a.is_active_on(date)),
+        (a for a in assignments if a.role_type == AssignmentRole.DEPUTY and a.is_active_on(date) and a.user.is_active),
         None,
     )
     if deputy is not None:
         return deputy.user
 
     curator = next(
-        (a for a in assignments if a.role_type == AssignmentRole.CURATOR and a.is_active_on(date)),
+        (a for a in assignments if a.role_type == AssignmentRole.CURATOR and a.is_active_on(date) and a.user.is_active),
         None,
     )
     return curator.user if curator else None
@@ -155,7 +155,11 @@ def leadership_weekly_digest(db: Session, date_from: datetime.date, date_to: dat
 def leadership_recipients(db: Session) -> list[User]:
     return (
         db.query(User)
-        .filter(User.receives_leadership_digest.is_(True), User.telegram_chat_id.isnot(None))
+        .filter(
+            User.receives_leadership_digest.is_(True),
+            User.telegram_chat_id.isnot(None),
+            User.is_active.is_(True),
+        )
         .all()
     )
 
@@ -166,7 +170,7 @@ def edu_department_recipients(db: Session) -> list[User]:
     role = db.query(Role).filter(Role.code == RoleCode.EDU_DEPARTMENT.value).one_or_none()
     if role is None:
         return []
-    return db.query(User).filter(User.role_id == role.id, User.telegram_chat_id.isnot(None)).all()
+    return db.query(User).filter(User.role_id == role.id, User.telegram_chat_id.isnot(None), User.is_active.is_(True)).all()
 
 
 def dept_heads_with_telegram(db: Session) -> list[User]:
@@ -175,4 +179,4 @@ def dept_heads_with_telegram(db: Session) -> list[User]:
     role = db.query(Role).filter(Role.code == RoleCode.DEPT_HEAD.value).one_or_none()
     if role is None:
         return []
-    return db.query(User).filter(User.role_id == role.id, User.telegram_chat_id.isnot(None)).all()
+    return db.query(User).filter(User.role_id == role.id, User.telegram_chat_id.isnot(None), User.is_active.is_(True)).all()

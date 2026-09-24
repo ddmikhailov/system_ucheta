@@ -1,9 +1,9 @@
 import datetime
+import secrets
 
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.security import generate_invitation_token
 from app.core.time import utcnow
 from app.models import TelegramLinkToken, User
 from app.services.audit_service import log_action
@@ -13,7 +13,7 @@ settings = get_settings()
 
 def create_link_token(db: Session, user: User) -> TelegramLinkToken:
     token = TelegramLinkToken(
-        token=generate_invitation_token(),
+        token=secrets.token_urlsafe(32),
         user_id=user.id,
         expires_at=utcnow() + datetime.timedelta(minutes=settings.telegram_link_token_ttl_minutes),
     )

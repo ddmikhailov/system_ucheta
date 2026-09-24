@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_admin, require_management, require_reference_editor
+from app.api.deps import require_admin, require_management, require_reference_editor, scope_department_id
 from app.db.session import get_db
 from app.models import (
     AcademicCalendarDay,
@@ -21,6 +21,7 @@ from app.models import (
     StudyGroup,
     User,
 )
+from app.core.password_policy import validate_password_strength
 from app.core.security import hash_password
 from app.schemas.admin import (
     CalendarDayUpsert,
@@ -30,7 +31,6 @@ from app.schemas.admin import (
     DepartmentRead,
     GroupCalendarOverrideRead,
     GroupCalendarOverrideUpsert,
-    InvitationRead,
     MarkCodeRead,
     MarkCodeUpdate,
     SetPasswordRequest,
@@ -48,17 +48,9 @@ from app.schemas.admin import (
     UserUpdateLeadershipDigest,
 )
 from app.services.audit_service import log_action
-from app.services.invitation_service import create_invitation
 from app.services.password_service import generate_temporary_password
 
 router = APIRouter(prefix="/admin", tags=["admin"])
-
-
-def _scope_department_id(user: User, requested: int | None) -> int | None:
-    """Зав. отделением всегда ограничен своим отделением, остальные — по запросу."""
-    if RoleCode(user.role.code) == RoleCode.DEPT_HEAD:
-        return user.department_id
-    return requested
 
 
 @router.get("/departments", response_model=list[DepartmentRead], dependencies=[Depends(require_management)])
@@ -106,7 +98,7 @@ def list_groups(
     db: Session = Depends(get_db),
 ):
     today = datetime.date.today()
-    scope = _scope_department_id(user, department_id)
+    scope = scope_department_id(user, department_id)
     q = db.query(StudyGroup)
     if scope is not None:
         q = q.filter(StudyGroup.department_id == scope)
@@ -234,14 +226,15 @@ def create_student(payload: StudentCreate, db: Session = Depends(get_db)):
     )
 
 
-@router.patch(
-    "/students/{student_id}/status", response_model=StudentRead,
-    dependencies=[Depends(require_management)],
-)
-def update_student_status(student_id: int, payload: StudentUpdateStatus, db: Session = Depends(get_db)):
+@router.patch("/students/{student_id}/status", response_model=StudentRead)
+def update_student_status(
+    student_id: int, payload: StudentUpdateStatus,
+    user: User = Depends(require_management), db: Session = Depends(get_db),
+):
     student = db.get(Student, student_id)
     if student is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Студент не найден")
+    _assert_can_manage_student(db, user, student)
     student.status = StudentStatus(payload.status)
     if payload.left_at is not None:
         student.left_at = payload.left_at
@@ -347,18 +340,50 @@ def create_curator_assignment(
     user: User = Depends(require_management),
     db: Session = Depends(get_db),
 ):
+    group = db.get(StudyGroup, payload.study_group_id)
+    if group is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Группа не найдена")
+    curator = db.get(User, payload.user_id)
+    if curator is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Пользователь не найден")
+    if not curator.is_active:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Пользователь в архиве — сначала восстановите его")
+    if curator.role.code not in (RoleCode.CURATOR.value, RoleCode.DEPUTY_CURATOR.value):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Назначать на группу можно только куратора или заместителя")
+    if payload.end_date is not None and payload.end_date < payload.start_date:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Дата окончания раньше даты начала")
+
     if RoleCode(user.role.code) == RoleCode.DEPT_HEAD:
-        group = db.get(StudyGroup, payload.study_group_id)
-        if group is None or group.department_id != user.department_id:
+        if group.department_id != user.department_id:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Группа не относится к вашему отделению")
-        curator = db.get(User, payload.user_id)
-        if curator is None or curator.department_id != user.department_id:
+        if curator.department_id != user.department_id:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Куратор не из вашего отделения")
 
-    data = payload.model_dump()
-    data["role_type"] = AssignmentRole(data["role_type"])
-    assignment = CuratorAssignment(**data)
+    role_type = AssignmentRole(payload.role_type)
+    # Новое назначение на ту же роль (куратор/заместитель) в этой группе
+    # автоматически завершает предыдущее активное — иначе на группе
+    # оказывается два "текущих" куратора одновременно (см. TODO.md 3).
+    previous_active = (
+        db.query(CuratorAssignment)
+        .filter(
+            CuratorAssignment.study_group_id == payload.study_group_id,
+            CuratorAssignment.role_type == role_type,
+        )
+        .filter((CuratorAssignment.end_date.is_(None)) | (CuratorAssignment.end_date >= payload.start_date))
+        .all()
+    )
+    for prev in previous_active:
+        prev.end_date = payload.start_date - datetime.timedelta(days=1)
+
+    assignment = CuratorAssignment(
+        study_group_id=payload.study_group_id, user_id=payload.user_id,
+        role_type=role_type, start_date=payload.start_date, end_date=payload.end_date,
+    )
     db.add(assignment)
+    log_action(
+        db, user, "curator_assignment.create", "curator_assignment",
+        f"{payload.study_group_id}:{payload.user_id}",
+    )
     db.commit()
     db.refresh(assignment)
     return {"id": assignment.id}
@@ -398,19 +423,52 @@ def _user_read(u: User) -> UserRead:
     )
 
 
-def _assert_can_manage_user(admin: User, target: User) -> None:
-    """Зав. отделением управляет логинами/паролями только внутри своего
-    отделения; воспитательный отдел и администратор — без ограничений."""
-    if RoleCode(admin.role.code) == RoleCode.DEPT_HEAD and target.department_id != admin.department_id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Пользователь не относится к вашему отделению")
-
-
-# Смену ролей могут выполнять только администратор и зав. отделением
-# (обновление 1.3) — больше никто, включая тьютора и воспитательный отдел,
-# к этому доступа не имеет. Зав. отделением при этом ограничен назначением
-# только "куратор ⇄ заместитель ⇄ зав. отделением" — иначе он мог бы сам
-# себя или кого угодно назначить администратором.
+# Права на управление учётками (пароль/логин/ФИО/архив/удаление) и на смену
+# ролей — см. TODO.md 1.2/1.3/1.5. Правило:
+#   - admin — управляет кем угодно, назначает любую роль;
+#   - tutor — как admin, но не может трогать учётки admin/tutor (иначе один
+#     тьютор мог бы захватить учётку другого тьютора или администратора) и
+#     не может менять роли вообще;
+#   - dept_head — только curator/deputy_curator своего отделения, и может
+#     назначать только роли curator/deputy_curator/dept_head (не может
+#     повысить кого-то до admin/tutor/edu_department или тронуть чужого
+#     dept_head/admin/tutor/edu_department, даже в своём отделении);
+#   - edu_department — не управляет учётками вообще (раньше могло сбросить
+#     пароль администратору — TODO.md 1.2).
+_ELEVATED_ROLES = {RoleCode.ADMIN.value, RoleCode.TUTOR.value}
+_DEPT_HEAD_MANAGEABLE_ROLES = {RoleCode.CURATOR.value, RoleCode.DEPUTY_CURATOR.value}
 _DEPT_HEAD_ASSIGNABLE_ROLES = {RoleCode.CURATOR.value, RoleCode.DEPUTY_CURATOR.value, RoleCode.DEPT_HEAD.value}
+# Роли, которым обязательно нужно отделение, и роли, которым оно не нужно
+# (см. TODO.md 1.4: без этого зав. отделением/куратор без отделения получает
+# фактически доступ ко всему колледжу, т.к. фильтры по department_id=None
+# просто не применяются).
+_DEPARTMENT_REQUIRED_ROLES = {RoleCode.DEPT_HEAD.value, RoleCode.CURATOR.value, RoleCode.DEPUTY_CURATOR.value}
+_DEPARTMENT_FORBIDDEN_ROLES = {RoleCode.ADMIN.value, RoleCode.TUTOR.value, RoleCode.EDU_DEPARTMENT.value}
+
+
+def _assert_can_manage_user(admin: User, target: User) -> None:
+    if target.id == admin.id:
+        return
+    admin_role = RoleCode(admin.role.code)
+    if admin_role == RoleCode.ADMIN:
+        return
+    if admin_role == RoleCode.TUTOR:
+        if target.role.code in _ELEVATED_ROLES:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Только администратор может управлять учётками администратора/тьютора"
+            )
+        return
+    if admin_role == RoleCode.DEPT_HEAD:
+        if admin.department_id is None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "У вас не задано отделение — обратитесь к администратору")
+        if target.department_id != admin.department_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Пользователь не относится к вашему отделению")
+        if target.role.code not in _DEPT_HEAD_MANAGEABLE_ROLES:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Зав. отделением может управлять только кураторами и заместителями"
+            )
+        return
+    raise HTTPException(status.HTTP_403_FORBIDDEN, "Недостаточно прав для управления пользователями")
 
 
 def _assert_can_assign_role(admin: User, new_role_code: str) -> None:
@@ -422,29 +480,43 @@ def _assert_can_assign_role(admin: User, new_role_code: str) -> None:
     raise HTTPException(status.HTTP_403_FORBIDDEN, "Недостаточно прав для назначения этой роли")
 
 
+def _resolve_department_for_role(role_code: str, requested_department_id: int | None) -> int | None:
+    """Отделение проставляется только там, где оно осмысленно (см. TODO.md
+    1.3/1.4): у admin/tutor/edu_department его вообще не должно быть — форма
+    создания пользователя раньше подставляла отделение всем без разбора."""
+    if role_code in _DEPARTMENT_FORBIDDEN_ROLES:
+        return None
+    if role_code in _DEPARTMENT_REQUIRED_ROLES and requested_department_id is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Для этой роли нужно указать отделение")
+    return requested_department_id
+
+
 @router.get("/users", response_model=list[UserRead])
 def list_users(user: User = Depends(require_management), db: Session = Depends(get_db)):
     q = db.query(User)
     if RoleCode(user.role.code) == RoleCode.DEPT_HEAD:
-        q = q.filter(User.department_id == user.department_id)
+        scope = scope_department_id(user, None)
+        q = q.filter(User.department_id == scope)
     users = q.all()
     return [_user_read(u) for u in users]
 
 
-@router.post(
-    "/users", response_model=UserRead, status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_admin)],
-)
-def create_user(payload: UserCreate, db: Session = Depends(get_db)):
+@router.post("/users", response_model=UserRead, status_code=status.HTTP_201_CREATED)
+def create_user(payload: UserCreate, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     role = db.query(Role).filter(Role.code == payload.role).one_or_none()
     if role is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Неизвестная роль")
+    if payload.role in _ELEVATED_ROLES and RoleCode(admin.role.code) != RoleCode.ADMIN:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Только администратор может создавать учётки администратора/тьютора"
+        )
     if db.query(User).filter(User.username == payload.username).first():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Логин уже занят")
+    department_id = _resolve_department_for_role(payload.role, payload.department_id)
 
     user = User(
         username=payload.username, full_name=payload.full_name,
-        role_id=role.id, department_id=payload.department_id, password_hash=None,
+        role_id=role.id, department_id=department_id, password_hash=None,
         display_title=payload.display_title,
     )
     db.add(user)
@@ -486,6 +558,13 @@ def update_user(
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Неизвестная роль")
         old_role = target.role.code
         target.role_id = new_role.id
+        target.token_version += 1
+        # Отделение приводим в соответствие новой роли — иначе, например,
+        # только что назначенный admin/tutor остаётся числиться в старом
+        # отделении, что путает scope-проверки (см. TODO.md 1.4).
+        target.department_id = _resolve_department_for_role(
+            payload.role, payload.department_id if payload.department_id is not None else target.department_id
+        )
         log_action(db, admin, "user.role_change", "user", str(target.id), old_value=old_role, new_value=payload.role)
 
     if payload.username is not None and payload.username != target.username:
@@ -501,14 +580,33 @@ def update_user(
     if payload.display_title is not None:
         target.display_title = payload.display_title or None
 
-    if payload.department_id is not None and RoleCode(admin.role.code) != RoleCode.DEPT_HEAD:
-        target.department_id = payload.department_id
+    if (
+        payload.department_id is not None
+        and (payload.role is None or payload.role == target.role.code)
+        and RoleCode(admin.role.code) != RoleCode.DEPT_HEAD
+    ):
+        target.department_id = _resolve_department_for_role(target.role.code, payload.department_id)
 
     if payload.is_active is not None:
         if target.id == admin.id and not payload.is_active:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Нельзя заблокировать самого себя")
         if target.is_active != payload.is_active:
             target.is_active = payload.is_active
+            target.token_version += 1
+            if not payload.is_active:
+                # Архивный пользователь не должен продолжать действовать
+                # через бота (сдавать день, получать напоминания/дайджесты)
+                # и оставаться "текущим" куратором группы (см. TODO.md 2/3).
+                target.telegram_chat_id = None
+                target.telegram_linked_at = None
+                today = datetime.date.today()
+                for assignment in (
+                    db.query(CuratorAssignment)
+                    .filter(CuratorAssignment.user_id == target.id)
+                    .filter((CuratorAssignment.end_date.is_(None)) | (CuratorAssignment.end_date >= today))
+                    .all()
+                ):
+                    assignment.end_date = today
             log_action(
                 db, admin, "user.archive" if not payload.is_active else "user.restore",
                 "user", str(target.id),
@@ -577,8 +675,14 @@ def set_password(
     _assert_can_manage_user(admin, target)
 
     password = payload.password or generate_temporary_password()
+    if payload.password is not None:
+        try:
+            validate_password_strength(password, target.username)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
     target.password_hash = hash_password(password)
     target.must_change_password = True
+    target.token_version += 1
     # Заодно снимаем блокировку — типовой сценарий обращения «не могу войти».
     target.failed_login_attempts = 0
     target.locked_until = None
@@ -605,27 +709,6 @@ def unlock_user(
     db.commit()
     db.refresh(target)
     return _user_read(target)
-
-
-@router.post(
-    "/users/{user_id}/invitations", response_model=InvitationRead,
-    dependencies=[Depends(require_admin)],
-    include_in_schema=False,
-)
-def issue_invitation(user_id: int, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    # Оставлено ради обратной совместимости (принятые ранее ссылки и тесты);
-    # в интерфейсе администратора этот путь больше не используется — вместо
-    # него выдача временного пароля (POST /users/{id}/set-password), см.
-    # обновление 1.1.
-    target = db.get(User, user_id)
-    if target is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Пользователь не найден")
-    invitation = create_invitation(db, target, admin)
-    return InvitationRead(
-        token=invitation.token,
-        expires_at=invitation.expires_at,
-        invitation_url_path=f"/invite/{invitation.token}",
-    )
 
 
 @router.get("/calendar", dependencies=[Depends(require_management)])

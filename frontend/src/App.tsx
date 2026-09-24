@@ -3,7 +3,6 @@ import { Navigate, Route, BrowserRouter as Router, Routes } from "react-router-d
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import Layout from "./components/Layout";
 import LoginPage from "./pages/LoginPage";
-import InvitationAcceptPage from "./pages/InvitationAcceptPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 import CuratorCabinetPage from "./pages/CuratorCabinetPage";
 import DashboardsPage from "./pages/DashboardsPage";
@@ -51,7 +50,6 @@ export default function App() {
       <Router>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/invite/:token" element={<InvitationAcceptPage />} />
           <Route
             path="/change-password"
             element={

@@ -71,10 +71,23 @@ def submit_day(
 def mark_all_present(
     study_group_id: int,
     date: datetime.date,
+    confirm: bool = False,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     assert_can_access_group(db, user, study_group_id, date)
+    # "Все присутствуют" отправляет пустой список исключений — submit_day
+    # молча удаляет все уже стоящие ручные отметки за этот день. Если день
+    # уже сдан не пустым (в нём есть реальные отметки), требуем явного
+    # подтверждения, а не стираем их без предупреждения (см. TODO.md 1.8).
+    if not confirm:
+        at_risk = attendance_service.count_manual_exceptions(db, study_group_id, date)
+        if at_risk > 0:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"На этот день уже внесено отметок: {at_risk}. Они будут стёрты — "
+                "повторите запрос с confirm=true, если это действительно нужно.",
+            )
     try:
         attendance_service.submit_day(db, study_group_id, date, [], user)
     except attendance_service.BackdateNotAllowed as exc:

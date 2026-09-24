@@ -27,21 +27,15 @@ class MeResponse(BaseModel):
     dept_head_name: str | None = None
     telegram_linked: bool = False
     must_change_password: bool = False
+    # Заполняется только ответом /auth/change-password (см. TODO.md 2 —
+    # смена пароля отзывает все ранее выданные токены, включая тот, которым
+    # выполнен сам этот запрос, поэтому новый нужно вернуть тут же).
+    access_token: str | None = None
 
 
 class ChangePasswordRequest(BaseModel):
     current_password: str | None = None
     new_password: str = Field(min_length=8)
-
-
-class AcceptInvitationRequest(BaseModel):
-    password: str
-
-
-class InvitationPreview(BaseModel):
-    full_name: str
-    role: str
-    groups: list[str] = []
 
 
 class TelegramLinkResponse(BaseModel):

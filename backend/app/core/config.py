@@ -1,13 +1,29 @@
+import os
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Слабые/дефолтные секреты, с которыми запуск считается небезопасным (см.
+# TODO.md 1.6): если JWT_SECRET не задан явно или совпадает с одним из этих
+# значений — токен администратора можно подделать, зная только эту строку
+# из публичного репозитория.
+_INSECURE_JWT_SECRETS = {
+    "change-me-in-production",
+    "change-me",
+    "secret",
+    "test",
+}
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     app_name: str = "КАИТ-20 Учёт посещаемости"
-    environment: str = "development"
+    # По умолчанию — "production" (fail-safe): если забыть выставить
+    # переменную окружения на проде, Swagger/OpenAPI останутся выключены,
+    # а не наоборот. Для локальной разработки задайте ENVIRONMENT=development
+    # в backend/.env (см. .env.example).
+    environment: str = "production"
 
     db_host: str = "localhost"
     db_port: int = 3306
@@ -63,6 +79,21 @@ class Settings(BaseSettings):
         )
 
 
+def validate_jwt_secret(secret: str) -> None:
+    if len(secret) < 32 or secret.lower() in _INSECURE_JWT_SECRETS:
+        raise RuntimeError(
+            "JWT_SECRET не задан или слишком короткий/предсказуемый (нужна случайная строка "
+            "не короче 32 символов) — иначе токен администратора можно подделать. "
+            "Задайте переменную окружения JWT_SECRET."
+        )
+
+
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    # PYTEST_SKIP_SECRET_CHECK — только если сознательно нужно собрать
+    # Settings со слабым секретом (см. test_todo_security_fixes.py, который
+    # проверяет validate_jwt_secret() напрямую и его не использует).
+    if not os.environ.get("PYTEST_SKIP_SECRET_CHECK"):
+        validate_jwt_secret(settings.jwt_secret)
+    return settings

@@ -1,0 +1,45 @@
+# Без этого файла локальная сборка `docker build .` включает в контекст, а
+# затем рискует утащить в образ через случайный COPY: секреты (.env),
+# персональные данные (CSV с ФИО студентов/кураторов), кэши тестов и
+# Windows-специфичные node_modules — см. TODO.md 0.
+
+# Git / IDE / прочее локальное окружение
+.git
+.gitignore
+.claude
+.vscode
+.idea
+TODO.md
+
+# Секреты
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Персональные данные — на сервер кладутся отдельно, не через сборку образа
+backend/scripts/import/data/*.csv
+
+# Python
+**/__pycache__
+**/*.pyc
+**/*.pyo
+.venv
+venv
+*.egg-info
+.pytest_cache
+backend/*.db
+
+# Node / frontend — образ сам делает `npm ci` внутри контейнера
+frontend/node_modules
+frontend/dist
+frontend/.vite
+
+# Уже собранная статика — Dockerfile копирует её из промежуточного этапа
+# сборки, а не с хоста
+backend/static
+
+# Логи
+*.log

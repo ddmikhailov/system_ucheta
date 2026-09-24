@@ -3,7 +3,7 @@ import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_management
+from app.api.deps import require_management, scope_department_id
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models import AttendanceMark, RoleCode, Student, User
@@ -21,13 +21,6 @@ router = APIRouter(prefix="/dashboards", tags=["dashboards"])
 settings = get_settings()
 
 
-def _scope_department_id(user: User, requested: int | None) -> int | None:
-    """Зав. отделением всегда ограничен своим отделением, остальные видят по запросу."""
-    if RoleCode(user.role.code) == RoleCode.DEPT_HEAD:
-        return user.department_id
-    return requested
-
-
 @router.get("/day", response_model=list[DayOverviewRow])
 def day_overview(
     date: datetime.date,
@@ -35,7 +28,7 @@ def day_overview(
     user: User = Depends(require_management),
     db: Session = Depends(get_db),
 ):
-    scope = _scope_department_id(user, department_id)
+    scope = scope_department_id(user, department_id)
     rows = stats_service.day_overview(db, date, scope)
     return [DayOverviewRow(**r) for r in rows]
 
@@ -51,7 +44,7 @@ def dynamics(
     user: User = Depends(require_management),
     db: Session = Depends(get_db),
 ):
-    scope = _scope_department_id(user, department_id)
+    scope = scope_department_id(user, department_id)
     rows = stats_service.dynamics(db, date_from, date_to, scope, course, study_group_id, student_id)
     return [DynamicsPoint(**r) for r in rows]
 
@@ -64,7 +57,7 @@ def risk_students(
     user: User = Depends(require_management),
     db: Session = Depends(get_db),
 ):
-    scope = _scope_department_id(user, department_id)
+    scope = scope_department_id(user, department_id)
     rows = stats_service.risk_students(
         db, as_of_date, threshold or settings.risk_threshold_consecutive_unexcused, scope
     )
@@ -79,7 +72,7 @@ def curator_discipline(
     user: User = Depends(require_management),
     db: Session = Depends(get_db),
 ):
-    scope = _scope_department_id(user, department_id)
+    scope = scope_department_id(user, department_id)
     rows = stats_service.curator_discipline(db, date_from, date_to, scope)
     return [CuratorDisciplineRow(**r) for r in rows]
 

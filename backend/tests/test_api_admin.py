@@ -94,7 +94,7 @@ def test_mark_codes_flags_affect_stats(client, admin_headers, edu_department_hea
     assert after.percent == 100.0
 
 
-def test_invite_and_list_users_shows_pending_state(client, admin_headers, imported, db):
+def test_users_show_pending_password_state(client, admin_headers, imported, db):
     from app.models import Role, User
 
     curator_role = db.query(Role).filter(Role.code == "curator").one()
@@ -103,10 +103,6 @@ def test_invite_and_list_users_shows_pending_state(client, admin_headers, import
     r = client.get("/admin/users", headers=admin_headers)
     row = next(u for u in r.json() if u["id"] == pending_user.id)
     assert row["has_password"] is False
-
-    r = client.post(f"/admin/users/{pending_user.id}/invitations", headers=admin_headers)
-    assert r.status_code == 200
-    assert r.json()["invitation_url_path"].startswith("/invite/")
 
 
 def test_calendar_upsert_and_list(client, edu_department_headers):

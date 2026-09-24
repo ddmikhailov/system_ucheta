@@ -14,6 +14,8 @@ export interface MeResponse {
   dept_head_name: string | null;
   telegram_linked: boolean;
   must_change_password: boolean;
+  // Заполнено только в ответе POST /auth/change-password.
+  access_token?: string | null;
 }
 
 export interface TelegramLinkResponse {
@@ -188,11 +190,6 @@ export interface SetPasswordResult {
   password: string;
 }
 
-export interface InvitationRead {
-  token: string;
-  expires_at: string;
-  invitation_url_path: string;
-}
 
 export interface CalendarDay {
   date: string;

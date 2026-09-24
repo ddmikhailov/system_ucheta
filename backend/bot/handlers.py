@@ -46,7 +46,11 @@ async def handle_all_present(callback: CallbackQuery) -> None:
     db = SessionLocal()
     try:
         user = db.query(User).filter(User.telegram_chat_id == str(callback.from_user.id)).one_or_none()
-        if user is None:
+        if user is None or not user.is_active:
+            # Архивный пользователь мог сохранить привязку Telegram и
+            # продолжать сдавать дни кнопкой из старых сообщений (см.
+            # TODO.md 2) — при архивации сама привязка тоже снимается
+            # (см. admin.py update_user), но это на случай гонки/старых токенов.
             await callback.answer("Аккаунт не привязан.", show_alert=True)
             return
 
@@ -57,6 +61,16 @@ async def handle_all_present(callback: CallbackQuery) -> None:
         group = db.get(StudyGroup, group_id)
         if group is None:
             await callback.answer("Группа не найдена.", show_alert=True)
+            return
+
+        # Кнопка остаётся в старом сообщении в чате: если день уже сдан (в т.ч.
+        # с реальными пропусками — с сайта или отдельным нажатием той же
+        # кнопки на старом сообщении), повторное "все присутствуют" молча
+        # стёрло бы уже внесённые отметки (см. TODO.md 1.8) — вместо этого
+        # просто сообщаем, что день уже сдан, и ничего не меняем.
+        roster = attendance_service.get_roster(db, group_id, date)
+        if roster["is_submitted"]:
+            await callback.answer("Этот день уже сдан — ничего не изменено.", show_alert=True)
             return
 
         try:

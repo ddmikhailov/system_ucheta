@@ -39,33 +39,12 @@ def test_me_rejects_garbage_token(client, seeded):
     assert r.status_code == 401
 
 
-def test_invitation_preview_and_accept(client, admin_headers, imported, db):
-    from app.models import Role, User
-
-    curator_role = db.query(Role).filter(Role.code == "curator").one()
-    target = db.query(User).filter(User.role_id == curator_role.id).first()
-
-    r = client.post(f"/admin/users/{target.id}/invitations", headers=admin_headers)
-    assert r.status_code == 200
-    token = r.json()["token"]
-
-    r = client.get(f"/auth/invitations/{token}")
-    assert r.status_code == 200
-    assert r.json()["full_name"] == target.full_name
-
-    r = client.post(f"/auth/invitations/{token}/accept", json={"password": "NewPass123!"})
-    assert r.status_code == 200
-    access_token = r.json()["access_token"]
-
-    r = client.get("/auth/me", headers={"Authorization": f"Bearer {access_token}"})
-    assert r.status_code == 200
-    assert r.json()["id"] == target.id
-
-    # Ссылкой нельзя воспользоваться повторно.
-    r = client.post(f"/auth/invitations/{token}/accept", json={"password": "AnotherPass123!"})
-    assert r.status_code == 400
-
-
-def test_invitation_unknown_token(client, seeded):
-    r = client.get("/auth/invitations/does-not-exist")
+def test_invitation_endpoints_removed(client, seeded):
+    """Приглашения по одноразовой ссылке убраны целиком (см. TODO.md 2) —
+    accept не проверял is_active, не требовал минимальную длину пароля и не
+    сбрасывал must_change_password. Единственный путь выдать пароль теперь —
+    POST /admin/users/{id}/set-password."""
+    r = client.get("/auth/invitations/anything")
+    assert r.status_code == 404
+    r = client.post("/auth/invitations/anything/accept", json={"password": "whatever123"})
     assert r.status_code == 404

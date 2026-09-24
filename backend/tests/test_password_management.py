@@ -54,12 +54,15 @@ def test_admin_can_choose_password_explicitly(client, admin_headers, imported, d
 
 def test_voluntary_password_change_requires_current_password(client, admin_headers, imported, db):
     target = _first_curator(db)
-    client.post(f"/admin/users/{target.id}/set-password", headers=admin_headers, json={"password": "TempPass1"})
+    client.post(f"/admin/users/{target.id}/set-password", headers=admin_headers, json={"password": "TempPassword1"})
 
-    r = client.post("/auth/login", json={"username": target.username, "password": "TempPass1"})
+    r = client.post("/auth/login", json={"username": target.username, "password": "TempPassword1"})
     token = r.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
-    client.post("/auth/change-password", headers=headers, json={"new_password": "FirstOwn1"})
+    r = client.post("/auth/change-password", headers=headers, json={"new_password": "FirstOwnPass1"})
+    # Смена пароля отзывает старый токен (см. TODO.md 2) — сервер сразу же
+    # выдаёт новый, им и продолжаем.
+    headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
 
     # Теперь пользователь сам меняет пароль по своей воле — старый обязателен.
     r = client.post("/auth/change-password", headers=headers, json={"new_password": "SecondOwn1"})
@@ -73,7 +76,7 @@ def test_voluntary_password_change_requires_current_password(client, admin_heade
 
     r = client.post(
         "/auth/change-password", headers=headers,
-        json={"current_password": "FirstOwn1", "new_password": "SecondOwn1"},
+        json={"current_password": "FirstOwnPass1", "new_password": "SecondOwn1"},
     )
     assert r.status_code == 200
 
@@ -83,19 +86,19 @@ def test_set_password_unlocks_account(client, admin_headers, imported, db):
 
     settings = get_settings()
     target = _first_curator(db)
-    client.post(f"/admin/users/{target.id}/set-password", headers=admin_headers, json={"password": "TempPass1"})
+    client.post(f"/admin/users/{target.id}/set-password", headers=admin_headers, json={"password": "TempPassword1"})
 
     for _ in range(settings.max_failed_login_attempts):
         r = client.post("/auth/login", json={"username": target.username, "password": "wrong"})
         assert r.status_code == 401
 
-    r = client.post("/auth/login", json={"username": target.username, "password": "TempPass1"})
+    r = client.post("/auth/login", json={"username": target.username, "password": "TempPassword1"})
     assert r.status_code == 423
 
-    r = client.post(f"/admin/users/{target.id}/set-password", headers=admin_headers, json={"password": "NewTemp1"})
+    r = client.post(f"/admin/users/{target.id}/set-password", headers=admin_headers, json={"password": "NewTempPassword1"})
     assert r.status_code == 200
 
-    r = client.post("/auth/login", json={"username": target.username, "password": "NewTemp1"})
+    r = client.post("/auth/login", json={"username": target.username, "password": "NewTempPassword1"})
     assert r.status_code == 200
 
 
@@ -104,19 +107,19 @@ def test_unlock_endpoint_without_changing_password(client, admin_headers, import
 
     settings = get_settings()
     target = _first_curator(db)
-    client.post(f"/admin/users/{target.id}/set-password", headers=admin_headers, json={"password": "TempPass1"})
+    client.post(f"/admin/users/{target.id}/set-password", headers=admin_headers, json={"password": "TempPassword1"})
 
     for _ in range(settings.max_failed_login_attempts):
         client.post("/auth/login", json={"username": target.username, "password": "wrong"})
 
-    r = client.post("/auth/login", json={"username": target.username, "password": "TempPass1"})
+    r = client.post("/auth/login", json={"username": target.username, "password": "TempPassword1"})
     assert r.status_code == 423
 
     r = client.post(f"/admin/users/{target.id}/unlock", headers=admin_headers)
     assert r.status_code == 200
     assert r.json()["is_locked"] is False
 
-    r = client.post("/auth/login", json={"username": target.username, "password": "TempPass1"})
+    r = client.post("/auth/login", json={"username": target.username, "password": "TempPassword1"})
     assert r.status_code == 200
 
 

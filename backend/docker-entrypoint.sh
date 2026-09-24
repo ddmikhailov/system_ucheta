@@ -43,14 +43,22 @@ alembic upgrade head
 echo "[entrypoint] Справочники..."
 python -m scripts.seed
 
-# Выгрузки с реальными ФИО в репозиторий не входят — их кладут в постоянное
-# хранилище (IMPORT_DATA_DIR). Нет файлов — просто пропускаем импорт.
+# Импорт «Диджитал» — разовая ручная операция, а не то, что должно
+# повторяться при каждом рестарте контейнера (см. TODO.md 1.7: раньше при
+# каждом старте заново создавались уже удалённые/переименованные студенты,
+# кураторы получали второе назначение на группу и т.п.). Включается явно
+# переменной окружения IMPORT_ON_START=true только на тот один деплой, где
+# он действительно нужен, и сразу выключается обратно.
 IMPORT_DIR="${IMPORT_DATA_DIR:-/data/import}"
-if [ -f "$IMPORT_DIR/students.csv" ] && [ -f "$IMPORT_DIR/curators.csv" ] && [ -f "$IMPORT_DIR/groups.csv" ]; then
-    echo "[entrypoint] Импорт «Диджитал» из $IMPORT_DIR..."
-    IMPORT_DATA_DIR="$IMPORT_DIR" python -m scripts.import_source_data
+if [ "${IMPORT_ON_START:-false}" = "true" ]; then
+    if [ -f "$IMPORT_DIR/students.csv" ] && [ -f "$IMPORT_DIR/curators.csv" ] && [ -f "$IMPORT_DIR/groups.csv" ]; then
+        echo "[entrypoint] IMPORT_ON_START=true — импорт «Диджитал» из $IMPORT_DIR..."
+        IMPORT_DATA_DIR="$IMPORT_DIR" python -m scripts.import_source_data
+    else
+        echo "[entrypoint] IMPORT_ON_START=true, но выгрузки в $IMPORT_DIR не найдены — импорт пропущен."
+    fi
 else
-    echo "[entrypoint] Выгрузки в $IMPORT_DIR не найдены — импорт пропущен."
+    echo "[entrypoint] IMPORT_ON_START не включён — импорт пропущен (это нормально после первого раза)."
 fi
 
 echo "[entrypoint] Запуск приложения..."

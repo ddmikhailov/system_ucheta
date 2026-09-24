@@ -3,20 +3,24 @@
 # scheduler объединены внутрь app, см. README, раздел «Архитектура».
 services:
   db:
-    image: mysql:8.1.0
+    image: mysql:8.4
     restart: unless-stopped
     environment:
       MYSQL_DATABASE: ${DB_NAME:-kait20}
       MYSQL_USER: ${DB_USER:-kait20}
-      MYSQL_PASSWORD: ${DB_PASSWORD:-change-me}
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-change-me-root}
+      # Без значений по умолчанию: docker compose откажется стартовать,
+      # если пароли не заданы в .env, а не молча возьмёт "change-me" (см.
+      # TODO.md 0 — так и было на тестовом сервере).
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Задайте DB_PASSWORD в .env}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Задайте DB_ROOT_PASSWORD в .env}
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     volumes:
       - db_data:/var/lib/mysql
-    ports:
-      - "3306:3306"
+    # Порт наружу намеренно не публикуется — приложение обращается к БД
+    # внутри docker-сети по имени сервиса ("db"), доступ снаружи не нужен
+    # (см. TODO.md 0: раньше 3306 был открыт наружу с дефолтными паролями).
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-change-me-root}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
       interval: 5s
       timeout: 5s
       retries: 20

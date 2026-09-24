@@ -1,4 +1,10 @@
 import datetime
+import os
+
+# Должно быть выставлено раньше первого импорта из app.* — иначе Settings()
+# (через lru_cache) закэширует значение до того, как мы его зададим (см.
+# TODO.md 1.6: без этого get_settings() падает на слабом секрете по умолчанию).
+os.environ.setdefault("JWT_SECRET", "pytest-only-secret-do-not-use-in-production-32chars")
 
 import pytest
 from fastapi.testclient import TestClient
@@ -52,6 +58,19 @@ def db(test_engine):
     session.close()
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limit():
+    """Лимитер по IP (app/core/rate_limit.py) — общее состояние процесса;
+    без сброса между тестами один и тот же TestClient IP ("testclient")
+    накопил бы попытки входа из всех тестов подряд и словил бы 429 там, где
+    тест ожидает 401/200."""
+    from app.core.rate_limit import _attempts
+
+    _attempts.clear()
+    yield
+    _attempts.clear()
+
+
 @pytest.fixture()
 def client(test_engine):
     from app.db.session import get_db
@@ -99,6 +118,9 @@ def _login(client, username: str, password: str) -> dict:
 def admin_headers(client, db, seeded):
     admin = db.query(User).filter(User.username == "admin").one()
     admin.password_hash = hash_password(ADMIN_PASSWORD)
+    # seed.py принудительно требует смену пароля при первом входе (см.
+    # TODO.md 0/2) — для тестов админ уже "прошёл" эту смену.
+    admin.must_change_password = False
     db.commit()
     return _login(client, "admin", ADMIN_PASSWORD)
 

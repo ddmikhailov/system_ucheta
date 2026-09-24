@@ -1,7 +1,7 @@
 import datetime
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -12,8 +12,15 @@ from app.models.people import CuratorAssignment
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
+# С временным паролем (must_change_password=True) весь остальной API был
+# доступен — проверка была только на фронтенде (см. TODO.md 2). Эти два
+# пути остаются доступны, чтобы пользователь вообще мог узнать, кто он, и
+# задать свой пароль.
+_ALLOWED_WITH_PENDING_PASSWORD_CHANGE = {"/auth/me", "/auth/change-password"}
+
 
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
@@ -27,6 +34,13 @@ def get_current_user(
     user = db.get(User, int(payload["sub"]))
     if user is None or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Пользователь не найден или заблокирован")
+    # Токены, выпущенные до этого поля, не несут "tv" — считаем их версией 0,
+    # совпадающей с начальным token_version у всех существующих пользователей
+    # (см. миграцию f2a3b4c5d6e7), чтобы не разлогинить всех разом при деплое.
+    if payload.get("tv", 0) != user.token_version:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Сессия отозвана — войдите заново")
+    if user.must_change_password and request.url.path not in _ALLOWED_WITH_PENDING_PASSWORD_CHANGE:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Сначала задайте свой пароль")
     return user
 
 
@@ -48,6 +62,20 @@ require_reference_editor = require_roles(RoleCode.EDU_DEPARTMENT, RoleCode.ADMIN
 # теперь и он. Имя оставлено как есть, чтобы не переименовывать во всех
 # вызовах — по смыслу это "require_full_access".
 require_admin = require_roles(RoleCode.ADMIN, RoleCode.TUTOR)
+
+
+def scope_department_id(user: User, requested: int | None) -> int | None:
+    """Зав. отделением всегда ограничен своим отделением, остальные — по
+    запросу. Если у зав. отделением почему-то не задано отделение,
+    возвращаем несуществующий id (а не None) — иначе фильтр по department_id
+    просто не применяется и он видит весь колледж (см. TODO.md 1.4)."""
+    if RoleCode(user.role.code) == RoleCode.DEPT_HEAD:
+        if user.department_id is None:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "У вас не задано отделение — обратитесь к администратору"
+            )
+        return user.department_id
+    return requested
 
 
 def get_curator_group_ids(db: Session, user: User, on_date: datetime.date) -> list[int]:
