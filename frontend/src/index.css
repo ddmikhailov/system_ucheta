@@ -509,6 +509,38 @@ select:hover {
   cursor: default;
 }
 
+/* --- Mark code quick-pick buttons --- */
+
+.mark-code-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.mark-code-btn {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.1s ease, color 0.1s ease, border-color 0.1s ease;
+}
+
+.mark-code-btn:hover {
+  border-color: var(--primary);
+}
+
+.mark-code-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
 .archive-toggle {
   margin-top: 32px;
   text-align: right;

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
+import MarkCodeButtons from "../components/MarkCodeButtons";
 import { scrollToTop } from "../utils/scroll";
 import type { GroupSummary, MarkCodeOption, MonthDayStatus, RosterResponse } from "../api/types";
 
@@ -195,17 +196,11 @@ export default function CuratorCabinetPage() {
                           {entry.mark_name}
                         </span>
                       ) : (
-                        <select
-                          value={code ?? ""}
-                          onChange={(e) => setStudentMark(entry.student_id, e.target.value || null)}
-                        >
-                          <option value="">Присутствует</option>
-                          {markCodes.map((m) => (
-                            <option key={m.code} value={m.code}>
-                              {m.name}
-                            </option>
-                          ))}
-                        </select>
+                        <MarkCodeButtons
+                          value={code}
+                          markCodes={markCodes}
+                          onChange={(c) => setStudentMark(entry.student_id, c)}
+                        />
                       )}
                       {entry.is_draft_suggestion && !entry.is_locked && (
                         <span className="draft-badge">черновик со вчера</span>
