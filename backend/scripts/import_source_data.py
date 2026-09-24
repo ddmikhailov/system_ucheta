@@ -110,6 +110,11 @@ def run() -> None:
                 continue
 
             group = group_by_code[row["code"]]
+            # first(), не one_or_none(): куратора можно снять и назначить
+            # заново (см. admin.py: end_curator_assignment не удаляет запись,
+            # а закрывает её датой) — тогда по этой тройке может быть больше
+            # одной исторической записи, и это не повод падать при повторном
+            # запуске импорта.
             existing = (
                 db.query(CuratorAssignment)
                 .filter(
@@ -117,7 +122,7 @@ def run() -> None:
                     CuratorAssignment.user_id == user.id,
                     CuratorAssignment.role_type == AssignmentRole.CURATOR,
                 )
-                .one_or_none()
+                .first()
             )
             if existing is None:
                 db.add(
