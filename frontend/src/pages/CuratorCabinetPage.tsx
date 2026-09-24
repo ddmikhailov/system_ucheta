@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import MarkCodeButtons from "../components/MarkCodeButtons";
+import MarkCommentModal from "../components/MarkCommentModal";
 import { scrollToTop } from "../utils/scroll";
 import type { GroupSummary, MarkCodeOption, MonthDayStatus, RosterResponse } from "../api/types";
 
@@ -30,6 +31,7 @@ export default function CuratorCabinetPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPeriodForm, setShowPeriodForm] = useState<number | null>(null);
+  const [showCommentFor, setShowCommentFor] = useState<number | null>(null);
 
   useEffect(() => {
     api.get<GroupSummary[]>("/curator/groups").then((gs) => {
@@ -134,32 +136,34 @@ export default function CuratorCabinetPage() {
 
   return (
     <div>
-      <div className="toolbar">
-        <select value={groupId ?? ""} onChange={(e) => setGroupId(Number(e.target.value))}>
-          {groups.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.code} (курс {g.course}){g.is_submitted_today ? "" : " — не сдано сегодня"}
-            </option>
-          ))}
-        </select>
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} max={todayIso()} />
-      </div>
+      <div className="roster-sticky-header">
+        <div className="toolbar">
+          <select value={groupId ?? ""} onChange={(e) => setGroupId(Number(e.target.value))}>
+            {groups.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.code} (курс {g.course}){g.is_submitted_today ? "" : " — не сдано сегодня"}
+              </option>
+            ))}
+          </select>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} max={todayIso()} />
+        </div>
 
-      <div className="month-strip">
-        {monthStatus.map((d) => (
-          <span
-            key={d.date}
-            title={d.date}
-            className={`month-dot ${
-              ["weekend", "holiday", "vacation"].includes(d.day_type)
-                ? "weekend"
-                : d.is_submitted
-                  ? (d.is_on_time ? "ok" : "late")
-                  : "missing"
-            } ${d.day_type === "remote" ? "remote-day" : ""} ${d.date === date ? "selected" : ""}`}
-            onClick={() => setDate(d.date)}
-          />
-        ))}
+        <div className="month-strip">
+          {monthStatus.map((d) => (
+            <span
+              key={d.date}
+              title={d.date}
+              className={`month-dot ${
+                ["weekend", "holiday", "vacation"].includes(d.day_type)
+                  ? "weekend"
+                  : d.is_submitted
+                    ? (d.is_on_time ? "ok" : "late")
+                    : "missing"
+              } ${d.day_type === "remote" ? "remote-day" : ""} ${d.date === date ? "selected" : ""}`}
+              onClick={() => setDate(d.date)}
+            />
+          ))}
+        </div>
       </div>
 
       {error && <div className="error-text">{error}</div>}
@@ -177,7 +181,7 @@ export default function CuratorCabinetPage() {
               <tr>
                 <th>ФИО</th>
                 <th>Статус</th>
-                <th>Комментарий / основание</th>
+                <th>Комментарий</th>
                 <th></th>
               </tr>
             </thead>
@@ -185,8 +189,8 @@ export default function CuratorCabinetPage() {
               {roster.entries.map((entry) => {
                 const current = pending[entry.student_id];
                 const code = current?.mark_code ?? null;
-                const markInfo = code ? markCodeByCode.get(code) : null;
                 const risky = entry.risk_streak >= 3;
+                const hasComment = Boolean(current?.comment || current?.basis_reference);
                 return (
                   <tr key={entry.student_id} className={risky ? "risk-row" : ""}>
                     <td data-label="ФИО">{entry.full_name}</td>
@@ -207,28 +211,17 @@ export default function CuratorCabinetPage() {
                       )}
                       {risky && <span className="risk-badge">риск: {entry.risk_streak} дн. подряд</span>}
                     </td>
-                    <td data-label="Комментарий / основание">
+                    <td data-label="Комментарий">
                       {!entry.is_locked && code && (
-                        <>
-                          <input
-                            placeholder="комментарий"
-                            value={current?.comment ?? ""}
-                            onChange={(e) => updateField(entry.student_id, "comment", e.target.value)}
-                          />
-                          {markInfo?.requires_document && (
-                            <input
-                              placeholder="основание (№ приказа / справки)"
-                              value={current?.basis_reference ?? ""}
-                              onChange={(e) => updateField(entry.student_id, "basis_reference", e.target.value)}
-                            />
-                          )}
-                        </>
+                        <button className="comment-btn" onClick={() => setShowCommentFor(entry.student_id)}>
+                          {hasComment ? "Комментарий добавлен" : "Добавить комментарий"}
+                        </button>
                       )}
                     </td>
                     <td>
                       {!entry.is_locked && (
                         <button className="link-btn" onClick={() => setShowPeriodForm(entry.student_id)}>
-                          Период…
+                          Период
                         </button>
                       )}
                     </td>
@@ -258,6 +251,19 @@ export default function CuratorCabinetPage() {
             setShowPeriodForm(null);
             loadRoster();
             scrollToTop();
+          }}
+        />
+      )}
+
+      {showCommentFor !== null && (
+        <MarkCommentModal
+          comment={pending[showCommentFor]?.comment ?? ""}
+          basisReference={pending[showCommentFor]?.basis_reference ?? ""}
+          requiresDocument={Boolean(markCodeByCode.get(pending[showCommentFor]?.mark_code ?? "")?.requires_document)}
+          onClose={() => setShowCommentFor(null)}
+          onSave={(comment, basisReference) => {
+            updateField(showCommentFor, "comment", comment);
+            updateField(showCommentFor, "basis_reference", basisReference);
           }}
         />
       )}

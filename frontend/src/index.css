@@ -513,11 +513,15 @@ select:hover {
 
 .mark-code-buttons {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 4px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
 }
 
 .mark-code-btn {
+  flex-shrink: 0;
   min-width: 34px;
   height: 34px;
   padding: 0 8px;
@@ -539,6 +543,40 @@ select:hover {
   background: var(--primary);
   border-color: var(--primary);
   color: #fff;
+}
+
+.comment-btn {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.comment-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* --- Sticky group/date header above the roster (desktop only — on mobile
+   it would eat too much of the small screen, see media query below) --- */
+
+.roster-sticky-header {
+  background: var(--bg);
+}
+
+@media (min-width: 641px) {
+  .roster-sticky-header {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding: 12px 0 4px;
+    margin-top: -12px;
+  }
 }
 
 .archive-toggle {
