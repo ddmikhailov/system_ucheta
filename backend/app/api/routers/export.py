@@ -1,12 +1,12 @@
 import datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import assert_can_access_group, get_current_user, require_management, scope_department_id
 from app.db.session import get_db
-from app.models import User
+from app.models import StudyGroup, User
 from app.services import export_service
 
 router = APIRouter(prefix="/export", tags=["export"])
@@ -39,6 +39,8 @@ def export_pdf(
     db: Session = Depends(get_db),
 ):
     assert_can_access_group(db, user, study_group_id, date_to)
+    if db.get(StudyGroup, study_group_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Группа не найдена")
     content = export_service.build_signature_pdf(db, study_group_id, date_from, date_to)
     filename = f"tabel_{study_group_id}_{date_from}_{date_to}.pdf"
     return Response(

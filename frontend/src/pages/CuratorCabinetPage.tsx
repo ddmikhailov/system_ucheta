@@ -256,6 +256,7 @@ export default function CuratorCabinetPage() {
       {showPeriodForm !== null && (
         <AbsencePeriodModal
           studentId={showPeriodForm}
+          studentName={roster?.entries.find((e) => e.student_id === showPeriodForm)?.full_name ?? ""}
           markCodes={markCodes}
           onClose={() => setShowPeriodForm(null)}
           onSaved={() => {
@@ -284,16 +285,22 @@ export default function CuratorCabinetPage() {
 
 function AbsencePeriodModal({
   studentId,
+  studentName,
   markCodes,
   onClose,
   onSaved,
 }: {
   studentId: number;
+  studentName: string;
   markCodes: MarkCodeOption[];
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [markCode, setMarkCode] = useState(markCodes[0]?.code ?? "");
+  // Только уважительные коды — период это "больничный/приказ на много
+  // дней", а не опоздание/самовольный уход за один день (см. TODO.md 3:
+  // раньше по умолчанию стояло "Опоздание", а список включал всё подряд).
+  const excusedCodes = markCodes.filter((m) => m.is_excused);
+  const [markCode, setMarkCode] = useState(excusedCodes[0]?.code ?? "");
   const [dateFrom, setDateFrom] = useState(todayIso());
   const [dateTo, setDateTo] = useState(todayIso());
   const [basisReference, setBasisReference] = useState("");
@@ -301,6 +308,10 @@ function AbsencePeriodModal({
   const [busy, setBusy] = useState(false);
 
   async function save() {
+    if (dateTo < dateFrom) {
+      setError("Дата окончания раньше даты начала");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -322,11 +333,11 @@ function AbsencePeriodModal({
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>Длительное отсутствие</h3>
+        <h3>Длительное отсутствие{studentName ? ` — ${studentName}` : ""}</h3>
         <label>
           Код
           <select value={markCode} onChange={(e) => setMarkCode(e.target.value)}>
-            {markCodes.map((m) => (
+            {excusedCodes.map((m) => (
               <option key={m.code} value={m.code}>
                 {m.name}
               </option>
@@ -335,11 +346,11 @@ function AbsencePeriodModal({
         </label>
         <label>
           С
-          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} max={todayIso()} />
         </label>
         <label>
           По
-          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} max={todayIso()} />
         </label>
         <label>
           Основание

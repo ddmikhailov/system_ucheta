@@ -36,7 +36,7 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
     });
     api
       .get<UserAdmin[]>("/admin/users")
-      .then((us) => setCurators(us.filter((u) => u.role === "curator" || u.role === "deputy_curator")));
+      .then((us) => setCurators(us.filter((u) => u.is_active && (u.role === "curator" || u.role === "deputy_curator"))));
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -47,7 +47,8 @@ export default function CalendarTab({ canEdit }: { canEdit: boolean }) {
   useEffect(load, [dateFrom, dateTo]);
 
   useEffect(() => {
-    api.get<StudyGroupAdmin[]>("/admin/groups").then((gs) => {
+    api.get<StudyGroupAdmin[]>("/admin/groups").then((allGroups) => {
+      const gs = allGroups.filter((g) => g.is_active);
       setGroups(gs);
       if (gs.length > 0 && overrideGroupId === null) setOverrideGroupId(gs[0].id);
     });
@@ -73,6 +74,16 @@ export default function CalendarTab({ canEdit }: { canEdit: boolean }) {
       load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Не удалось сохранить");
+    }
+  }
+
+  async function removeException(date: string) {
+    setError(null);
+    try {
+      await api.delete(`/admin/calendar/${date}`);
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не удалось удалить");
     }
   }
 
@@ -123,6 +134,7 @@ export default function CalendarTab({ canEdit }: { canEdit: boolean }) {
           <tr>
             <th>Дата</th>
             <th>Тип</th>
+            {canEdit && <th></th>}
           </tr>
         </thead>
         <tbody>
@@ -130,11 +142,18 @@ export default function CalendarTab({ canEdit }: { canEdit: boolean }) {
             <tr key={r.date}>
               <td>{r.date}</td>
               <td>{DAY_TYPE_LABELS[r.day_type] ?? r.day_type}</td>
+              {canEdit && (
+                <td>
+                  <button className="link-btn" onClick={() => removeException(r.date)}>
+                    Убрать (вернуть по умолчанию)
+                  </button>
+                </td>
+              )}
             </tr>
           ))}
           {rows.length === 0 && (
             <tr>
-              <td colSpan={2}>Исключений в этом диапазоне нет.</td>
+              <td colSpan={canEdit ? 3 : 2}>Исключений в этом диапазоне нет.</td>
             </tr>
           )}
         </tbody>

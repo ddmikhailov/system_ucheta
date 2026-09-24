@@ -25,6 +25,14 @@ class BackdateNotAllowed(Exception):
     pass
 
 
+class InvalidSubmission(Exception):
+    """Неизвестный код отметки или студент не из этой группы — раньше и то,
+    и другое молча отбрасывалось, и пользователь думал, что сохранил (см.
+    TODO.md 3)."""
+
+    pass
+
+
 def _compute_basis(basis_reference: str | None) -> tuple[BasisStatus, None]:
     """Основание (номер приказа/справки) — необязательное дополнение к коду
     отметки, а не обязательное условие (см. обновление 1.1: убран жёсткий
@@ -47,13 +55,13 @@ def get_active_students(db: Session, study_group_id: int, as_of: datetime.date) 
 
 
 def can_edit_date(user: User, target_date: datetime.date, today: datetime.date) -> bool:
-    """Куратор правит посещаемость за любой прошедший день без ограничения
+    """Любая роль правит посещаемость за любой прошедший день без ограничения
     (обновление 1.1: раньше было только «вчера», теперь — весь период;
     правка задним числом больше чем на 48 часов просто уведомляет зав.
     отделением, см. notify_if_late_edit, а не блокируется). Будущее
-    по-прежнему недоступно никому — отмечать то, чего ещё не было, нельзя."""
-    if user.role.code in (RoleCode.DEPT_HEAD, RoleCode.EDU_DEPARTMENT, RoleCode.ADMIN, RoleCode.TUTOR):
-        return True
+    недоступно никому, включая администрацию (см. TODO.md 3 — раньше этот
+    же docstring обещал это, а код давал admin/tutor/dept_head/edu_department
+    исключение и молча пропускал проверку)."""
     return target_date <= today
 
 
@@ -228,6 +236,14 @@ def submit_day(
     if not can_edit_date(user, date, today):
         raise BackdateNotAllowed(f"Правка за {date} недоступна: это ещё не наступивший день.")
 
+    group = db.get(StudyGroup, study_group_id)
+    if group is not None and not calendar_service.is_study_day(
+        db, date, study_group_id=study_group_id, course=group.course
+    ):
+        # Нет занятия — нечего отмечать (см. TODO.md 3: раньше можно было
+        # "сдать" выходной/праздник/каникулы как обычный учебный день).
+        raise BackdateNotAllowed(f"{date} — нерабочий день, отмечать посещаемость не нужно.")
+
     mark_codes = get_mark_codes(db)
     active_students = get_active_students(db, study_group_id, date)
     active_ids = {s.id for s in active_students}
@@ -242,7 +258,13 @@ def submit_day(
         ).scalars().all()
     }
 
-    exceptions_by_student = {e["student_id"]: e for e in exceptions if e["student_id"] in active_ids}
+    for entry in exceptions:
+        if entry["student_id"] not in active_ids:
+            raise InvalidSubmission(f"Студент {entry['student_id']} не из этой группы на {date}")
+        if entry["mark_code"] not in mark_codes:
+            raise InvalidSubmission(f"Неизвестный код отметки: {entry['mark_code']!r}")
+
+    exceptions_by_student = {e["student_id"]: e for e in exceptions}
 
     for student_id in active_ids:
         entry = exceptions_by_student.get(student_id)
@@ -257,9 +279,7 @@ def submit_day(
                 db.delete(existing)
             continue
 
-        mark_code = mark_codes.get(entry["mark_code"])
-        if mark_code is None:
-            continue
+        mark_code = mark_codes[entry["mark_code"]]
 
         basis_reference = entry.get("basis_reference")
         basis_status, basis_deadline = _compute_basis(basis_reference)

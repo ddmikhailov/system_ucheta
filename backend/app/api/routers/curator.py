@@ -21,7 +21,16 @@ router = APIRouter(prefix="/curator", tags=["curator"])
 @router.get("/mark-codes")
 def mark_codes(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     rows = db.query(MarkCode).filter(MarkCode.is_active.is_(True)).order_by(MarkCode.sort_order).all()
-    return [{"code": r.code, "name": r.name, "requires_document": r.requires_document} for r in rows]
+    # is_excused нужен фронту, чтобы не предлагать неуважительные коды в
+    # форме "Длительное отсутствие" (см. TODO.md 3) — раньше поле не
+    # отдавалось вовсе, хотя фронтовый тип уже давно его ожидал.
+    return [
+        {
+            "id": r.id, "code": r.code, "name": r.name, "counts_as_present": r.counts_as_present,
+            "is_excused": r.is_excused, "requires_document": r.requires_document, "is_active": r.is_active,
+        }
+        for r in rows
+    ]
 
 
 @router.get("/groups", response_model=list[GroupSummary])
@@ -64,6 +73,8 @@ def submit_day(
         )
     except attendance_service.BackdateNotAllowed as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc))
+    except attendance_service.InvalidSubmission as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
     return attendance_service.get_roster(db, study_group_id, date)
 
 
@@ -103,6 +114,10 @@ def month_status(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if not (1 <= month <= 12) or not (2000 <= year <= 2100):
+        # datetime.date(year, 13, 1) роняет ValueError -> необработанный 500
+        # (см. TODO.md 3).
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Некорректные год/месяц")
     assert_can_access_group(db, user, study_group_id, datetime.date(year, month, 1))
     group = db.get(StudyGroup, study_group_id)
 
@@ -153,11 +168,35 @@ def create_absence_period(
     if student is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Студент не найден")
 
+    # Раньше не проверялось совсем (см. TODO.md 3): период мог кончаться
+    # раньше, чем начинался (даты просто менялись местами при расчёте, и
+    # период создавался пустым — 201 без единой отметки), тянуться на годы
+    # вперёд (первый же такой period клал бы сервер расчётом study_days на
+    # тысячи дат) или уходить в будущее.
+    if payload.date_to < payload.date_from:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Дата окончания раньше даты начала")
+    if (payload.date_to - payload.date_from).days > 366:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Период не может быть длиннее года")
+    today = datetime.date.today()
+    if payload.date_to > today:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Период не может уходить в будущее")
+
     assert_can_access_group(db, user, student.study_group_id, payload.date_from)
+    assert_can_access_group(db, user, student.study_group_id, payload.date_to)
 
     mark_code = db.query(MarkCode).filter(MarkCode.code == payload.mark_code).one_or_none()
     if mark_code is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Неизвестный код отметки")
+    if not mark_code.is_active:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Этот код отметки отключён")
+    if not mark_code.is_excused:
+        # Длительный период — это "уважительная причина на много дней"
+        # (больничный, приказ и т.п.). "Опоздание"/"ушёл с занятий"/
+        # "неуважительная причина" тут не имеют смысла — они про конкретный
+        # день, а не про отсутствие подряд (см. TODO.md 3).
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "Для длительного периода нужен код с уважительной причиной"
+        )
 
     period = attendance_service.create_absence_period(
         db, student.id, mark_code.id, payload.date_from, payload.date_to, payload.basis_reference, user

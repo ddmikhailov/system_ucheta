@@ -11,7 +11,7 @@ import logging
 from aiogram import Bot
 
 from app.db import base as db_base
-from app.services import calendar_service, notification_service
+from app.services import notification_service
 from bot import keyboards, messages
 
 logger = logging.getLogger(__name__)
@@ -30,9 +30,11 @@ async def send_reminders(bot: Bot, kind: str, is_second: bool, today: datetime.d
     today = today or datetime.date.today()
     db = db_base.SessionLocal()
     try:
-        if not calendar_service.is_study_day(db, today):
-            return
-
+        # Раньше здесь была общая на весь колледж проверка "сегодня учебный
+        # день?" — по субботам она либо слала напоминания всем (включая
+        # курсы без занятий), либо не слала никому, включая 1 курс, у
+        # которого по субботам как раз есть занятия (см. TODO.md 3).
+        # groups_needing_reminder уже фильтрует по каждой группе отдельно.
         by_user = notification_service.groups_needing_reminder(db, today)
         for user, groups in by_user.items():
             if notification_service.was_notified(db, user.id, kind, today):
@@ -57,9 +59,8 @@ async def send_dept_head_digest(bot: Bot, today: datetime.date | None = None) ->
     today = today or datetime.date.today()
     db = db_base.SessionLocal()
     try:
-        if not calendar_service.is_study_day(db, today):
-            return
-
+        # dept_head_unsubmitted_groups фильтрует по каждой группе отдельно
+        # (см. пояснение в send_reminders выше).
         for user in notification_service.dept_heads_with_telegram(db):
             if notification_service.was_notified(db, user.id, "dept_head_digest", today):
                 continue
@@ -77,9 +78,8 @@ async def send_edu_department_digest(bot: Bot, today: datetime.date | None = Non
     today = today or datetime.date.today()
     db = db_base.SessionLocal()
     try:
-        if not calendar_service.is_study_day(db, today):
-            return
-
+        # day_overview (внутри college_day_summary) сам исключает группы,
+        # для которых сегодня не учебный день — см. пояснение выше.
         summary = notification_service.college_day_summary(db, today)
         text = messages.edu_department_digest(summary, today)
         for user in notification_service.edu_department_recipients(db):

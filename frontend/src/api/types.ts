@@ -74,21 +74,22 @@ export interface DayOverviewRow {
   study_group_id: number;
   code: string;
   course: number;
-  in_list: number;
-  present: number;
-  late: number;
-  absent_excused: number;
-  absent_unexcused: number;
-  percent: number;
+  responsible_name: string | null;
+  in_list: number | null;
+  present: number | null;
+  late: number | null;
+  absent_excused: number | null;
+  absent_unexcused: number | null;
+  percent: number | null;
   is_submitted: boolean;
   is_on_time: boolean | null;
 }
 
 export interface DynamicsPoint {
   date: string;
-  percent: number;
-  in_list: number;
-  present: number;
+  percent: number | null;
+  in_list: number | null;
+  present: number | null;
 }
 
 export interface RiskStudentRow {
@@ -103,6 +104,7 @@ export interface CuratorDisciplineRow {
   study_group_id: number;
   code: string;
   course: number;
+  responsible_name: string | null;
   on_time: number;
   late: number;
   missed: number;

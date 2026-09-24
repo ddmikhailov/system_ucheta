@@ -87,6 +87,7 @@ def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
             .join(User.role)
             .filter(User.department_id == user.department_id)
             .filter(User.role.has(code="dept_head"))
+            .filter(User.is_active.is_(True))
             .first()
         )
         dept_head_name = dept_head.full_name if dept_head else None

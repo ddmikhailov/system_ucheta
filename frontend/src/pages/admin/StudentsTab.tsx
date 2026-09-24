@@ -38,7 +38,8 @@ export default function StudentsTab({ canEdit, canCreate }: { canEdit: boolean; 
   const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
-    api.get<StudyGroupAdmin[]>("/admin/groups").then((gs) => {
+    api.get<StudyGroupAdmin[]>("/admin/groups").then((allGroups) => {
+      const gs = allGroups.filter((g) => g.is_active);
       setGroups(gs);
       if (gs.length > 0) setGroupId(gs[0].id);
     });

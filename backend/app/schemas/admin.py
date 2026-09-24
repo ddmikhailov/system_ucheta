@@ -1,6 +1,9 @@
 import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
+
+_DayTypeLiteral = Literal["study_day", "weekend", "holiday", "vacation", "remote"]
 
 
 class DepartmentRead(BaseModel):
@@ -10,7 +13,7 @@ class DepartmentRead(BaseModel):
 
 
 class DepartmentCreate(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=255)
 
 
 class StudyGroupRead(BaseModel):
@@ -25,17 +28,17 @@ class StudyGroupRead(BaseModel):
 
 
 class StudyGroupCreate(BaseModel):
-    code: str
-    course: int
+    code: str = Field(min_length=1, max_length=32)
+    course: int = Field(ge=1, le=6)
     department_id: int
-    study_form: str | None = None
+    study_form: str | None = Field(default=None, max_length=64)
 
 
 class StudyGroupUpdate(BaseModel):
-    code: str | None = None
-    course: int | None = None
+    code: str | None = Field(default=None, min_length=1, max_length=32)
+    course: int | None = Field(default=None, ge=1, le=6)
     department_id: int | None = None
-    study_form: str | None = None
+    study_form: str | None = Field(default=None, max_length=64)
     is_active: bool | None = None
 
 
@@ -43,6 +46,9 @@ class DeleteResult(BaseModel):
     deleted: bool
     anonymized: bool
     detail: str
+
+
+_StudentStatusLiteral = Literal["studying", "academic_leave", "expelled"]
 
 
 class StudentRead(BaseModel):
@@ -55,24 +61,24 @@ class StudentRead(BaseModel):
 
 
 class StudentCreate(BaseModel):
-    last_name: str
-    first_name: str
-    middle_name: str | None = None
+    last_name: str = Field(min_length=1, max_length=128)
+    first_name: str = Field(min_length=1, max_length=128)
+    middle_name: str | None = Field(default=None, max_length=128)
     study_group_id: int
     enrolled_at: datetime.date
 
 
 class StudentUpdateStatus(BaseModel):
-    status: str
+    status: _StudentStatusLiteral
     left_at: datetime.date | None = None
 
 
 class StudentUpdate(BaseModel):
-    last_name: str | None = None
-    first_name: str | None = None
-    middle_name: str | None = None
+    last_name: str | None = Field(default=None, min_length=1, max_length=128)
+    first_name: str | None = Field(default=None, min_length=1, max_length=128)
+    middle_name: str | None = Field(default=None, max_length=128)
     study_group_id: int | None = None
-    status: str | None = None
+    status: _StudentStatusLiteral | None = None
     left_at: datetime.date | None = None
 
 
@@ -96,17 +102,17 @@ class MarkCodeUpdate(BaseModel):
 class CuratorAssignmentCreate(BaseModel):
     study_group_id: int
     user_id: int
-    role_type: str
+    role_type: Literal["curator", "deputy"]
     start_date: datetime.date
     end_date: datetime.date | None = None
 
 
 class UserCreate(BaseModel):
-    full_name: str
-    username: str
+    full_name: str = Field(min_length=1, max_length=255)
+    username: str = Field(min_length=1, max_length=64)
     role: str
     department_id: int | None = None
-    display_title: str | None = None
+    display_title: str | None = Field(default=None, max_length=128)
 
 
 class UserRead(BaseModel):
@@ -131,12 +137,12 @@ class UserUpdateLeadershipDigest(BaseModel):
 class UserUpdate(BaseModel):
     """Редактирование логина/ФИО/статуса существующего пользователя администрацией."""
 
-    username: str | None = None
-    full_name: str | None = None
+    username: str | None = Field(default=None, min_length=1, max_length=64)
+    full_name: str | None = Field(default=None, min_length=1, max_length=255)
     role: str | None = None
     department_id: int | None = None
     is_active: bool | None = None
-    display_title: str | None = None
+    display_title: str | None = Field(default=None, max_length=128)
 
 
 class SetPasswordRequest(BaseModel):
@@ -153,7 +159,7 @@ class SetPasswordResponse(BaseModel):
 
 class CalendarDayUpsert(BaseModel):
     date: datetime.date
-    day_type: str
+    day_type: _DayTypeLiteral
 
 
 class GroupCalendarOverrideRead(BaseModel):
@@ -165,4 +171,4 @@ class GroupCalendarOverrideRead(BaseModel):
 class GroupCalendarOverrideUpsert(BaseModel):
     study_group_id: int
     date: datetime.date
-    day_type: str
+    day_type: _DayTypeLiteral

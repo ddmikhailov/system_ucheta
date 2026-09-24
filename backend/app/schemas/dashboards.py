@@ -7,21 +7,24 @@ class DayOverviewRow(BaseModel):
     study_group_id: int
     code: str
     course: int
-    in_list: int
-    present: int
-    late: int
-    absent_excused: int
-    absent_unexcused: int
-    percent: float
+    responsible_name: str | None = None
+    # None, если день ещё не сдан — раньше несданный день молча считался за
+    # 100% присутствия (см. TODO.md 3), теперь фронт показывает «—».
+    in_list: int | None
+    present: int | None
+    late: int | None
+    absent_excused: int | None
+    absent_unexcused: int | None
+    percent: float | None
     is_submitted: bool
     is_on_time: bool | None
 
 
 class DynamicsPoint(BaseModel):
     date: datetime.date
-    percent: float
-    in_list: int
-    present: int
+    percent: float | None
+    in_list: int | None
+    present: int | None
 
 
 class RiskStudentRow(BaseModel):
@@ -36,6 +39,7 @@ class CuratorDisciplineRow(BaseModel):
     study_group_id: int
     code: str
     course: int
+    responsible_name: str | None = None
     on_time: int
     late: int
     missed: int

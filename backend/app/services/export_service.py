@@ -32,6 +32,32 @@ for _candidate in _CYRILLIC_FONT_CANDIDATES:
         _PDF_FONT_NAME = "UnicodeBody"
         break
 
+_SHEET_NAME_FORBIDDEN = set('[]:*?/\\')
+
+
+def _safe_sheet_name(name: str, used: set[str]) -> str:
+    """Excel запрещает [ ] : * ? / \\ в названии листа и режет до 31 символа —
+    без очистки и дедупликации это роняло экспорт (см. TODO.md 3)."""
+    cleaned = "".join(c for c in name if c not in _SHEET_NAME_FORBIDDEN).strip() or "Группа"
+    cleaned = cleaned[:31]
+    candidate = cleaned
+    suffix = 2
+    while candidate in used:
+        suffix_text = f" ({suffix})"
+        candidate = cleaned[: 31 - len(suffix_text)] + suffix_text
+        suffix += 1
+    used.add(candidate)
+    return candidate
+
+
+def _safe_cell(value):
+    """openpyxl запишет строку, начинающуюся с =, +, - или @, как формулу —
+    Excel её выполнит при открытии (см. TODO.md 3: ФИО/куратор — свободный
+    текст, вводимый людьми, никак не проверяется на это)."""
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@"):
+        return "'" + value
+    return value
+
 
 def build_summary_workbook(
     db: Session,
@@ -59,13 +85,23 @@ def build_summary_workbook(
     groups = list(db.execute(stmt.order_by(StudyGroup.course, StudyGroup.code)).scalars().all())
 
     for group in groups:
-        stats = stats_service.compute_period_stats(db, date_from, date_to, study_group_id=group.id)
+        # only_submitted=True — несданные дни не должны считаться как 100%
+        # присутствия (см. TODO.md 3).
+        stats = stats_service.compute_period_stats(
+            db, date_from, date_to, study_group_id=group.id, only_submitted=True
+        )
+        # Текущий куратор, а не первый за всю историю группы (см. TODO.md 3) —
+        # используем ту же логику активности назначения, что и в админке.
         curator = next(
-            (a.user.full_name for a in group.curator_assignments if a.role_type.value == "curator"), ""
+            (
+                a.user.full_name for a in group.curator_assignments
+                if a.role_type.value == "curator" and a.is_active_on(date_to) and a.user.is_active
+            ),
+            "",
         )
         ws.append(
             [
-                group.course, curator, group.code, stats.in_list, stats.present, stats.late,
+                group.course, _safe_cell(curator), group.code, stats.in_list, stats.present, stats.late,
                 stats.absent_total, stats.absent_excused, stats.absent_unexcused, stats.percent,
             ]
         )
@@ -82,12 +118,12 @@ def build_summary_workbook(
 
 
 def _add_group_sheets(wb: Workbook, db: Session, groups: list[StudyGroup], date_from: datetime.date, date_to: datetime.date) -> None:
+    used_sheet_names: set[str] = set()
     for group in groups:
         study_days = calendar_service.study_days_between(
             db, date_from, date_to, study_group_id=group.id, course=group.course
         )
-        sheet_name = group.code[:31]
-        ws = wb.create_sheet(sheet_name)
+        ws = wb.create_sheet(_safe_sheet_name(group.code, used_sheet_names))
         ws.append(["№", "ФИО"] + [d.strftime("%d.%m") for d in study_days])
         for cell in ws[1]:
             cell.font = Font(bold=True)
@@ -103,7 +139,7 @@ def _add_group_sheets(wb: Workbook, db: Session, groups: list[StudyGroup], date_
         marks_map: dict[tuple[int, datetime.date], str] = {(m.student_id, m.date): m.code for m in marks}
 
         for idx, student in enumerate(students, start=1):
-            row = [idx, student.full_name]
+            row = [idx, _safe_cell(student.full_name)]
             for day in study_days:
                 row.append(marks_map.get((student.id, day), ""))
             ws.append(row)

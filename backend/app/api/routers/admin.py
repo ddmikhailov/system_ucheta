@@ -67,15 +67,25 @@ def list_departments(db: Session = Depends(get_db)):
 def create_department(payload: DepartmentCreate, db: Session = Depends(get_db)):
     dept = Department(name=payload.name)
     db.add(dept)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "Отделение с таким названием уже существует")
     db.refresh(dept)
     return dept
 
 
 def _group_read(g: StudyGroup, today: datetime.date | None = None) -> StudyGroupRead:
     today = today or datetime.date.today()
+    # Архивный куратор не должен продолжать числиться куратором группы (см.
+    # TODO.md 3) — иначе группа не попадает в «Вакантные», хотя ей на самом
+    # деле некому заниматься.
     curator_assignment = next(
-        (a for a in g.curator_assignments if a.is_active_on(today) and a.role_type.value == "curator"),
+        (
+            a for a in g.curator_assignments
+            if a.is_active_on(today) and a.role_type.value == "curator" and a.user.is_active
+        ),
         None,
     )
     return StudyGroupRead(
@@ -113,7 +123,11 @@ def list_groups(
 def create_group(payload: StudyGroupCreate, db: Session = Depends(get_db)):
     group = StudyGroup(**payload.model_dump())
     db.add(group)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "Группа с таким кодом уже существует")
     db.refresh(group)
     return _group_read(group)
 
@@ -235,9 +249,16 @@ def update_student_status(
     if student is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Студент не найден")
     _assert_can_manage_student(db, user, student)
-    student.status = StudentStatus(payload.status)
+    new_status = StudentStatus(payload.status)
+    student.status = new_status
     if payload.left_at is not None:
         student.left_at = payload.left_at
+    elif new_status == StudentStatus.STUDYING:
+        # Возврат из академа/восстановление — дата выбытия больше не
+        # актуальна, иначе студент продолжает считаться выбывшим и
+        # пропадает из активного списка группы (см. TODO.md 3).
+        student.left_at = None
+    log_action(db, user, "student.status_change", "student", str(student.id))
     db.commit()
     db.refresh(student)
     return StudentRead(
@@ -800,3 +821,21 @@ def delete_group_calendar_override(
     )
     db.commit()
     return DeleteResult(deleted=True, anonymized=False, detail="Переопределение удалено, действует общий календарь")
+
+
+@router.delete("/calendar/{date}", response_model=DeleteResult, dependencies=[Depends(require_reference_editor)])
+def delete_calendar_day(
+    date: datetime.date, user: User = Depends(require_reference_editor), db: Session = Depends(get_db),
+):
+    """Раньше "вернуть" исключение можно было только выставив «Учебный
+    день» — для субботы это делало её учебной для всех курсов, а не просто
+    убирало исключение (см. TODO.md 3). Зарегистрирован после
+    /calendar/group-overrides: иначе DELETE .../group-overrides сам попадал
+    бы сюда как date="group-overrides" (422 на разборе даты)."""
+    row = db.get(AcademicCalendarDay, date)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Исключение не найдено")
+    db.delete(row)
+    log_action(db, user, "calendar.delete", "academic_calendar", str(date), old_value=row.day_type)
+    db.commit()
+    return DeleteResult(deleted=True, anonymized=False, detail="Исключение удалено, действует правило по умолчанию")

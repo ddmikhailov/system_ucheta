@@ -13,7 +13,7 @@ from app.models import (
     StudyGroup,
     User,
 )
-from app.services import stats_service
+from app.services import calendar_service, stats_service
 
 settings = get_settings()
 
@@ -54,6 +54,12 @@ def groups_needing_reminder(db: Session, date: datetime.date) -> dict[User, list
     by_user: dict[User, list[StudyGroup]] = {}
     for group in groups:
         if group.id in submitted_ids:
+            continue
+        # По субботам учится только 1 курс (и у отдельных групп бывают
+        # собственные исключения календаря) — раньше единая на весь колледж
+        # проверка "сегодня учебный день?" либо слала напоминания всем по
+        # субботам, либо не слала никому, включая 1 курс (см. TODO.md 3).
+        if not calendar_service.is_study_day(db, date, study_group_id=group.id, course=group.course):
             continue
         user = get_responsible_user(db, group, date)
         if user is None or user.telegram_chat_id is None:
@@ -98,6 +104,8 @@ def dept_head_unsubmitted_groups(db: Session, department: Department, date: date
     for group in groups:
         if group.id in submitted_ids:
             continue
+        if not calendar_service.is_study_day(db, date, study_group_id=group.id, course=group.course):
+            continue
         responsible = get_responsible_user(db, group, date)
         rows.append(DeptHeadDigestRow(group_code=group.code, responsible_name=responsible.full_name if responsible else None))
     return rows
@@ -113,12 +121,15 @@ class CollegeSummary:
 
 def college_day_summary(db: Session, date: datetime.date) -> CollegeSummary:
     rows = stats_service.day_overview(db, date)
-    submitted = sum(1 for r in rows if r["is_submitted"])
-    total_in_list = sum(r["in_list"] for r in rows)
-    total_present = sum(r["present"] for r in rows)
+    # Несданные группы дают in_list/present = None (см. TODO.md 3) — не
+    # считаем их ни как 100%, ни как 0%, просто исключаем из суммы.
+    submitted_rows = [r for r in rows if r["is_submitted"]]
+    submitted = len(submitted_rows)
+    total_in_list = sum(r["in_list"] for r in submitted_rows)
+    total_present = sum(r["present"] for r in submitted_rows)
     percent = round(total_present / total_in_list * 100, 1) if total_in_list else 0.0
     problem = [
-        r["code"] for r in rows
+        r["code"] for r in submitted_rows
         if r["in_list"] > 0 and r["percent"] < settings.problem_group_percent_threshold
     ]
     return CollegeSummary(

@@ -24,7 +24,11 @@ def dept_head_for(db: Session, department_id: int | None) -> User | None:
     return (
         db.query(User)
         .join(User.role)
-        .filter(User.department_id == department_id, User.role.has(code=RoleCode.DEPT_HEAD.value))
+        .filter(
+            User.department_id == department_id,
+            User.role.has(code=RoleCode.DEPT_HEAD.value),
+            User.is_active.is_(True),
+        )
         .first()
     )
 

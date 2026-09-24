@@ -1,6 +1,6 @@
 import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class RosterEntry(BaseModel):
@@ -32,8 +32,10 @@ class RosterResponse(BaseModel):
 class MarkExceptionInput(BaseModel):
     student_id: int
     mark_code: str
-    comment: str | None = None
-    basis_reference: str | None = None
+    comment: str | None = Field(default=None, max_length=500)
+    # Лимит совпадает с колонкой AttendanceMark.basis_reference в БД — иначе
+    # MySQL strict mode роняет запрос необработанным 500 (см. TODO.md 3).
+    basis_reference: str | None = Field(default=None, max_length=255)
 
 
 class SubmitDayRequest(BaseModel):
@@ -59,7 +61,7 @@ class AbsencePeriodCreate(BaseModel):
     mark_code: str
     date_from: datetime.date
     date_to: datetime.date
-    basis_reference: str | None = None
+    basis_reference: str | None = Field(default=None, max_length=255)
 
 
 class AbsencePeriodRead(BaseModel):

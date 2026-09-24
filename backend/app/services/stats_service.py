@@ -61,7 +61,12 @@ def compute_period_stats(
     course: int | None = None,
     study_group_id: int | None = None,
     student_id: int | None = None,
+    only_submitted: bool = False,
 ) -> PeriodStats:
+    """only_submitted=True считает "в списке" только по дням, которые группа
+    реально сдала — иначе несданный день молча учитывался как 100%
+    присутствия (см. TODO.md 3: пустой день без единой отметки давал
+    present == in_list)."""
     students = _students_in_scope(db, department_id, course, study_group_id, student_id)
     if not students:
         return PeriodStats()
@@ -76,6 +81,18 @@ def compute_period_stats(
         return PeriodStats()
 
     student_ids = [s.id for s in students]
+    student_by_id = {s.id: s for s in students}
+
+    submitted_pairs: set[tuple[int, datetime.date]] | None = None
+    if only_submitted:
+        group_ids = {s.study_group_id for s in students}
+        submission_rows = db.execute(
+            select(DaySubmission.study_group_id, DaySubmission.date).where(
+                DaySubmission.study_group_id.in_(group_ids), DaySubmission.date.in_(study_days)
+            )
+        ).all()
+        submitted_pairs = {(r.study_group_id, r.date) for r in submission_rows}
+
     marks = db.execute(
         select(AttendanceMark.student_id, AttendanceMark.date, MarkCode.code, MarkCode.counts_as_present, MarkCode.is_excused)
         .join(MarkCode, MarkCode.id == AttendanceMark.mark_code_id)
@@ -89,10 +106,15 @@ def compute_period_stats(
         enrolled_days = {
             d for d in study_days_set
             if student.enrolled_at <= d and (student.left_at is None or student.left_at >= d)
+            and (submitted_pairs is None or (student.study_group_id, d) in submitted_pairs)
         }
         stats.in_list += len(enrolled_days)
 
     for row in marks:
+        if submitted_pairs is not None:
+            student = student_by_id.get(row.student_id)
+            if student is None or (student.study_group_id, row.date) not in submitted_pairs:
+                continue
         stats.by_code[row.code] = stats.by_code.get(row.code, 0) + 1
         if row.code == "о":
             stats.late += 1
@@ -104,6 +126,29 @@ def compute_period_stats(
                 stats.absent_unexcused += 1
 
     return stats
+
+
+def _current_responsible_name(group: StudyGroup, as_of: datetime.date) -> str | None:
+    """Замещающий, если он сейчас активен, иначе куратор — тот же приоритет,
+    что и в напоминаниях (notification_service.get_responsible_user), но без
+    циклического импорта. Нужен, чтобы «Дисциплина кураторов» и «День по
+    колледжу» показывали, к кому идти, а не только код группы (см. TODO.md 3)."""
+    deputy = next(
+        (
+            a.user.full_name for a in group.curator_assignments
+            if a.role_type.value == "deputy" and a.is_active_on(as_of) and a.user.is_active
+        ),
+        None,
+    )
+    if deputy:
+        return deputy
+    return next(
+        (
+            a.user.full_name for a in group.curator_assignments
+            if a.role_type.value == "curator" and a.is_active_on(as_of) and a.user.is_active
+        ),
+        None,
+    )
 
 
 def day_overview(db: Session, date: datetime.date, department_id: int | None = None) -> list[dict]:
@@ -124,21 +169,41 @@ def day_overview(db: Session, date: datetime.date, department_id: int | None = N
 
     rows = []
     for group in groups:
-        stats = compute_period_stats(db, date, date, study_group_id=group.id)
+        if not calendar_service.is_study_day(db, date, study_group_id=group.id, course=group.course):
+            # Не учебный день у этой конкретной группы (например, суббота у
+            # курса не 1, или у группы отдельное исключение календаря) — не
+            # показываем как "не сдано", сдавать нечего (см. TODO.md 3).
+            continue
+        responsible_name = _current_responsible_name(group, date)
         submission = submissions.get(group.id)
+        if submission is None:
+            # День не сдан — «100% присутствия» тут means "мы ничего не
+            # знаем", а не "все были". Показываем это явно как None/«—»,
+            # а не задним числом рассчитанную по нулю отметок статистику.
+            rows.append(
+                {
+                    "study_group_id": group.id, "code": group.code, "course": group.course,
+                    "in_list": None, "present": None, "late": None,
+                    "absent_excused": None, "absent_unexcused": None, "percent": None,
+                    "is_submitted": False, "is_on_time": None, "responsible_name": responsible_name,
+                }
+            )
+            continue
+        stats = compute_period_stats(db, date, date, study_group_id=group.id)
         rows.append(
             {
                 "study_group_id": group.id,
                 "code": group.code,
                 "course": group.course,
+                "responsible_name": responsible_name,
                 "in_list": stats.in_list,
                 "present": stats.present,
                 "late": stats.late,
                 "absent_excused": stats.absent_excused,
                 "absent_unexcused": stats.absent_unexcused,
                 "percent": stats.percent,
-                "is_submitted": submission is not None,
-                "is_on_time": submission.is_on_time if submission else None,
+                "is_submitted": True,
+                "is_on_time": submission.is_on_time,
             }
         )
     return rows
@@ -158,8 +223,14 @@ def dynamics(
     )
     result = []
     for day in study_days:
-        stats = compute_period_stats(db, day, day, department_id, course, study_group_id, student_id)
-        result.append({"date": day, "percent": stats.percent, "in_list": stats.in_list, "present": stats.present})
+        stats = compute_period_stats(
+            db, day, day, department_id, course, study_group_id, student_id, only_submitted=True
+        )
+        if stats.in_list == 0:
+            # Никто из группы(групп) этот день не сдал — не 100%/0%, а «нет данных».
+            result.append({"date": day, "percent": None, "in_list": None, "present": None})
+        else:
+            result.append({"date": day, "percent": stats.percent, "in_list": stats.in_list, "present": stats.present})
     return result
 
 
@@ -194,6 +265,7 @@ def curator_discipline(
                 "study_group_id": group.id,
                 "code": group.code,
                 "course": group.course,
+                "responsible_name": _current_responsible_name(group, date_to),
                 "on_time": on_time,
                 "late": late,
                 "missed": missed,

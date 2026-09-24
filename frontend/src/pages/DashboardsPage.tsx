@@ -44,7 +44,7 @@ export default function DashboardsPage() {
   const [groups, setGroups] = useState<StudyGroupAdmin[]>([]);
   const [curators, setCurators] = useState<UserAdmin[]>([]);
   const [assigningGroupId, setAssigningGroupId] = useState<number | null>(null);
-  const vacantGroups = useMemo(() => groups.filter((g) => !g.curator_name), [groups]);
+  const vacantGroups = useMemo(() => groups.filter((g) => g.is_active && !g.curator_name), [groups]);
 
   const courses = useMemo(
     () => Array.from(new Set(dayRows.map((r) => r.course))).sort((a, b) => a - b),
@@ -91,7 +91,7 @@ export default function DashboardsPage() {
     api.get<StudyGroupAdmin[]>("/admin/groups").then(setGroups).catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка загрузки"));
     api
       .get<UserAdmin[]>("/admin/users")
-      .then((us) => setCurators(us.filter((u) => u.role === "curator" || u.role === "deputy_curator")))
+      .then((us) => setCurators(us.filter((u) => u.is_active && (u.role === "curator" || u.role === "deputy_curator"))))
       .catch(() => setCurators([]));
   }
 
@@ -159,6 +159,7 @@ export default function DashboardsPage() {
             <tr>
               <th>Группа</th>
               <th>Курс</th>
+              <th>Ответственный</th>
               <th>В списке</th>
               <th>Пришло</th>
               <th>Опоздало</th>
@@ -173,11 +174,12 @@ export default function DashboardsPage() {
               <tr key={r.study_group_id} className={!r.is_submitted ? "not-submitted-row" : ""}>
                 <td>{r.code}</td>
                 <td>{r.course}</td>
-                <td>{r.in_list}</td>
-                <td>{r.present}</td>
-                <td>{r.late}</td>
-                <td>{r.absent_excused}</td>
-                <td>{r.absent_unexcused}</td>
+                <td>{r.responsible_name ?? "нет куратора"}</td>
+                <td>{r.in_list ?? "—"}</td>
+                <td>{r.present ?? "—"}</td>
+                <td>{r.late ?? "—"}</td>
+                <td>{r.absent_excused ?? "—"}</td>
+                <td>{r.absent_unexcused ?? "—"}</td>
                 <td>
                   <PercentBar value={r.percent} />
                 </td>
@@ -202,8 +204,8 @@ export default function DashboardsPage() {
             {dynamicsPoints.map((p) => (
               <tr key={p.date}>
                 <td>{p.date}</td>
-                <td>{p.in_list}</td>
-                <td>{p.present}</td>
+                <td>{p.in_list ?? "—"}</td>
+                <td>{p.present ?? "—"}</td>
                 <td>
                   <PercentBar value={p.percent} />
                 </td>
@@ -249,6 +251,7 @@ export default function DashboardsPage() {
             <tr>
               <th>Группа</th>
               <th>Курс</th>
+              <th>Ответственный</th>
               <th>Вовремя</th>
               <th>С опозданием</th>
               <th>Не сдано</th>
@@ -260,6 +263,7 @@ export default function DashboardsPage() {
               <tr key={r.study_group_id} className={r.missed > 0 ? "not-submitted-row" : ""}>
                 <td>{r.code}</td>
                 <td>{r.course}</td>
+                <td>{r.responsible_name ?? "нет куратора"}</td>
                 <td>{r.on_time}</td>
                 <td>{r.late}</td>
                 <td>{r.missed}</td>
@@ -273,8 +277,9 @@ export default function DashboardsPage() {
       {tab === "vacant" && (
         <>
           <p className="hint">
-            Группа никогда не остаётся без ответственного: пока куратор не назначен, напоминания и отметка
-            падают на зав. отделением. Назначьте куратора или заместителя, чтобы снять с себя эту обязанность.
+            Пока куратор не назначен, отмечать посещаемость в группе некому и напоминания никому не приходят —
+            группа просто перечисляется в ежедневной сводке зав. отделением. Назначьте куратора или заместителя,
+            чтобы группа заработала как обычно.
           </p>
           <table className="dash-table">
             <thead>
@@ -387,7 +392,11 @@ function StudentCardModal({
   );
 }
 
-function PercentBar({ value }: { value: number }) {
+function PercentBar({ value }: { value: number | null | undefined }) {
+  if (value === null || value === undefined) {
+    // День не сдан — раньше это молча считалось за 100% (см. TODO.md 3).
+    return <span className="hint">—</span>;
+  }
   const color = value >= 95 ? "var(--ok)" : value >= 85 ? "var(--warn)" : "var(--danger)";
   const textColor = value >= 95 ? "var(--ok)" : value >= 85 ? "var(--warn-ink)" : "var(--danger)";
   return (

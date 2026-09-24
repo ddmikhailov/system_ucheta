@@ -99,12 +99,32 @@ async def test_leadership_digest_only_to_flagged_users(imported, db, fake_bot):
     assert "Недельный дайджест" in sent[0]["text"]
 
 
-async def test_no_reminders_sent_on_weekend(imported, db, curator_group, curator_user, fake_bot):
+async def test_course_1_gets_reminder_on_saturday(imported, db, curator_group, curator_user, fake_bot):
+    """1 курс учится по субботам (см. TODO.md 3) — раньше единая на весь
+    колледж проверка "сегодня учебный день?" вообще не слала напоминаний по
+    субботам, даже курсу 1."""
+    assert curator_group.course == 1
     curator_user.telegram_chat_id = "555"
     db.commit()
 
     await jobs.send_first_reminder(fake_bot, today=SATURDAY)
-    assert fake_bot.sent == []
+    assert any(m["chat_id"] == "555" for m in fake_bot.sent)
+
+
+async def test_other_courses_no_reminder_on_saturday(imported, db, fake_bot):
+    from app.models import AssignmentRole, CuratorAssignment, StudyGroup
+
+    group = db.query(StudyGroup).filter(StudyGroup.course != 1, StudyGroup.is_active.is_(True)).first()
+    assignment = (
+        db.query(CuratorAssignment)
+        .filter(CuratorAssignment.study_group_id == group.id, CuratorAssignment.role_type == AssignmentRole.CURATOR)
+        .first()
+    )
+    assignment.user.telegram_chat_id = "556"
+    db.commit()
+
+    await jobs.send_first_reminder(fake_bot, today=SATURDAY)
+    assert not any(m["chat_id"] == "556" for m in fake_bot.sent)
 
 
 async def test_deputy_receives_reminder_instead_of_curator(imported, db, curator_group, curator_user, fake_bot):
