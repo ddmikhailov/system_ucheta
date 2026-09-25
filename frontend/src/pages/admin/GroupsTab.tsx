@@ -220,6 +220,22 @@ function GroupDetailModal({
     }
   }
 
+  // Раньше заместителя не было видно в админке вообще — значит его нельзя
+  // было ни увидеть, ни снять, и он "навсегда" оставался ответственным за
+  // группу в глазах интерфейса, даже если реально уже не замещал (см.
+  // TODO.md 3).
+  async function endDeputyAssignment() {
+    if (group.deputy_assignment_id === null) return;
+    if (!window.confirm(`Снять ${group.deputy_name} с замещения в группе «${group.code}»?`)) return;
+    setLocalError(null);
+    try {
+      await api.post(`/admin/curator-assignments/${group.deputy_assignment_id}/end`);
+      onChanged();
+    } catch (err) {
+      setLocalError(err instanceof ApiError ? err.message : "Не удалось снять заместителя");
+    }
+  }
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" role="dialog" aria-modal="true" aria-label={group.code} onClick={(e) => e.stopPropagation()}>
@@ -253,6 +269,18 @@ function GroupDetailModal({
           {group.curator_assignment_id !== null && (
             <button className="link-btn" onClick={endCuratorAssignment}>
               Снять куратора
+            </button>
+          )}
+        </div>
+
+        <p className="hint">Заместитель: {group.deputy_name ?? "нет заместителя"}</p>
+        <div className="admin-row-actions">
+          <button className="link-btn" onClick={() => setAssigning(true)}>
+            {group.deputy_name ? "Сменить заместителя" : "Назначить заместителя"}
+          </button>
+          {group.deputy_assignment_id !== null && (
+            <button className="link-btn" onClick={endDeputyAssignment}>
+              Снять заместителя
             </button>
           )}
         </div>

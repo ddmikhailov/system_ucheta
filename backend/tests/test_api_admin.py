@@ -1,3 +1,6 @@
+import datetime
+
+
 def test_create_department(client, admin_headers):
     r = client.post("/admin/departments", headers=admin_headers, json={"name": "Экономика"})
     assert r.status_code == 201
@@ -93,6 +96,16 @@ def test_mark_codes_flags_affect_stats(client, admin_headers, edu_department_hea
     assert after.absent_total == 0
     assert after.percent == 100.0
 
+    from app.models import AuditLog
+
+    entry = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "mark_code.flag_change", AuditLog.entity_id == str(mark_code.id))
+        .one()
+    )
+    assert "counts_as_present" in entry.old_value
+    assert "counts_as_present" in entry.new_value
+
 
 def test_users_show_pending_password_state(client, admin_headers, imported, db):
     from app.models import Role, User
@@ -158,3 +171,41 @@ def test_leadership_digest_flag_forbidden_for_edu_department(client, edu_departm
         json={"receives_leadership_digest": True},
     )
     assert r.status_code == 403
+
+
+def test_group_list_shows_and_can_remove_deputy(client, admin_headers, imported, db):
+    """Раньше заместителя не было видно в /admin/groups и снять его было
+    нечем на фронте (см. TODO.md 3)."""
+    from app.models import Role, StudyGroup, User
+
+    curator_role = db.query(Role).filter(Role.code == "curator").one()
+    curators = db.query(User).filter(User.role_id == curator_role.id).limit(2).all()
+    group = db.query(StudyGroup).filter(StudyGroup.course == 1).first()
+
+    r = client.post(
+        "/admin/curator-assignments", headers=admin_headers,
+        json={
+            "study_group_id": group.id, "user_id": curators[1].id, "role_type": "deputy",
+            "start_date": "2026-09-01",
+        },
+    )
+    assert r.status_code == 201, r.text
+
+    r = client.get("/admin/groups", headers=admin_headers)
+    row = next(g for g in r.json() if g["id"] == group.id)
+    assert row["deputy_name"] == curators[1].full_name
+    assert row["deputy_assignment_id"] is not None
+    deputy_assignment_id = row["deputy_assignment_id"]
+
+    r = client.post(f"/admin/curator-assignments/{deputy_assignment_id}/end", headers=admin_headers)
+    assert r.status_code == 200
+
+    # end_date выставляется на сегодня включительно (см. is_active_on) — тот,
+    # кого сняли сегодня, ещё числился ответственным сегодня же, поэтому
+    # проверяем сам факт простановки даты окончания, а не мгновенное
+    # исчезновение из /admin/groups в тот же день.
+    from app.models import CuratorAssignment
+
+    assignment = db.get(CuratorAssignment, deputy_assignment_id)
+    assert assignment.end_date is not None
+    assert assignment.end_date <= datetime.date.today()

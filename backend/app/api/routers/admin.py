@@ -111,11 +111,23 @@ def _group_read(g: StudyGroup, today: datetime.date | None = None) -> StudyGroup
         ),
         None,
     )
+    # Раньше замещающего вообще не было видно в админке (см. TODO.md 3) —
+    # значит его нельзя было ни увидеть, ни снять, и он "навсегда" оставался
+    # ответственным за группу в глазах интерфейса.
+    deputy_assignment = next(
+        (
+            a for a in g.curator_assignments
+            if a.is_active_on(today) and a.role_type.value == "deputy" and a.user.is_active
+        ),
+        None,
+    )
     return StudyGroupRead(
         id=g.id, code=g.code, course=g.course, department_id=g.department_id,
         study_form=g.study_form, is_active=g.is_active,
         curator_name=curator_assignment.user.full_name if curator_assignment else None,
         curator_assignment_id=curator_assignment.id if curator_assignment else None,
+        deputy_name=deputy_assignment.user.full_name if deputy_assignment else None,
+        deputy_assignment_id=deputy_assignment.id if deputy_assignment else None,
     )
 
 
@@ -363,15 +375,24 @@ def list_mark_codes(db: Session = Depends(get_db)):
     return db.query(MarkCode).order_by(MarkCode.sort_order).all()
 
 
-@router.patch(
-    "/mark-codes/{mark_code_id}", response_model=MarkCodeRead,
-    dependencies=[Depends(require_reference_editor)],
-)
-def update_mark_code(mark_code_id: int, payload: MarkCodeUpdate, db: Session = Depends(get_db)):
+@router.patch("/mark-codes/{mark_code_id}", response_model=MarkCodeRead)
+def update_mark_code(
+    mark_code_id: int, payload: MarkCodeUpdate,
+    user: User = Depends(require_reference_editor), db: Session = Depends(get_db),
+):
     mark_code = db.get(MarkCode, mark_code_id)
     if mark_code is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Код не найден")
+    # Флаги кода (counts_as_present/is_excused/...) задним числом меняют
+    # смысл уже стоящих отметок во всей истории — раньше это не попадало в
+    # audit_log, хотя остальные структурные правки логируются (см. TODO.md 2).
     for field, value in payload.model_dump(exclude_unset=True).items():
+        old_value = getattr(mark_code, field)
+        if old_value != value:
+            log_action(
+                db, user, "mark_code.flag_change", "mark_code", str(mark_code.id),
+                old_value=f"{field}={old_value}", new_value=f"{field}={value}",
+            )
         setattr(mark_code, field, value)
     db.commit()
     db.refresh(mark_code)

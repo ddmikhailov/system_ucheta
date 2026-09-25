@@ -30,6 +30,8 @@ class StudyGroupRead(BaseModel):
     is_active: bool
     curator_name: str | None = None
     curator_assignment_id: int | None = None
+    deputy_name: str | None = None
+    deputy_assignment_id: int | None = None
 
 
 class StudyGroupCreate(BaseModel):

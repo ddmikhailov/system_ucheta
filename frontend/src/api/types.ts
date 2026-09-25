@@ -140,6 +140,8 @@ export interface StudyGroupAdmin {
   is_active: boolean;
   curator_name: string | null;
   curator_assignment_id: number | null;
+  deputy_name: string | null;
+  deputy_assignment_id: number | null;
 }
 
 export interface DeleteResult {
