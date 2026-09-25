@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import DepartmentsTab from "./admin/DepartmentsTab";
 import GroupsTab from "./admin/GroupsTab";
@@ -10,10 +11,30 @@ import GroupJournalTab from "./admin/GroupJournalTab";
 
 type Tab = "departments" | "groups" | "students" | "mark-codes" | "users" | "calendar" | "journal";
 
+const VALID_TABS: Tab[] = ["departments", "groups", "students", "mark-codes", "users", "calendar", "journal"];
+
 export default function AdminPage() {
   const { user } = useAuth();
   const isDeptHead = user?.role === "dept_head";
-  const [tab, setTab] = useState<Tab>(isDeptHead ? "journal" : "groups");
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Вкладка теперь живёт в URL (?tab=...) — раньше сбрасывалась при
+  // обновлении страницы, и на неё нельзя было дать прямую ссылку (см.
+  // TODO.md 4; заодно на это опирается переход по клику на уведомление).
+  const tabFromUrl = searchParams.get("tab") as Tab | null;
+  const [tab, setTabState] = useState<Tab>(
+    tabFromUrl && VALID_TABS.includes(tabFromUrl) ? tabFromUrl : isDeptHead ? "journal" : "groups"
+  );
+
+  function setTab(next: Tab) {
+    setTabState(next);
+    const params = new URLSearchParams(searchParams);
+    params.set("tab", next);
+    if (next !== "journal") {
+      params.delete("group");
+      params.delete("date");
+    }
+    setSearchParams(params, { replace: true });
+  }
 
   // Тьютор — второй полноценный администратор по всему колледжу (обновление
   // 1.2): везде, где раньше был только admin, теперь и он.

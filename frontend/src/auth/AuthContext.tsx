@@ -39,6 +39,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    // Токен истёк/отозван (401 на любой запрос, не только на /auth/me) —
+    // без этого пользователь оставался "залогиненным" в интерфейсе и видел
+    // только ошибки, пока не перезагружал страницу вручную (см. TODO.md 4).
+    const onUnauthorized = () => setUser(null);
+    window.addEventListener("auth:unauthorized", onUnauthorized);
+    return () => window.removeEventListener("auth:unauthorized", onUnauthorized);
+  }, []);
+
   const login = useCallback(async (username: string, password: string) => {
     const res = await api.post<{ access_token: string }>("/auth/login", { username, password });
     setToken(res.access_token);

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { api, ApiError } from "../../api/client";
 import AssignCuratorModal from "../../components/AssignCuratorModal";
+import { useEscapeKey } from "../../hooks/useEscapeKey";
 import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { DeleteResult, DepartmentAdmin, StudyGroupAdmin, UserAdmin } from "../../api/types";
 
@@ -13,17 +14,16 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
   const [notice, setNotice] = useState<string | null>(null);
   useScrollToTopOnChange(error, notice);
   const [busy, setBusy] = useState(false);
-  const [assigning, setAssigning] = useState<number | null>(null);
 
   const [code, setCode] = useState("");
   const [course, setCourse] = useState(1);
   const [departmentId, setDepartmentId] = useState<number | null>(null);
   const [studyForm, setStudyForm] = useState("");
 
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editCode, setEditCode] = useState("");
-  const [editCourse, setEditCourse] = useState(1);
-  const [editStudyForm, setEditStudyForm] = useState("");
+  // Раньше на каждую строку было 4-5 кнопок сразу (см. TODO.md 4) — теперь
+  // всё управление группой (редактирование, куратор, архив, удаление) в
+  // одном модальном окне, как в UsersTab.
+  const [detailId, setDetailId] = useState<number | null>(null);
 
   // Архивные группы не мешаются в основном списке — их можно найти отдельно.
   const [showArchived, setShowArchived] = useState(false);
@@ -59,63 +59,9 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
     }
   }
 
-  function startEdit(g: StudyGroupAdmin) {
-    setEditingId(g.id);
-    setEditCode(g.code);
-    setEditCourse(g.course);
-    setEditStudyForm(g.study_form ?? "");
-  }
-
-  async function saveEdit(groupId: number) {
-    setError(null);
-    try {
-      await api.patch(`/admin/groups/${groupId}`, {
-        code: editCode, course: editCourse, study_form: editStudyForm || null,
-      });
-      setEditingId(null);
-      load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось сохранить");
-    }
-  }
-
-  async function toggleActive(g: StudyGroupAdmin) {
-    setError(null);
-    try {
-      await api.patch(`/admin/groups/${g.id}`, { is_active: !g.is_active });
-      load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось сохранить");
-    }
-  }
-
-  async function removeGroup(g: StudyGroupAdmin) {
-    if (!window.confirm(`Удалить группу «${g.code}» насовсем? Это необратимо.`)) return;
-    setError(null);
-    setNotice(null);
-    try {
-      const res = await api.delete<DeleteResult>(`/admin/groups/${g.id}`);
-      setNotice(res.detail);
-      load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось удалить");
-    }
-  }
-
-  async function endCuratorAssignment(g: StudyGroupAdmin) {
-    if (g.curator_assignment_id === null) return;
-    if (!window.confirm(`Снять ${g.curator_name} с группы «${g.code}»? История назначения сохранится.`)) return;
-    setError(null);
-    try {
-      await api.post(`/admin/curator-assignments/${g.curator_assignment_id}/end`);
-      load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось снять куратора");
-    }
-  }
-
   const visibleRows = showArchived ? rows : rows.filter((g) => g.is_active);
   const archivedCount = rows.length - rows.filter((g) => g.is_active).length;
+  const detailGroup = rows.find((g) => g.id === detailId) ?? null;
 
   return (
     <div>
@@ -133,75 +79,24 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
             <th>Форма обучения</th>
             <th>Куратор</th>
             <th>Активна</th>
-            {canEdit && <th>Управление</th>}
           </tr>
         </thead>
         <tbody>
           {visibleRows.map((g) => (
             <tr key={g.id} className={!g.curator_name ? "not-submitted-row" : ""}>
-              {editingId === g.id ? (
-                <>
-                  <td>
-                    <input value={editCode} onChange={(e) => setEditCode(e.target.value)} style={{ width: 90 }} />
-                  </td>
-                  <td>
-                    <input
-                      type="number" min={1} max={4} value={editCourse}
-                      onChange={(e) => setEditCourse(Number(e.target.value))}
-                      style={{ width: 50 }}
-                    />
-                  </td>
-                  <td>
-                    <input value={editStudyForm} onChange={(e) => setEditStudyForm(e.target.value)} />
-                  </td>
-                </>
-              ) : (
-                <>
-                  <td>{g.code}</td>
-                  <td>{g.course}</td>
-                  <td>{g.study_form ?? "—"}</td>
-                </>
-              )}
               <td>
-                {g.curator_name ?? "нет куратора"}
-                {canEdit && g.curator_assignment_id !== null && (
-                  <button className="link-btn" onClick={() => endCuratorAssignment(g)}>
-                    Снять
+                {canEdit ? (
+                  <button className="link-btn" onClick={() => setDetailId(g.id)}>
+                    {g.code}
                   </button>
+                ) : (
+                  g.code
                 )}
               </td>
+              <td>{g.course}</td>
+              <td>{g.study_form ?? "—"}</td>
+              <td>{g.curator_name ?? "нет куратора"}</td>
               <td>{g.is_active ? "да" : "нет"}</td>
-              {canEdit && (
-                <td className="admin-row-actions">
-                  {editingId === g.id ? (
-                    <>
-                      <button className="link-btn" onClick={() => saveEdit(g.id)}>
-                        Сохранить
-                      </button>
-                      <button className="link-btn" onClick={() => setEditingId(null)}>
-                        Отмена
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button className="link-btn" onClick={() => startEdit(g)}>
-                        Изменить
-                      </button>
-                      <button className="link-btn" onClick={() => setAssigning(g.id)}>
-                        Назначить куратора
-                      </button>
-                      <button className="link-btn" onClick={() => toggleActive(g)}>
-                        {g.is_active ? "В архив" : "Вернуть из архива"}
-                      </button>
-                      {!g.is_active && (
-                        <button className="link-btn" onClick={() => removeGroup(g)}>
-                          Удалить насовсем
-                        </button>
-                      )}
-                    </>
-                  )}
-                </td>
-              )}
             </tr>
           ))}
         </tbody>
@@ -232,15 +127,14 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
         </form>
       )}
 
-      {assigning !== null && (
-        <AssignCuratorModal
-          groupId={assigning}
+      {detailGroup && (
+        <GroupDetailModal
+          group={detailGroup}
           curators={curators}
-          onClose={() => setAssigning(null)}
-          onSaved={() => {
-            setAssigning(null);
-            load();
-          }}
+          onClose={() => setDetailId(null)}
+          onChanged={load}
+          setNotice={setNotice}
+          setError={setError}
         />
       )}
 
@@ -251,6 +145,144 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
           </button>
         </p>
       )}
+    </div>
+  );
+}
+
+function GroupDetailModal({
+  group,
+  curators,
+  onClose,
+  onChanged,
+  setNotice,
+  setError,
+}: {
+  group: StudyGroupAdmin;
+  curators: UserAdmin[];
+  onClose: () => void;
+  onChanged: () => void;
+  setNotice: (n: string | null) => void;
+  setError: (e: string | null) => void;
+}) {
+  const [editCode, setEditCode] = useState(group.code);
+  const [editCourse, setEditCourse] = useState(group.course);
+  const [editStudyForm, setEditStudyForm] = useState(group.study_form ?? "");
+  const [assigning, setAssigning] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+  useEscapeKey(onClose);
+
+  async function saveEdit() {
+    setLocalError(null);
+    try {
+      await api.patch(`/admin/groups/${group.id}`, {
+        code: editCode, course: editCourse, study_form: editStudyForm || null,
+      });
+      onChanged();
+    } catch (err) {
+      setLocalError(err instanceof ApiError ? err.message : "Не удалось сохранить");
+    }
+  }
+
+  async function toggleActive() {
+    setLocalError(null);
+    try {
+      await api.patch(`/admin/groups/${group.id}`, { is_active: !group.is_active });
+      onChanged();
+      onClose();
+    } catch (err) {
+      setLocalError(err instanceof ApiError ? err.message : "Не удалось сохранить");
+    }
+  }
+
+  async function removeGroup() {
+    if (!window.confirm(`Удалить группу «${group.code}» насовсем? Это необратимо.`)) return;
+    setLocalError(null);
+    setNotice(null);
+    try {
+      const res = await api.delete<DeleteResult>(`/admin/groups/${group.id}`);
+      setNotice(res.detail);
+      onChanged();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не удалось удалить");
+    }
+  }
+
+  async function endCuratorAssignment() {
+    if (group.curator_assignment_id === null) return;
+    if (!window.confirm(`Снять ${group.curator_name} с группы «${group.code}»? История назначения сохранится.`)) return;
+    setLocalError(null);
+    try {
+      await api.post(`/admin/curator-assignments/${group.curator_assignment_id}/end`);
+      onChanged();
+    } catch (err) {
+      setLocalError(err instanceof ApiError ? err.message : "Не удалось снять куратора");
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" role="dialog" aria-modal="true" aria-label={group.code} onClick={(e) => e.stopPropagation()}>
+        <h3>Группа {group.code}</h3>
+
+        {localError && <div className="error-text">{localError}</div>}
+
+        <label>
+          Код
+          <input value={editCode} onChange={(e) => setEditCode(e.target.value)} />
+        </label>
+        <label>
+          Курс
+          <input type="number" min={1} max={4} value={editCourse} onChange={(e) => setEditCourse(Number(e.target.value))} />
+        </label>
+        <label>
+          Форма обучения
+          <input value={editStudyForm} onChange={(e) => setEditStudyForm(e.target.value)} placeholder="необязательно" />
+        </label>
+        <div className="actions">
+          <button onClick={saveEdit}>Сохранить</button>
+        </div>
+
+        <hr />
+
+        <p className="hint">Куратор: {group.curator_name ?? "нет куратора"}</p>
+        <div className="admin-row-actions">
+          <button className="link-btn" onClick={() => setAssigning(true)}>
+            {group.curator_name ? "Сменить куратора" : "Назначить куратора"}
+          </button>
+          {group.curator_assignment_id !== null && (
+            <button className="link-btn" onClick={endCuratorAssignment}>
+              Снять куратора
+            </button>
+          )}
+        </div>
+
+        <hr />
+
+        <div className="actions">
+          <button onClick={onClose}>Закрыть</button>
+          <button className="link-btn" onClick={toggleActive}>
+            {group.is_active ? "В архив" : "Вернуть из архива"}
+          </button>
+          {!group.is_active && (
+            <button className="link-btn" onClick={removeGroup}>
+              Удалить насовсем
+            </button>
+          )}
+        </div>
+
+        {assigning && (
+          <AssignCuratorModal
+            groupId={group.id}
+            curators={curators}
+            onClose={() => setAssigning(false)}
+            onSaved={() => {
+              setAssigning(false);
+              onChanged();
+            }}
+          />
+        )}
+      </div>
     </div>
   );
 }

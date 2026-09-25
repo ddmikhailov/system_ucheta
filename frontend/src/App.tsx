@@ -44,6 +44,16 @@ function HomeRedirect() {
   return <Navigate to="/cabinet" replace />;
 }
 
+function NotFoundPage() {
+  return (
+    <div className="not-found-page">
+      <h1>404</h1>
+      <p>Такой страницы нет.</p>
+      <a href="/">На главную</a>
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -91,6 +101,7 @@ export default function App() {
             }
           />
           <Route path="/" element={<HomeRedirect />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Router>
     </AuthProvider>

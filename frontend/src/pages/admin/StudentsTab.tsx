@@ -37,6 +37,10 @@ export default function StudentsTab({ canEdit, canCreate }: { canEdit: boolean; 
   // Отчисленные/в академе не мешаются в основном списке группы.
   const [showArchived, setShowArchived] = useState(false);
 
+  // Поиск по ФИО ищет сразу по всем группам (см. TODO.md 4) — раньше нужно
+  // было вручную перебирать группы, чтобы найти студента.
+  const [searchQuery, setSearchQuery] = useState("");
+
   useEffect(() => {
     api.get<StudyGroupAdmin[]>("/admin/groups").then((allGroups) => {
       const gs = allGroups.filter((g) => g.is_active);
@@ -46,14 +50,16 @@ export default function StudentsTab({ canEdit, canCreate }: { canEdit: boolean; 
   }, []);
 
   function loadStudents() {
-    if (groupId === null) return;
+    const isSearching = searchQuery.trim().length > 0;
+    if (!isSearching && groupId === null) return;
+    const url = isSearching ? "/admin/students" : `/admin/students?study_group_id=${groupId}`;
     api
-      .get<StudentAdmin[]>(`/admin/students?study_group_id=${groupId}`)
+      .get<StudentAdmin[]>(url)
       .then(setStudents)
       .catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка"));
   }
 
-  useEffect(loadStudents, [groupId]);
+  useEffect(loadStudents, [groupId, searchQuery]);
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
@@ -79,10 +85,27 @@ export default function StudentsTab({ canEdit, canCreate }: { canEdit: boolean; 
     }
   }
 
-  async function changeStatus(student: StudentAdmin, status: string) {
-    const left_at = status !== "studying" ? todayIso() : null;
+  // Смена статуса раньше применялась сразу по выбору в select с датой "сегодня"
+  // без возможности её поменять и без подтверждения (см. TODO.md 4) — теперь
+  // выбор статуса только открывает форму с датой и явным подтверждением.
+  const [pendingStatusStudentId, setPendingStatusStudentId] = useState<number | null>(null);
+  const [pendingStatus, setPendingStatus] = useState("studying");
+  const [pendingLeftAt, setPendingLeftAt] = useState(todayIso());
+
+  function startStatusChange(student: StudentAdmin, status: string) {
+    if (status === student.status) return;
+    setPendingStatusStudentId(student.id);
+    setPendingStatus(status);
+    setPendingLeftAt(todayIso());
+  }
+
+  async function confirmStatusChange(student: StudentAdmin) {
+    const left_at = pendingStatus !== "studying" ? pendingLeftAt : null;
+    if (!window.confirm(`Сменить статус «${student.full_name}» на «${STATUS_LABELS[pendingStatus] ?? pendingStatus}»?`)) return;
+    setError(null);
     try {
-      await api.patch(`/admin/students/${student.id}/status`, { status, left_at });
+      await api.patch(`/admin/students/${student.id}/status`, { status: pendingStatus, left_at });
+      setPendingStatusStudentId(null);
       loadStudents();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Не удалось изменить статус");
@@ -132,8 +155,12 @@ export default function StudentsTab({ canEdit, canCreate }: { canEdit: boolean; 
     }
   }
 
-  const visibleStudents = showArchived ? students : students.filter((s) => s.status === "studying");
-  const archivedCount = students.length - students.filter((s) => s.status === "studying").length;
+  const isSearching = searchQuery.trim().length > 0;
+  const searchedStudents = isSearching
+    ? students.filter((s) => s.full_name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+    : students;
+  const visibleStudents = showArchived ? searchedStudents : searchedStudents.filter((s) => s.status === "studying");
+  const archivedCount = searchedStudents.length - searchedStudents.filter((s) => s.status === "studying").length;
 
   return (
     <div>
@@ -144,13 +171,18 @@ export default function StudentsTab({ canEdit, canCreate }: { canEdit: boolean; 
         </div>
       )}
       <div className="toolbar">
-        <select value={groupId ?? ""} onChange={(e) => setGroupId(Number(e.target.value))}>
+        <select value={groupId ?? ""} onChange={(e) => setGroupId(Number(e.target.value))} disabled={isSearching}>
           {groups.map((g) => (
             <option key={g.id} value={g.id}>
               {g.code} (курс {g.course})
             </option>
           ))}
         </select>
+        <input
+          placeholder="Поиск по ФИО — по всем группам"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
       </div>
 
       <table className="dash-table">
@@ -192,13 +224,28 @@ export default function StudentsTab({ canEdit, canCreate }: { canEdit: boolean; 
               )}
               <td>
                 {canEdit ? (
-                  <select value={s.status} onChange={(e) => changeStatus(s, e.target.value)}>
-                    {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
+                  pendingStatusStudentId === s.id ? (
+                    <div className="inline-form" style={{ marginTop: 0 }}>
+                      <span>{STATUS_LABELS[pendingStatus] ?? pendingStatus}</span>
+                      {pendingStatus !== "studying" && (
+                        <input type="date" value={pendingLeftAt} onChange={(e) => setPendingLeftAt(e.target.value)} />
+                      )}
+                      <button className="link-btn" onClick={() => confirmStatusChange(s)}>
+                        Подтвердить
+                      </button>
+                      <button className="link-btn" onClick={() => setPendingStatusStudentId(null)}>
+                        Отмена
+                      </button>
+                    </div>
+                  ) : (
+                    <select value={s.status} onChange={(e) => startStatusChange(s, e.target.value)}>
+                      {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  )
                 ) : (
                   STATUS_LABELS[s.status] ?? s.status
                 )}

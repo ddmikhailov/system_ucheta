@@ -3,12 +3,22 @@ import { useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import MarkCodeButtons from "../components/MarkCodeButtons";
 import MarkCommentModal from "../components/MarkCommentModal";
+import { useEscapeKey } from "../hooks/useEscapeKey";
 import { scrollToTop } from "../utils/scroll";
 import type { GroupSummary, MarkCodeOption, MonthDayStatus, RosterResponse } from "../api/types";
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
+
+// Раньше подсказка точки в полоске месяца была просто ISO-датой (см. TODO.md 4).
+const MONTH_DOT_TITLES: Record<string, string> = {
+  study_day: "учебный день",
+  weekend: "выходной",
+  holiday: "праздник",
+  vacation: "каникулы",
+  remote: "ЭФО",
+};
 
 interface PendingMark {
   mark_code: string;
@@ -32,14 +42,32 @@ export default function CuratorCabinetPage() {
   const [error, setError] = useState<string | null>(null);
   const [showPeriodForm, setShowPeriodForm] = useState<number | null>(null);
   const [showCommentFor, setShowCommentFor] = useState<number | null>(null);
+  const [groupsLoaded, setGroupsLoaded] = useState(false);
+  const [groupsError, setGroupsError] = useState<string | null>(null);
+  const [riskThreshold, setRiskThreshold] = useState(3);
+
+  function loadGroups() {
+    api
+      .get<GroupSummary[]>("/curator/groups")
+      .then((gs) => {
+        setGroups(gs);
+        setGroupsLoaded(true);
+        // Ссылка "Открыть" из Telegram уже задаёт группу — не перезатираем её.
+        if (gs.length > 0 && groupId === null) setGroupId(gs[0].id);
+      })
+      .catch((err) => {
+        setGroupsError(err instanceof ApiError ? err.message : "Не удалось загрузить список групп");
+        setGroupsLoaded(true);
+      });
+  }
 
   useEffect(() => {
-    api.get<GroupSummary[]>("/curator/groups").then((gs) => {
-      setGroups(gs);
-      // Ссылка "Открыть" из Telegram уже задаёт группу — не перезатираем её.
-      if (gs.length > 0 && groupId === null) setGroupId(gs[0].id);
-    });
+    loadGroups();
     api.get<MarkCodeOption[]>("/curator/mark-codes").then(setMarkCodes);
+    api
+      .get<{ risk_threshold_consecutive_unexcused: number }>("/curator/settings")
+      .then((s) => setRiskThreshold(s.risk_threshold_consecutive_unexcused))
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -69,7 +97,7 @@ export default function CuratorCabinetPage() {
     loadRoster();
   }, [loadRoster]);
 
-  useEffect(() => {
+  const loadMonthStatus = useCallback(() => {
     if (!groupId) return;
     const [year, month] = date.split("-").map(Number);
     api
@@ -78,7 +106,14 @@ export default function CuratorCabinetPage() {
       .catch(() => setMonthStatus([]));
   }, [groupId, date]);
 
+  useEffect(() => {
+    loadMonthStatus();
+  }, [loadMonthStatus]);
+
   const markCodeByCode = useMemo(() => new Map(markCodes.map((m) => [m.code, m])), [markCodes]);
+  const selectedDayType = monthStatus.find((d) => d.date === date)?.day_type;
+  const isNonWorkingDay = selectedDayType != null && ["weekend", "holiday", "vacation"].includes(selectedDayType);
+  const absentCount = Object.values(pending).length;
 
   function setStudentMark(studentId: number, code: string | null) {
     setPending((prev) => {
@@ -121,6 +156,10 @@ export default function CuratorCabinetPage() {
           };
       const updated = await api.post<RosterResponse>(path, body);
       setRoster(updated);
+      // Иначе полоска месяца и пометка "не сдано сегодня" в списке групп
+      // остаются устаревшими до следующей смены даты/группы (см. TODO.md 4).
+      loadMonthStatus();
+      loadGroups();
       scrollToTop();
     } catch (err) {
       // Сервер отказывает с 409, если "Все присутствуют" стёрло бы уже
@@ -141,6 +180,12 @@ export default function CuratorCabinetPage() {
     }
   }
 
+  if (!groupsLoaded) {
+    return <p className="hint">Загрузка…</p>;
+  }
+  if (groupsError) {
+    return <div className="error-text">{groupsError}</div>;
+  }
   if (groups.length === 0) {
     return <p>У вас нет закреплённых групп.</p>;
   }
@@ -149,21 +194,38 @@ export default function CuratorCabinetPage() {
     <div>
       <div className="roster-sticky-header">
         <div className="toolbar">
-          <select value={groupId ?? ""} onChange={(e) => setGroupId(Number(e.target.value))}>
+          <select
+            value={groupId ?? ""}
+            onChange={(e) => {
+              if (absentCount > 0 && !window.confirm("Несохранённые изменения будут потеряны. Сменить группу?")) return;
+              setGroupId(Number(e.target.value));
+            }}
+          >
             {groups.map((g) => (
               <option key={g.id} value={g.id}>
                 {g.code} (курс {g.course}){g.is_submitted_today ? "" : " — не сдано сегодня"}
               </option>
             ))}
           </select>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} max={todayIso()} />
+          <input
+            type="date"
+            value={date}
+            max={todayIso()}
+            onChange={(e) => {
+              if (absentCount > 0 && !window.confirm("Несохранённые изменения будут потеряны. Сменить дату?")) return;
+              setDate(e.target.value);
+            }}
+          />
         </div>
 
         <div className="month-strip">
           {monthStatus.map((d) => (
             <span
               key={d.date}
-              title={d.date}
+              title={`${d.date} — ${MONTH_DOT_TITLES[d.day_type] ?? d.day_type}`}
+              tabIndex={0}
+              role="button"
+              aria-label={`${d.date}, ${MONTH_DOT_TITLES[d.day_type] ?? d.day_type}`}
               className={`month-dot ${
                 ["weekend", "holiday", "vacation"].includes(d.day_type)
                   ? "weekend"
@@ -172,20 +234,39 @@ export default function CuratorCabinetPage() {
                     : "missing"
               } ${d.day_type === "remote" ? "remote-day" : ""} ${d.date === date ? "selected" : ""}`}
               onClick={() => setDate(d.date)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") setDate(d.date);
+              }}
             />
           ))}
         </div>
+        <p className="hint month-strip-legend">
+          <span className="legend-dot ok" /> вовремя <span className="legend-dot late" /> задним числом{" "}
+          <span className="legend-dot missing" /> не сдано <span className="legend-dot weekend" /> нерабочий
+        </p>
       </div>
 
       {error && <div className="error-text">{error}</div>}
 
-      {roster && (
+      {roster && isNonWorkingDay && (
+        <div className="day-status weekend">Нерабочий день — отмечать посещаемость не нужно</div>
+      )}
+
+      {roster && !isNonWorkingDay && (
         <>
           <div className={`day-status ${roster.is_submitted ? "submitted" : "not-submitted"}`}>
             {roster.is_submitted
               ? `День сдан${roster.is_on_time === false ? " (задним числом)" : ""}`
-              : "День не активирован — куратор ещё не сдал"}
+              : "День ещё не сдан — можно заполнить"}
           </div>
+
+          <p className="hint mark-code-legend">
+            {markCodes.map((m) => (
+              <span key={m.code}>
+                <b>{m.code.toUpperCase()}</b> — {m.name}
+              </span>
+            ))}
+          </p>
 
           <table className="roster-table">
             <thead>
@@ -200,7 +281,7 @@ export default function CuratorCabinetPage() {
               {roster.entries.map((entry) => {
                 const current = pending[entry.student_id];
                 const code = current?.mark_code ?? null;
-                const risky = entry.risk_streak >= 3;
+                const risky = entry.risk_streak >= riskThreshold;
                 const hasComment = Boolean(current?.comment || current?.basis_reference);
                 return (
                   <tr key={entry.student_id} className={risky ? "risk-row" : ""}>
@@ -242,7 +323,8 @@ export default function CuratorCabinetPage() {
             </tbody>
           </table>
 
-          <div className="actions">
+          <div className="actions actions-sticky-mobile">
+            <span className="absent-counter">Отсутствуют: {absentCount}</span>
             <button onClick={() => submitDay(true)} disabled={busy}>
               Все присутствуют
             </button>
@@ -306,6 +388,7 @@ function AbsencePeriodModal({
   const [basisReference, setBasisReference] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  useEscapeKey(onClose);
 
   async function save() {
     if (dateTo < dateFrom) {
@@ -332,7 +415,7 @@ function AbsencePeriodModal({
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal" role="dialog" aria-modal="true" aria-label="Длительное отсутствие" onClick={(e) => e.stopPropagation()}>
         <h3>Длительное отсутствие{studentName ? ` — ${studentName}` : ""}</h3>
         <label>
           Код

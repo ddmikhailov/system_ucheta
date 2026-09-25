@@ -29,6 +29,7 @@ from app.schemas.admin import (
     DeleteResult,
     DepartmentCreate,
     DepartmentRead,
+    DepartmentUpdate,
     GroupCalendarOverrideRead,
     GroupCalendarOverrideUpsert,
     MarkCodeRead,
@@ -67,6 +68,28 @@ def list_departments(db: Session = Depends(get_db)):
 def create_department(payload: DepartmentCreate, db: Session = Depends(get_db)):
     dept = Department(name=payload.name)
     db.add(dept)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "Отделение с таким названием уже существует")
+    db.refresh(dept)
+    return dept
+
+
+@router.patch(
+    "/departments/{department_id}",
+    response_model=DepartmentRead,
+    dependencies=[Depends(require_admin)],
+)
+def update_department(department_id: int, payload: DepartmentUpdate, db: Session = Depends(get_db)):
+    dept = db.get(Department, department_id)
+    if dept is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Отделение не найдено")
+    if payload.name is not None:
+        dept.name = payload.name
+    if payload.is_active is not None:
+        dept.is_active = payload.is_active
     try:
         db.commit()
     except IntegrityError:

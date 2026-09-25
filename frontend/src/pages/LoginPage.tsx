@@ -7,6 +7,7 @@ import { ApiError } from "../api/client";
 export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const { login } = useAuth();
@@ -43,12 +44,34 @@ export default function LoginPage() {
 
           <label>
             Логин
-            <input value={username} onChange={(e) => setUsername(e.target.value)} autoFocus required />
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="username"
+              autoFocus
+              required
+            />
           </label>
 
           <label>
             Пароль
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+            <div className="password-field">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                required
+              />
+              <button
+                type="button"
+                className="password-field__toggle"
+                onClick={() => setShowPassword((v) => !v)}
+                tabIndex={-1}
+              >
+                {showPassword ? "Скрыть" : "Показать"}
+              </button>
+            </div>
           </label>
 
           {error && <div className="error-text">{error}</div>}

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { api, ApiError } from "../../api/client";
 import { useAuth } from "../../auth/AuthContext";
+import { useEscapeKey } from "../../hooks/useEscapeKey";
 import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { DeleteResult, DepartmentAdmin, SetPasswordResult, UserAdmin } from "../../api/types";
 
@@ -35,6 +36,11 @@ function statusLabel(u: UserAdmin): string {
   return "активен";
 }
 
+// Отделение обязательно только для ролей, привязанных к конкретному отделению
+// (зеркалит _resolve_department_for_role в admin.py) — остальным полю в форме
+// создания делать нечего (см. TODO.md 4).
+const ROLES_NEEDING_DEPARTMENT = new Set(["dept_head", "curator", "deputy_curator"]);
+
 const PAGE_SIZE = 15;
 
 export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; canCreate: boolean }) {
@@ -56,6 +62,14 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
   // пользователи не мешаются в основном списке — их можно найти отдельно.
   const [showArchived, setShowArchived] = useState(false);
 
+  // Поиск/фильтр по роли и отделению — раньше список из полусотни
+  // пользователей приходилось листать вручную (см. TODO.md 4).
+  const [searchQuery, setSearchQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState<string | "all">("all");
+  const [departmentFilter, setDepartmentFilter] = useState<number | "all">("all");
+
+  const [justCreated, setJustCreated] = useState<SetPasswordResult | null>(null);
+
   function load() {
     api.get<UserAdmin[]>("/admin/users").then(setRows).catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка"));
     api.get<DepartmentAdmin[]>("/admin/departments").then((ds) => {
@@ -67,14 +81,26 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(load, []);
 
+  const roleNeedsDepartment = ROLES_NEEDING_DEPARTMENT.has(role);
+
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
+    setJustCreated(null);
     try {
-      await api.post("/admin/users", { full_name: fullName, username, role, department_id: departmentId });
+      const created = await api.post<UserAdmin>("/admin/users", {
+        full_name: fullName,
+        username,
+        role,
+        department_id: roleNeedsDepartment ? departmentId : null,
+      });
       setFullName("");
       setUsername("");
+      // Сразу выдаём пароль новому пользователю — раньше для этого приходилось
+      // отдельно открывать его профиль (см. TODO.md 4).
+      const passwordResult = await api.post<SetPasswordResult>(`/admin/users/${created.id}/set-password`, {});
+      setJustCreated(passwordResult);
       load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Не удалось создать пользователя");
@@ -83,8 +109,14 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
     }
   }
 
-  const visibleRows = showArchived ? rows : rows.filter((u) => u.is_active);
-  const archivedCount = rows.length - rows.filter((u) => u.is_active).length;
+  const searchedRows = rows.filter((u) => {
+    if (searchQuery.trim() && !u.full_name.toLowerCase().includes(searchQuery.trim().toLowerCase())) return false;
+    if (roleFilter !== "all" && u.role !== roleFilter) return false;
+    if (departmentFilter !== "all" && u.department_id !== departmentFilter) return false;
+    return true;
+  });
+  const visibleRows = showArchived ? searchedRows : searchedRows.filter((u) => u.is_active);
+  const archivedCount = searchedRows.length - searchedRows.filter((u) => u.is_active).length;
   const pageCount = Math.max(1, Math.ceil(visibleRows.length / PAGE_SIZE));
   const pageRows = visibleRows.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
   const profileUser = rows.find((u) => u.id === profileId) ?? null;
@@ -93,12 +125,51 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
     <div>
       {error && <div className="error-text">{error}</div>}
 
+      {justCreated && (
+        <div className="day-status submitted">
+          Пароль для <b>{justCreated.username}</b>: <code>{justCreated.password}</code>{" "}
+          <button
+            className="link-btn"
+            onClick={() => navigator.clipboard?.writeText(justCreated.password)}
+          >
+            Скопировать
+          </button>{" "}
+          <button className="link-btn" onClick={() => setJustCreated(null)}>
+            Скрыть
+          </button>
+        </div>
+      )}
+
+      <div className="toolbar">
+        <input placeholder="Поиск по ФИО" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+        <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+          <option value="all">Все роли</option>
+          {Object.entries(ROLE_LABELS).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <select
+          value={departmentFilter}
+          onChange={(e) => setDepartmentFilter(e.target.value === "all" ? "all" : Number(e.target.value))}
+        >
+          <option value="all">Все отделения</option>
+          {departments.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
       <table className="dash-table">
         <thead>
           <tr>
             <th>ФИО</th>
             <th>Логин</th>
             <th>Роль</th>
+            <th>Отделение</th>
             <th>Статус</th>
           </tr>
         </thead>
@@ -116,12 +187,13 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
               </td>
               <td>{u.username}</td>
               <td>{roleDisplay(u)}</td>
+              <td>{departments.find((d) => d.id === u.department_id)?.name ?? "—"}</td>
               <td>{statusLabel(u)}</td>
             </tr>
           ))}
           {pageRows.length === 0 && (
             <tr>
-              <td colSpan={4}>Пользователей нет.</td>
+              <td colSpan={5}>Пользователей нет.</td>
             </tr>
           )}
         </tbody>
@@ -152,13 +224,15 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
               </option>
             ))}
           </select>
-          <select value={departmentId ?? ""} onChange={(e) => setDepartmentId(Number(e.target.value))}>
-            {departments.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </select>
+          {roleNeedsDepartment && (
+            <select value={departmentId ?? ""} onChange={(e) => setDepartmentId(Number(e.target.value))}>
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          )}
           <button type="submit" disabled={busy}>
             Добавить пользователя
           </button>
@@ -169,6 +243,7 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
         <UserProfileModal
           user={profileUser}
           me={me}
+          departments={departments}
           onClose={() => setProfileId(null)}
           onChanged={load}
         />
@@ -194,11 +269,13 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
 function UserProfileModal({
   user,
   me,
+  departments,
   onClose,
   onChanged,
 }: {
   user: UserAdmin;
   me: { id: number; role: string } | null | undefined;
+  departments: DepartmentAdmin[];
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -208,6 +285,12 @@ function UserProfileModal({
   const [editUsername, setEditUsername] = useState(user.username);
   const [editFullName, setEditFullName] = useState(user.full_name);
   const [editRole, setEditRole] = useState(user.role);
+  const [editDepartmentId, setEditDepartmentId] = useState(user.department_id);
+
+  // Дайджест руководству могут переключать только admin/tutor (эндпоинт
+  // отдаёт 403 остальным) — раньше чекбокс показывался и зав. отделением,
+  // у которых сохранение падало с ошибкой (см. TODO.md 4).
+  const canToggleDigest = me?.role === "admin" || me?.role === "tutor";
 
   const [customPasswordOpen, setCustomPasswordOpen] = useState(false);
   const [customPasswordValue, setCustomPasswordValue] = useState("");
@@ -215,6 +298,7 @@ function UserProfileModal({
 
   const isSelf = user.id === me?.id;
   const roleOptions = Array.from(new Set([user.role, ...assignableRoles(me?.role)]));
+  useEscapeKey(onClose);
 
   async function saveProfile() {
     setError(null);
@@ -222,7 +306,7 @@ function UserProfileModal({
       await api.patch(`/admin/users/${user.id}`, {
         username: editUsername,
         full_name: editFullName,
-        ...(isSelf ? {} : { role: editRole }),
+        ...(isSelf ? {} : { role: editRole, department_id: editDepartmentId }),
       });
       setNotice("Сохранено");
       onChanged();
@@ -311,7 +395,7 @@ function UserProfileModal({
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal" role="dialog" aria-modal="true" aria-label={user.full_name} onClick={(e) => e.stopPropagation()}>
         <h3>{user.full_name}</h3>
 
         {error && <div className="error-text">{error}</div>}
@@ -349,6 +433,19 @@ function UserProfileModal({
             </select>
           )}
         </label>
+
+        {!isSelf && ROLES_NEEDING_DEPARTMENT.has(editRole) && me?.role !== "dept_head" && (
+          <label>
+            Отделение
+            <select value={editDepartmentId ?? ""} onChange={(e) => setEditDepartmentId(Number(e.target.value))}>
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <div className="actions">
           <button onClick={saveProfile}>Сохранить</button>
@@ -389,14 +486,18 @@ function UserProfileModal({
           </div>
         )}
 
-        <label style={{ marginTop: "10px" }}>
-          <input
-            type="checkbox"
-            checked={user.receives_leadership_digest}
-            onChange={toggleLeadershipDigest}
-          />{" "}
-          Получает пятничный дайджест руководству
-        </label>
+        {canToggleDigest && (
+          <label style={{ marginTop: "10px" }}>
+            <input
+              type="checkbox"
+              checked={user.receives_leadership_digest}
+              disabled={!user.telegram_linked}
+              onChange={toggleLeadershipDigest}
+            />{" "}
+            Получает пятничный дайджест руководству
+            {!user.telegram_linked && <span className="hint"> (нужно сначала привязать Telegram)</span>}
+          </label>
+        )}
 
         <hr />
 

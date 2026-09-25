@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import assert_can_access_group, get_current_user, get_curator_group_ids
+from app.core.config import get_settings
 from app.db.session import get_db
 from app.models import DaySubmission, DayType, MarkCode, Student, StudyGroup, User
 from app.schemas.curator import (
@@ -16,6 +17,15 @@ from app.schemas.curator import (
 from app.services import attendance_service, calendar_service
 
 router = APIRouter(prefix="/curator", tags=["curator"])
+settings = get_settings()
+
+
+@router.get("/settings")
+def curator_settings(user: User = Depends(get_current_user)):
+    # Порог "риска" был захардкожен во фронте (см. TODO.md 4) — теперь
+    # берётся из того же значения, что реально использует бэкенд при
+    # расчёте risk_students.
+    return {"risk_threshold_consecutive_unexcused": settings.risk_threshold_consecutive_unexcused}
 
 
 @router.get("/mark-codes")

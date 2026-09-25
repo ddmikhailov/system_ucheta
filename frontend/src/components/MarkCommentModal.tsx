@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useEscapeKey } from "../hooks/useEscapeKey";
 
 /** Комментарий/основание к отметке — вынесены в отдельный диалог вместо
  * инпутов прямо в строке таблицы, чтобы строка статуса оставалась в одну
@@ -20,6 +21,7 @@ export default function MarkCommentModal({
 }) {
   const [commentValue, setCommentValue] = useState(comment);
   const [basisValue, setBasisValue] = useState(basisReference);
+  useEscapeKey(onClose);
 
   function save() {
     onSave(commentValue, basisValue);
@@ -28,7 +30,7 @@ export default function MarkCommentModal({
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal" role="dialog" aria-modal="true" aria-label="Комментарий" onClick={(e) => e.stopPropagation()}>
         <h3>Комментарий</h3>
         <label>
           Комментарий

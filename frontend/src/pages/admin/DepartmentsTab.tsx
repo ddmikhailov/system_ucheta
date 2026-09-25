@@ -11,6 +11,9 @@ export default function DepartmentsTab({ canEdit }: { canEdit: boolean }) {
   useScrollToTopOnChange(error);
   const [busy, setBusy] = useState(false);
 
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
+
   function load() {
     api.get<DepartmentAdmin[]>("/admin/departments").then(setRows).catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка"));
   }
@@ -32,6 +35,33 @@ export default function DepartmentsTab({ canEdit }: { canEdit: boolean }) {
     }
   }
 
+  function startEdit(d: DepartmentAdmin) {
+    setEditingId(d.id);
+    setEditName(d.name);
+  }
+
+  async function saveEdit(id: number) {
+    setError(null);
+    try {
+      await api.patch(`/admin/departments/${id}`, { name: editName });
+      setEditingId(null);
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не удалось сохранить");
+    }
+  }
+
+  async function toggleActive(d: DepartmentAdmin) {
+    if (d.is_active && !window.confirm(`Архивировать отделение «${d.name}»? Группы и пользователи в нём не удаляются.`)) return;
+    setError(null);
+    try {
+      await api.patch(`/admin/departments/${d.id}`, { is_active: !d.is_active });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не удалось сохранить");
+    }
+  }
+
   return (
     <div>
       {error && <div className="error-text">{error}</div>}
@@ -40,13 +70,43 @@ export default function DepartmentsTab({ canEdit }: { canEdit: boolean }) {
           <tr>
             <th>Название</th>
             <th>Активно</th>
+            {canEdit && <th>Управление</th>}
           </tr>
         </thead>
         <tbody>
           {rows.map((d) => (
             <tr key={d.id}>
-              <td>{d.name}</td>
+              <td>
+                {editingId === d.id ? (
+                  <input value={editName} onChange={(e) => setEditName(e.target.value)} />
+                ) : (
+                  d.name
+                )}
+              </td>
               <td>{d.is_active ? "да" : "нет"}</td>
+              {canEdit && (
+                <td className="admin-row-actions">
+                  {editingId === d.id ? (
+                    <>
+                      <button className="link-btn" onClick={() => saveEdit(d.id)}>
+                        Сохранить
+                      </button>
+                      <button className="link-btn" onClick={() => setEditingId(null)}>
+                        Отмена
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button className="link-btn" onClick={() => startEdit(d)}>
+                        Переименовать
+                      </button>
+                      <button className="link-btn" onClick={() => toggleActive(d)}>
+                        {d.is_active ? "В архив" : "Вернуть из архива"}
+                      </button>
+                    </>
+                  )}
+                </td>
+              )}
             </tr>
           ))}
         </tbody>

@@ -13,6 +13,11 @@ function monthsAheadIso(n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+function formatDateRu(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return `${d}.${m}.${y}`;
+}
+
 const DAY_TYPE_LABELS: Record<string, string> = {
   study_day: "Учебный день",
   weekend: "Выходной",
@@ -29,7 +34,9 @@ export default function CalendarTab({ canEdit }: { canEdit: boolean }) {
   useScrollToTopOnChange(error);
 
   const [newDate, setNewDate] = useState(todayIso());
+  const [newDateTo, setNewDateTo] = useState("");
   const [newType, setNewType] = useState("holiday");
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const [groups, setGroups] = useState<StudyGroupAdmin[]>([]);
   const [overrideGroupId, setOverrideGroupId] = useState<number | null>(null);
@@ -67,13 +74,33 @@ export default function CalendarTab({ canEdit }: { canEdit: boolean }) {
 
   useEffect(loadOverrides, [overrideGroupId, dateFrom, dateTo]);
 
+  // Каникулы — это диапазон в несколько недель, а не один день; раньше
+  // приходилось добавлять их по одной дате (см. TODO.md 4).
+  function datesBetween(from: string, to: string): string[] {
+    const result: string[] = [];
+    const cur = new Date(from + "T00:00:00");
+    const end = new Date(to + "T00:00:00");
+    while (cur <= end) {
+      result.push(cur.toISOString().slice(0, 10));
+      cur.setDate(cur.getDate() + 1);
+    }
+    return result;
+  }
+
   async function addException() {
     setError(null);
+    const dates = newDateTo && newDateTo > newDate ? datesBetween(newDate, newDateTo) : [newDate];
+    setBulkBusy(true);
     try {
-      await api.put("/admin/calendar", { date: newDate, day_type: newType });
+      for (const date of dates) {
+        await api.put("/admin/calendar", { date, day_type: newType });
+      }
+      setNewDateTo("");
       load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Не удалось сохранить");
+    } finally {
+      setBulkBusy(false);
     }
   }
 
@@ -123,6 +150,16 @@ export default function CalendarTab({ canEdit }: { canEdit: boolean }) {
       {error && <div className="error-text">{error}</div>}
 
       <div className="toolbar">
+        <button
+          className="link-btn"
+          onClick={() => {
+            setDateFrom(monthsAheadIso(-3));
+            setDateTo(todayIso());
+          }}
+          title="Посмотреть прошедший период"
+        >
+          ← Прошедшие
+        </button>
         <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
         <span>—</span>
         <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
@@ -140,7 +177,7 @@ export default function CalendarTab({ canEdit }: { canEdit: boolean }) {
         <tbody>
           {rows.map((r) => (
             <tr key={r.date}>
-              <td>{r.date}</td>
+              <td>{formatDateRu(r.date)}</td>
               <td>{DAY_TYPE_LABELS[r.day_type] ?? r.day_type}</td>
               {canEdit && (
                 <td>
@@ -161,7 +198,14 @@ export default function CalendarTab({ canEdit }: { canEdit: boolean }) {
 
       {canEdit && (
         <div className="inline-form">
-          <input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} />
+          <input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} title="Дата (начало диапазона)" />
+          <span>—</span>
+          <input
+            type="date"
+            value={newDateTo}
+            onChange={(e) => setNewDateTo(e.target.value)}
+            title="Конец диапазона — необязательно, для каникул на несколько дней"
+          />
           <select value={newType} onChange={(e) => setNewType(e.target.value)}>
             {Object.entries(DAY_TYPE_LABELS).map(([value, label]) => (
               <option key={value} value={value}>
@@ -169,7 +213,9 @@ export default function CalendarTab({ canEdit }: { canEdit: boolean }) {
               </option>
             ))}
           </select>
-          <button onClick={addException}>Сохранить</button>
+          <button onClick={addException} disabled={bulkBusy}>
+            {bulkBusy ? "Сохраняем…" : "Сохранить"}
+          </button>
         </div>
       )}
 
@@ -195,7 +241,7 @@ export default function CalendarTab({ canEdit }: { canEdit: boolean }) {
         <tbody>
           {overrides.map((r) => (
             <tr key={r.date}>
-              <td>{r.date}</td>
+              <td>{formatDateRu(r.date)}</td>
               <td>{DAY_TYPE_LABELS[r.day_type] ?? r.day_type}</td>
               {canEdit && (
                 <td>

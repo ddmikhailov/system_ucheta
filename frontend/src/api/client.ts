@@ -40,7 +40,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     } catch {
       // тело не JSON — оставляем statusText
     }
-    if (res.status === 401) setToken(null);
+    if (res.status === 401) {
+      setToken(null);
+      // client.ts — не React-компонент и не может дёрнуть useAuth() напрямую;
+      // AuthContext слушает это событие и сбрасывает user, чтобы роутер
+      // тут же увёл на /login, а не оставлял "залогиненного" с 401 на
+      // каждом запросе (см. TODO.md 4 — раньше токен просто стирался).
+      window.dispatchEvent(new Event("auth:unauthorized"));
+    }
     throw new ApiError(res.status, message);
   }
 

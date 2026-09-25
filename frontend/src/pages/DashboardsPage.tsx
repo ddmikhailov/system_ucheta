@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { downloadFile } from "../api/client";
 import { api, ApiError } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 import AssignCuratorModal from "../components/AssignCuratorModal";
+import { useEscapeKey } from "../hooks/useEscapeKey";
 import type {
   CuratorDisciplineRow,
   DayOverviewRow,
+  DepartmentAdmin,
   DynamicsPoint,
   RiskStudentRow,
   StudentCard,
@@ -22,11 +26,26 @@ function daysAgoIso(n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+// Даты в API приходят в ISO (YYYY-MM-DD) — на экране показываем в привычном
+// для колледжа виде ДД.ММ.ГГГГ (см. TODO.md 4).
+function formatDateRu(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return `${d}.${m}.${y}`;
+}
+
 type Tab = "day" | "dynamics" | "risk" | "discipline" | "vacant";
 
 export default function DashboardsPage() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const isDeptHead = user?.role === "dept_head";
+  // Админ/тьютор/учебный отдел видят весь колледж и могут сузить экспорт до
+  // одного отделения; зав. отделением и так видит только своё (см. TODO.md 4).
+  const canFilterDepartment = user?.role === "admin" || user?.role === "tutor" || user?.role === "edu_department";
+
   const [tab, setTab] = useState<Tab>("day");
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const [date, setDate] = useState(todayIso());
   const [dayRows, setDayRows] = useState<DayOverviewRow[]>([]);
@@ -46,6 +65,10 @@ export default function DashboardsPage() {
   const [assigningGroupId, setAssigningGroupId] = useState<number | null>(null);
   const vacantGroups = useMemo(() => groups.filter((g) => g.is_active && !g.curator_name), [groups]);
 
+  const [departments, setDepartments] = useState<DepartmentAdmin[]>([]);
+  const [exportDepartmentId, setExportDepartmentId] = useState<number | "all">("all");
+  const [exportError, setExportError] = useState<string | null>(null);
+
   const courses = useMemo(
     () => Array.from(new Set(dayRows.map((r) => r.course))).sort((a, b) => a - b),
     [dayRows],
@@ -57,38 +80,64 @@ export default function DashboardsPage() {
 
   useEffect(() => {
     if (tab !== "day") return;
+    setLoading(true);
     api
       .get<DayOverviewRow[]>(`/dashboards/day?date=${date}`)
-      .then(setDayRows)
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка загрузки"));
+      .then((rows) => {
+        setDayRows(rows);
+        setError(null);
+      })
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка загрузки"))
+      .finally(() => setLoading(false));
   }, [tab, date]);
 
   useEffect(() => {
     if (tab !== "dynamics") return;
+    setLoading(true);
     api
       .get<DynamicsPoint[]>(`/dashboards/dynamics?date_from=${dateFrom}&date_to=${dateTo}`)
-      .then(setDynamicsPoints)
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка загрузки"));
+      .then((points) => {
+        setDynamicsPoints(points);
+        setError(null);
+      })
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка загрузки"))
+      .finally(() => setLoading(false));
   }, [tab, dateFrom, dateTo]);
 
   useEffect(() => {
     if (tab !== "risk") return;
+    setLoading(true);
     api
       .get<RiskStudentRow[]>(`/dashboards/risk-students?as_of_date=${date}`)
-      .then(setRiskRows)
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка загрузки"));
+      .then((rows) => {
+        setRiskRows(rows);
+        setError(null);
+      })
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка загрузки"))
+      .finally(() => setLoading(false));
   }, [tab, date]);
 
   useEffect(() => {
     if (tab !== "discipline") return;
+    setLoading(true);
     api
       .get<CuratorDisciplineRow[]>(`/dashboards/curator-discipline?date_from=${dateFrom}&date_to=${dateTo}`)
-      .then(setDisciplineRows)
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка загрузки"));
+      .then((rows) => {
+        setDisciplineRows(rows);
+        setError(null);
+      })
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка загрузки"))
+      .finally(() => setLoading(false));
   }, [tab, dateFrom, dateTo]);
 
   function loadVacantGroups() {
-    api.get<StudyGroupAdmin[]>("/admin/groups").then(setGroups).catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка загрузки"));
+    api
+      .get<StudyGroupAdmin[]>("/admin/groups")
+      .then((rows) => {
+        setGroups(rows);
+        setError(null);
+      })
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка загрузки"));
     api
       .get<UserAdmin[]>("/admin/users")
       .then((us) => setCurators(us.filter((u) => u.is_active && (u.role === "curator" || u.role === "deputy_curator"))))
@@ -98,14 +147,31 @@ export default function DashboardsPage() {
   useEffect(() => {
     // Грузим сразу, чтобы счётчик в вкладке был виден и без переключения на неё.
     loadVacantGroups();
+    if (canFilterDepartment) {
+      api.get<DepartmentAdmin[]>("/admin/departments").then(setDepartments).catch(() => setDepartments([]));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Экспорт раньше всегда брал диапазон вкладки "Динамика", даже если открыта
+  // "День"/"Группа риска" — там теперь берём выбранный день (see TODO.md 4).
+  const exportDateFrom = tab === "day" || tab === "risk" ? date : dateFrom;
+  const exportDateTo = tab === "day" || tab === "risk" ? date : dateTo;
+
+  function handleExport() {
+    setExportError(null);
+    const deptParam = canFilterDepartment && exportDepartmentId !== "all" ? `&department_id=${exportDepartmentId}` : "";
+    downloadFile(
+      `/export/excel?date_from=${exportDateFrom}&date_to=${exportDateTo}${deptParam}`,
+      `itog_${exportDateFrom}_${exportDateTo}.xlsx`,
+    ).catch((err) => setExportError(err instanceof ApiError ? err.message : "Не удалось скачать файл"));
+  }
 
   return (
     <div>
       <div className="tabs">
         <button className={tab === "day" ? "active" : ""} onClick={() => setTab("day")}>
-          День по колледжу
+          {isDeptHead ? "День по отделению" : "День по колледжу"}
         </button>
         <button className={tab === "dynamics" ? "active" : ""} onClick={() => setTab("dynamics")}>
           Динамика
@@ -119,15 +185,28 @@ export default function DashboardsPage() {
         <button className={tab === "vacant" ? "active" : ""} onClick={() => setTab("vacant")}>
           Вакантные группы{vacantGroups.length > 0 ? ` (${vacantGroups.length})` : ""}
         </button>
-        <button
-          className="link-btn"
-          onClick={() => downloadFile(`/export/excel?date_from=${dateFrom}&date_to=${dateTo}`, `itog_${dateFrom}_${dateTo}.xlsx`)}
-        >
-          Экспорт в Excel
+        {canFilterDepartment && (
+          <select
+            value={exportDepartmentId}
+            onChange={(e) => setExportDepartmentId(e.target.value === "all" ? "all" : Number(e.target.value))}
+            title="Отделение для экспорта"
+          >
+            <option value="all">Весь колледж</option>
+            {departments.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+        )}
+        <button className="link-btn" onClick={handleExport}>
+          Экспорт в Excel ({formatDateRu(exportDateFrom)}–{formatDateRu(exportDateTo)})
         </button>
       </div>
 
+      {exportError && <div className="error-text">{exportError}</div>}
       {error && <div className="error-text">{error}</div>}
+      {loading && <p className="hint">Загрузка…</p>}
 
       {(tab === "day" || tab === "risk") && (
         <div className="toolbar">
@@ -171,7 +250,12 @@ export default function DashboardsPage() {
           </thead>
           <tbody>
             {visibleDayRows.map((r) => (
-              <tr key={r.study_group_id} className={!r.is_submitted ? "not-submitted-row" : ""}>
+              <tr
+                key={r.study_group_id}
+                className={!r.is_submitted ? "not-submitted-row clickable-row" : "clickable-row"}
+                onClick={() => navigate(`/admin?tab=journal&group=${r.study_group_id}&date=${date}`)}
+                title="Открыть журнал группы на эту дату"
+              >
                 <td>{r.code}</td>
                 <td>{r.course}</td>
                 <td>{r.responsible_name ?? "нет куратора"}</td>
@@ -191,28 +275,31 @@ export default function DashboardsPage() {
       )}
 
       {tab === "dynamics" && (
-        <table className="dash-table">
-          <thead>
-            <tr>
-              <th>Дата</th>
-              <th>В списке</th>
-              <th>Присутствовало</th>
-              <th>%</th>
-            </tr>
-          </thead>
-          <tbody>
-            {dynamicsPoints.map((p) => (
-              <tr key={p.date}>
-                <td>{p.date}</td>
-                <td>{p.in_list ?? "—"}</td>
-                <td>{p.present ?? "—"}</td>
-                <td>
-                  <PercentBar value={p.percent} />
-                </td>
+        <>
+          <DynamicsChart points={dynamicsPoints} />
+          <table className="dash-table">
+            <thead>
+              <tr>
+                <th>Дата</th>
+                <th>В списке</th>
+                <th>Присутствовало</th>
+                <th>%</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {dynamicsPoints.map((p) => (
+                <tr key={p.date}>
+                  <td>{formatDateRu(p.date)}</td>
+                  <td>{p.in_list ?? "—"}</td>
+                  <td>{p.present ?? "—"}</td>
+                  <td>
+                    <PercentBar value={p.percent} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
       )}
 
       {tab === "risk" && (
@@ -341,6 +428,7 @@ function StudentCardModal({
 }) {
   const [card, setCard] = useState<StudentCard | null>(null);
   const [error, setError] = useState<string | null>(null);
+  useEscapeKey(onClose);
 
   useEffect(() => {
     api
@@ -351,14 +439,16 @@ function StudentCardModal({
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal" role="dialog" aria-modal="true" aria-label="Карточка студента" onClick={(e) => e.stopPropagation()}>
         {error && <div className="error-text">{error}</div>}
         {card && (
           <>
             <h3>{card.full_name}</h3>
             <p>
-              Группа {card.group_code} · присутствие за период: {card.percent_period}%
+              Группа {card.group_code} · присутствие за период {formatDateRu(dateFrom)}–{formatDateRu(dateTo)}:{" "}
+              {card.percent_period}%
             </p>
+            <p className="hint">Период задаётся вкладкой «Динамика» — измените его там, если нужен другой диапазон.</p>
             <table className="dash-table">
               <thead>
                 <tr>
@@ -370,7 +460,7 @@ function StudentCardModal({
               <tbody>
                 {card.history.map((h, i) => (
                   <tr key={i}>
-                    <td>{h.date}</td>
+                    <td>{formatDateRu(h.date)}</td>
                     <td>{h.mark_name}</td>
                     <td>{h.basis_reference ?? "—"}</td>
                   </tr>
@@ -388,6 +478,43 @@ function StudentCardModal({
           <button onClick={onClose}>Закрыть</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// "Динамика" была таблицей без наглядности — среднее и график по точкам
+// (см. TODO.md 4). Своя лёгкая SVG-полоска вместо графической библиотеки.
+function DynamicsChart({ points }: { points: DynamicsPoint[] }) {
+  const withValue = points.filter((p): p is DynamicsPoint & { percent: number } => p.percent !== null && p.percent !== undefined);
+  if (withValue.length === 0) return null;
+  const average = withValue.reduce((sum, p) => sum + p.percent, 0) / withValue.length;
+  const barWidth = 100 / points.length;
+  return (
+    <div className="dynamics-chart">
+      <p>
+        Среднее за период: <b>{average.toFixed(1)}%</b>
+      </p>
+      <svg viewBox="0 0 100 40" preserveAspectRatio="none" className="dynamics-chart__svg">
+        {points.map((p, i) => {
+          if (p.percent === null || p.percent === undefined) return null;
+          const height = (Math.min(p.percent, 100) / 100) * 40;
+          const color = p.percent >= 95 ? "var(--ok)" : p.percent >= 85 ? "var(--warn)" : "var(--danger)";
+          return (
+            <rect
+              key={p.date}
+              x={i * barWidth}
+              y={40 - height}
+              width={Math.max(barWidth - 0.5, 0.5)}
+              height={height}
+              fill={color}
+            >
+              <title>
+                {formatDateRu(p.date)}: {p.percent.toFixed(1)}%
+              </title>
+            </rect>
+          );
+        })}
+      </svg>
     </div>
   );
 }

@@ -5,6 +5,13 @@ import type { MarkCodeAdmin } from "../../api/types";
 
 type FlagField = "counts_as_present" | "is_excused" | "requires_document" | "is_active";
 
+const FIELD_LABELS: Record<FlagField, string> = {
+  counts_as_present: "считается присутствием",
+  is_excused: "уважительная",
+  requires_document: "требует документа",
+  is_active: "активен",
+};
+
 export default function MarkCodesTab({ canEdit }: { canEdit: boolean }) {
   const [rows, setRows] = useState<MarkCodeAdmin[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -16,9 +23,20 @@ export default function MarkCodesTab({ canEdit }: { canEdit: boolean }) {
 
   useEffect(load, []);
 
+  // Флаги пересчитывают отчётность задним числом (см. предупреждение выше и
+  // TODO.md 4) — случайный клик мышью раньше применялся мгновенно без шанса
+  // передумать.
   async function toggle(row: MarkCodeAdmin, field: FlagField) {
+    const next = !row[field];
+    if (
+      !window.confirm(
+        `Изменить флаг «${FIELD_LABELS[field]}» у кода «${row.code}» на «${next ? "да" : "нет"}»? Это пересчитает отчётность задним числом.`
+      )
+    ) {
+      return;
+    }
     try {
-      await api.patch(`/admin/mark-codes/${row.id}`, { [field]: !row[field] });
+      await api.patch(`/admin/mark-codes/${row.id}`, { [field]: next });
       load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Не удалось сохранить");

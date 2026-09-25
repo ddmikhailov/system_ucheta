@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api, ApiError } from "../api/client";
+import { useEscapeKey } from "../hooks/useEscapeKey";
 import type { UserAdmin } from "../api/types";
 
 function todayIso(): string {
@@ -22,6 +23,7 @@ export default function AssignCuratorModal({
   const [startDate, setStartDate] = useState(todayIso());
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  useEscapeKey(onClose);
 
   async function save() {
     if (userId === null) return;
@@ -44,7 +46,7 @@ export default function AssignCuratorModal({
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal" role="dialog" aria-modal="true" aria-label="Назначить куратора" onClick={(e) => e.stopPropagation()}>
         <h3>Назначить куратора</h3>
         {curators.length === 0 ? (
           <p className="error-text">В отделении нет ни одного куратора или заместителя для назначения.</p>
