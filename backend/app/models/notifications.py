@@ -1,6 +1,6 @@
 import datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.time import utcnow
@@ -40,6 +40,7 @@ class InAppNotification(Base):
     """
 
     __tablename__ = "in_app_notifications"
+    __table_args__ = (Index("ix_in_app_notifications_user_read", "user_id", "read_at"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)

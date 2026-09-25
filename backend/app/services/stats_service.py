@@ -281,12 +281,13 @@ def risk_students(
     threshold: int,
     department_id: int | None = None,
 ) -> list[dict]:
-    from app.services.attendance_service import consecutive_unexcused_count
+    from app.services.attendance_service import consecutive_unexcused_counts_bulk
 
     students = _students_in_scope(db, department_id=department_id)
+    streaks = consecutive_unexcused_counts_bulk(db, students, as_of_date + datetime.timedelta(days=1))
     rows = []
     for student in students:
-        streak = consecutive_unexcused_count(db, student.id, as_of_date + datetime.timedelta(days=1))
+        streak = streaks[student.id]
         if streak >= threshold:
             rows.append(
                 {

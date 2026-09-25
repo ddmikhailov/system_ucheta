@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useAuth } from "../auth/AuthContext";
+import { useAuth } from "../auth/useAuth";
 import DepartmentsTab from "./admin/DepartmentsTab";
 import GroupsTab from "./admin/GroupsTab";
 import StudentsTab from "./admin/StudentsTab";

@@ -32,7 +32,11 @@ CURATOR_PASSWORD = "CuratorTest123!"
 def test_engine(tmp_path):
     """Изолированная SQLite-БД на каждый тест — никакого общего состояния между тестами."""
     db_path = tmp_path / "test.db"
-    engine = create_engine(f"sqlite:///{db_path}")
+    # check_same_thread=False: планировщик теперь снимает тяжёлые синхронные
+    # запросы с event loop через asyncio.to_thread (см. TODO.md 5) — в проде
+    # это MySQL и потоки его не смущают, но SQLite по умолчанию запрещает
+    # использовать соединение не из того потока, где оно создано.
+    engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
 
     # SQLite не проверяет внешние ключи по умолчанию — в проде (MySQL/InnoDB)
     # они enforced, и на этом строится безопасное удаление (см. admin.py:
@@ -99,10 +103,16 @@ def seeded(test_engine):
 
 
 @pytest.fixture()
-def imported(seeded, db):
-    """Справочники + реальный набор «Диджитал» (44 группы, 989 студентов, 24 куратора)."""
+def imported(seeded, db, monkeypatch):
+    """Справочники + синтетический набор той же формы, что реальный «Диджитал»
+    (44 группы, 989 студентов, 24 куратора, 3 вакансии) — коды/курсы/кол-во
+    взяты из реальной выгрузки, а ФИО целиком выдуманы (см. TODO.md 5:
+    раньше тесты читали backend/scripts/import/data/*.csv с настоящими ФИО,
+    которых нет в репозитории — на чистом клоне/в CI это падало)."""
     import scripts.import_source_data as import_script
 
+    fixtures_dir = os.path.join(os.path.dirname(__file__), "fixtures", "import")
+    monkeypatch.setattr(import_script, "DATA_DIR", fixtures_dir)
     import_script.run()
     db.expire_all()
     return seeded

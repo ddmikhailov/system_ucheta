@@ -55,7 +55,11 @@ class Settings(BaseSettings):
     telegram_link_token_ttl_minutes: int = 10
     notification_timezone: str = "Europe/Moscow"
     # Публичный адрес веб-интерфейса — для кнопки «Открыть» в напоминаниях.
-    web_app_base_url: str = "http://localhost:5173"
+    # Фронтенд и API отдаются одним процессом на одном порту (см. main.py),
+    # поэтому дефолт — порт самого приложения (8000), а не dev-сервера Vite
+    # (5173): раньше значения по умолчанию здесь и в .env.example расходились
+    # (см. TODO.md 5), и ссылка в напоминании могла вести не туда.
+    web_app_base_url: str = "http://localhost:8000"
 
     # Время ежедневных рассылок (день недели у пятничного дайджеста фиксирован в коде).
     reminder_first_time: str = "10:00"

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
-import { useAuth } from "../auth/AuthContext";
+import { useAuth } from "../auth/useAuth";
 import NotificationBell from "./NotificationBell";
 
 const MANAGEMENT_ROLES = ["dept_head", "edu_department", "admin", "tutor"];

@@ -67,4 +67,10 @@ def build_scheduler(bot: Bot) -> AsyncIOScheduler:
         CronTrigger(day_of_week="fri", hour=lead_hour, minute=lead_minute),
         args=[bot], id="leadership_digest", misfire_grace_time=3600,
     )
+    # Ночью, вне пиковой нагрузки — старые уведомления/токены раньше не
+    # чистились вообще (см. TODO.md 5).
+    scheduler.add_job(
+        jobs.cleanup_old_records, CronTrigger(hour=3, minute=0), args=[bot],
+        id="cleanup_old_records", misfire_grace_time=3600,
+    )
     return scheduler

@@ -60,7 +60,7 @@ class AttendanceMark(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), nullable=False)
-    date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    date: Mapped[datetime.date] = mapped_column(Date, nullable=False, index=True)
     mark_code_id: Mapped[int] = mapped_column(ForeignKey("mark_codes.id"), nullable=False)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -76,7 +76,6 @@ class AttendanceMark(Base):
     basis_status: Mapped[BasisStatus] = mapped_column(
         Enum(BasisStatus), nullable=False, default=BasisStatus.NOT_REQUIRED
     )
-    basis_deadline: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
 
     created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(

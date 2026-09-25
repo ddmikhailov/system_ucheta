@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ApiError, setToken } from "../api/client";
-import { useAuth } from "../auth/AuthContext";
+import { useAuth } from "../auth/useAuth";
 import type { MeResponse } from "../api/types";
 
 export default function ChangePasswordPage() {

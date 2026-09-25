@@ -66,31 +66,5 @@ class User(Base):
     curator_assignments: Mapped[list["CuratorAssignment"]] = relationship(back_populates="user")
 
     @property
-    def is_pending_invitation(self) -> bool:
-        return self.password_hash is None
-
-    @property
     def is_locked(self) -> bool:
         return self.locked_until is not None and self.locked_until > utcnow()
-
-
-class Invitation(Base):
-    """Персональная одноразовая ссылка вместо почтового приглашения."""
-
-    __tablename__ = "invitations"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    token: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    issued_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    expires_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
-    used_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime, default=utcnow, nullable=False
-    )
-
-    user: Mapped["User"] = relationship(foreign_keys=[user_id])
-
-    @property
-    def is_usable(self) -> bool:
-        return self.used_at is None and self.expires_at > utcnow()

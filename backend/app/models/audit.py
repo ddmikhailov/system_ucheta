@@ -21,7 +21,7 @@ class AuditLog(Base):
     new_value: Mapped[str | None] = mapped_column(Text, nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime, default=utcnow, nullable=False
+        DateTime, default=utcnow, nullable=False, index=True
     )
 
     user: Mapped["User"] = relationship()

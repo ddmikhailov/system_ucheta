@@ -113,3 +113,54 @@ def test_edu_department_and_dept_head_recipients(imported, db, edu_department_us
 
     assert [u.id for u in notification_service.edu_department_recipients(db)] == [edu_department_user.id]
     assert [u.id for u in notification_service.dept_heads_with_telegram(db)] == [dept_head_user.id]
+
+
+def test_cleanup_old_records_removes_read_notifications_and_old_logs_and_used_tokens(
+    imported, db, curator_user
+):
+    from app.models import InAppNotification, NotificationLog, TelegramLinkToken
+
+    today = datetime.date(2026, 9, 25)
+    old = datetime.datetime.combine(today, datetime.time.min) - datetime.timedelta(days=200)
+    recent = datetime.datetime.combine(today, datetime.time.min) - datetime.timedelta(days=1)
+
+    read_old = InAppNotification(
+        user_id=curator_user.id, kind="test", message="old read", created_at=old, read_at=old
+    )
+    unread_old = InAppNotification(
+        user_id=curator_user.id, kind="test", message="old unread", created_at=old, read_at=None
+    )
+    read_recent = InAppNotification(
+        user_id=curator_user.id, kind="test", message="recent read", created_at=recent, read_at=recent
+    )
+    db.add_all([read_old, unread_old, read_recent])
+
+    old_log = NotificationLog(user_id=curator_user.id, kind="reminder_1", date=today - datetime.timedelta(days=200), sent_at=old)
+    recent_log = NotificationLog(user_id=curator_user.id, kind="reminder_2", date=today, sent_at=recent)
+    db.add_all([old_log, recent_log])
+
+    used_token = TelegramLinkToken(
+        token="used", user_id=curator_user.id,
+        expires_at=recent + datetime.timedelta(minutes=10), used_at=recent,
+    )
+    expired_token = TelegramLinkToken(
+        token="expired", user_id=curator_user.id, expires_at=old, used_at=None,
+    )
+    live_token = TelegramLinkToken(
+        token="live", user_id=curator_user.id,
+        expires_at=datetime.datetime.combine(today, datetime.time.min) + datetime.timedelta(days=1), used_at=None,
+    )
+    db.add_all([used_token, expired_token, live_token])
+    db.commit()
+
+    counts = notification_service.cleanup_old_records(db, today, keep_days=90)
+    assert counts == {"notifications_deleted": 1, "logs_deleted": 1, "tokens_deleted": 2}
+
+    remaining_notifications = {n.id for n in db.query(InAppNotification).all()}
+    assert remaining_notifications == {unread_old.id, read_recent.id}
+
+    remaining_logs = {log.id for log in db.query(NotificationLog).all()}
+    assert remaining_logs == {recent_log.id}
+
+    remaining_tokens = {t.token for t in db.query(TelegramLinkToken).all()}
+    assert remaining_tokens == {"live"}

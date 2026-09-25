@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { api, ApiError } from "../../api/client";
-import { useAuth } from "../../auth/AuthContext";
+import { useAuth } from "../../auth/useAuth";
 import { useEscapeKey } from "../../hooks/useEscapeKey";
 import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { DeleteResult, DepartmentAdmin, SetPasswordResult, UserAdmin } from "../../api/types";

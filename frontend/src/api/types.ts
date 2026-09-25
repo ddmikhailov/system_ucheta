@@ -18,11 +18,6 @@ export interface MeResponse {
   access_token?: string | null;
 }
 
-export interface TelegramLinkResponse {
-  deep_link: string;
-  expires_at: string;
-}
-
 export interface RosterEntry {
   student_id: number;
   full_name: string;

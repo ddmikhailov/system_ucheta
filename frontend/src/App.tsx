@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 import { Navigate, Route, BrowserRouter as Router, Routes } from "react-router-dom";
-import { AuthProvider, useAuth } from "./auth/AuthContext";
+import { AuthProvider } from "./auth/AuthContext";
+import { useAuth } from "./auth/useAuth";
 import Layout from "./components/Layout";
 import LoginPage from "./pages/LoginPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";

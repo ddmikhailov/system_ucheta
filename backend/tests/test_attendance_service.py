@@ -48,7 +48,6 @@ def test_submit_day_persists_exceptions_and_submission(imported, db, curator_gro
     # Основание (приказ/справка) — необязательное дополнение (обновление 1.1):
     # без него отметка просто не требует последующего подтверждения.
     assert mark.basis_status == BasisStatus.NOT_REQUIRED
-    assert mark.basis_deadline is None
 
 
 def test_roster_shows_who_last_edited_a_mark(imported, db, curator_group, curator_user):

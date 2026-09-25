@@ -53,11 +53,15 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (res.status === 204) return undefined as T;
 
+  // Раньше не-JSON ответ молча превращался в Blob и приводился к типу T
+  // (см. TODO.md 5) — ни один вызов api.* в приложении блоб не ждёт, так что
+  // это маскировало реальную проблему (например, HTML-страницу ошибки от
+  // прокси) непонятной ошибкой ниже по стеку вместо явной здесь.
   const contentType = res.headers.get("content-type") ?? "";
-  if (contentType.includes("application/json")) {
-    return res.json();
+  if (!contentType.includes("application/json")) {
+    throw new ApiError(res.status, `Неожиданный тип ответа: ${contentType || "не указан"}`);
   }
-  return res.blob() as unknown as T;
+  return res.json();
 }
 
 export const api = {
@@ -83,5 +87,8 @@ export async function downloadFile(path: string, filename: string) {
   a.href = url;
   a.download = filename;
   a.click();
-  URL.revokeObjectURL(url);
+  // Отзыв сразу после click() в части браузеров обрывает ещё идущее
+  // скачивание (см. TODO.md 5) — даём событию клика и старту загрузки
+  // отработать первыми.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

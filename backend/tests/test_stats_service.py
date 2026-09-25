@@ -78,3 +78,25 @@ def test_risk_students_threshold(imported, db, curator_group, curator_user):
 
     not_risky = stats_service.risk_students(db, as_of, threshold=4)
     assert not any(r["student_id"] == student.id for r in not_risky)
+
+
+def test_risk_students_query_count_does_not_scale_with_student_count(imported, db):
+    """Раньше risk_students делала ~4 запроса НА КАЖДОГО студента колледжа
+    (3959 запросов на 989 студентах, см. TODO.md 5) — теперь запросы
+    батчатся по группе, так что их число зависит от количества групп,
+    а не студентов."""
+    from sqlalchemy import event
+
+    queries = []
+
+    def _count(conn, cursor, statement, parameters, context, executemany):
+        queries.append(statement)
+
+    event.listen(db.get_bind(), "before_cursor_execute", _count)
+    try:
+        stats_service.risk_students(db, DAY1, threshold=3)
+    finally:
+        event.remove(db.get_bind(), "before_cursor_execute", _count)
+
+    # 44 группы в синтетическом наборе — раньше тут было бы под 4000 запросов.
+    assert len(queries) < 200

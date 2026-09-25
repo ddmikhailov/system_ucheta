@@ -9,8 +9,10 @@ from app.models import (
     CuratorAssignment,
     DaySubmission,
     Department,
+    InAppNotification,
     NotificationLog,
     StudyGroup,
+    TelegramLinkToken,
     User,
 )
 from app.services import calendar_service, stats_service
@@ -191,3 +193,35 @@ def dept_heads_with_telegram(db: Session) -> list[User]:
     if role is None:
         return []
     return db.query(User).filter(User.role_id == role.id, User.telegram_chat_id.isnot(None), User.is_active.is_(True)).all()
+
+
+def cleanup_old_records(db: Session, today: datetime.date, keep_days: int = 90) -> dict[str, int]:
+    """Ничего не чистило старые записи (см. TODO.md 5) — колокольчик и
+    notification_log росли бы бессрочно. Хранится ровно то, что ещё может
+    пригодиться: прочитанные/старые уведомления и однажды использованные
+    (или просроченные) Telegram-токены удаляются, непрочитанные — нет,
+    сколько бы им ни было."""
+    cutoff = datetime.datetime.combine(today, datetime.time.min) - datetime.timedelta(days=keep_days)
+
+    notifications_deleted = (
+        db.query(InAppNotification)
+        .filter(InAppNotification.read_at.isnot(None), InAppNotification.created_at < cutoff)
+        .delete(synchronize_session=False)
+    )
+    logs_deleted = (
+        db.query(NotificationLog)
+        .filter(NotificationLog.sent_at < cutoff)
+        .delete(synchronize_session=False)
+    )
+    now = datetime.datetime.combine(today, datetime.time.min)
+    tokens_deleted = (
+        db.query(TelegramLinkToken)
+        .filter((TelegramLinkToken.used_at.isnot(None)) | (TelegramLinkToken.expires_at < now))
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return {
+        "notifications_deleted": notifications_deleted,
+        "logs_deleted": logs_deleted,
+        "tokens_deleted": tokens_deleted,
+    }

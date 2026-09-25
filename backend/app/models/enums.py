@@ -42,6 +42,4 @@ class MarkSource(str, enum.Enum):
 
 class BasisStatus(str, enum.Enum):
     NOT_REQUIRED = "not_required"
-    PENDING = "pending"
     CONFIRMED = "confirmed"
-    OVERDUE = "overdue"

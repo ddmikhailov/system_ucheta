@@ -1,22 +1,16 @@
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { api, getToken, setToken } from "../api/client";
 import type { MeResponse } from "../api/types";
-
-interface AuthContextValue {
-  user: MeResponse | null;
-  loading: boolean;
-  login: (username: string, password: string) => Promise<void>;
-  loginWithToken: (token: string) => Promise<void>;
-  logout: () => void;
-  refresh: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+import { AuthContext } from "./authContextObject";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<MeResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Без токена сразу известно, что грузить нечего — раньше эффект всё равно
+  // синхронно вызывал setLoading(false) на первом рендере (oxlint
+  // react/set-state-in-effect, см. TODO.md 5); теперь это уже верное
+  // начальное значение, а не побочный эффект.
+  const [loading, setLoading] = useState(() => !!getToken());
 
   const refresh = useCallback(async () => {
     if (!getToken()) {
@@ -36,13 +30,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    refresh();
+    // Загрузка текущего пользователя при монтировании — setState происходит
+    // только после await внутри refresh(), не синхронно в теле эффекта;
+    // без этого разово выполнить запрос на старте нечем (см. TODO.md 5).
+    // oxlint-disable-next-line react/set-state-in-effect
+    if (getToken()) refresh();
   }, [refresh]);
 
   useEffect(() => {
     // Токен истёк/отозван (401 на любой запрос, не только на /auth/me) —
     // без этого пользователь оставался "залогиненным" в интерфейсе и видел
     // только ошибки, пока не перезагружал страницу вручную (см. TODO.md 4).
+    // setState здесь вызывается из обработчика внешнего события (именно
+    // тот случай, который правило react/set-state-in-effect само называет
+    // корректным), а не синхронно в теле эффекта — ложное срабатывание.
+    // oxlint-disable-next-line react/set-state-in-effect
     const onUnauthorized = () => setUser(null);
     window.addEventListener("auth:unauthorized", onUnauthorized);
     return () => window.removeEventListener("auth:unauthorized", onUnauthorized);
@@ -69,10 +71,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth должен использоваться внутри AuthProvider");
-  return ctx;
 }

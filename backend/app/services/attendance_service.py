@@ -33,12 +33,12 @@ class InvalidSubmission(Exception):
     pass
 
 
-def _compute_basis(basis_reference: str | None) -> tuple[BasisStatus, None]:
+def _compute_basis(basis_reference: str | None) -> BasisStatus:
     """Основание (номер приказа/справки) — необязательное дополнение к коду
     отметки, а не обязательное условие (см. обновление 1.1: убран жёсткий
     контроль дедлайна подтверждения — куратор может указать документ, но
     его отсутствие ни к чему не обязывает и никого не блокирует)."""
-    return (BasisStatus.CONFIRMED if basis_reference else BasisStatus.NOT_REQUIRED), None
+    return BasisStatus.CONFIRMED if basis_reference else BasisStatus.NOT_REQUIRED
 
 
 def get_active_students(db: Session, study_group_id: int, as_of: datetime.date) -> list[Student]:
@@ -85,12 +85,23 @@ def get_mark_codes(db: Session) -> dict[str, MarkCode]:
 
 
 def consecutive_unexcused_count(
-    db: Session, student_id: int, as_of_date: datetime.date, lookback_days: int = 21
+    db: Session,
+    student_id: int,
+    as_of_date: datetime.date,
+    lookback_days: int = 21,
+    study_group_id: int | None = None,
 ) -> int:
-    """Сколько учебных дней подряд перед as_of_date (не включая) стоит код 'н'."""
+    """Сколько учебных дней подряд перед as_of_date (не включая) стоит код 'н'.
+
+    `study_group_id` — необязательная оптимизация (см. TODO.md 5): вызывающий
+    код почти всегда уже держит объект Student в цикле, и без этого параметра
+    функция заново шла бы в БД за тем же id группы на каждого из ~1000
+    студентов колледжа (это была заметная доля тех самых N+1 запросов на
+    экране «Группа риска»)."""
     window_start = as_of_date - datetime.timedelta(days=lookback_days)
-    student = db.get(Student, student_id)
-    study_group_id = student.study_group_id if student else None
+    if study_group_id is None:
+        student = db.get(Student, student_id)
+        study_group_id = student.study_group_id if student else None
     study_days = calendar_service.study_days_between(
         db, window_start, as_of_date - datetime.timedelta(days=1), study_group_id=study_group_id
     )
@@ -104,7 +115,10 @@ def consecutive_unexcused_count(
         .where(AttendanceMark.student_id == student_id, AttendanceMark.date.in_(study_days))
     ).all()
     marks_by_date = {row.date: row.code for row in marks}
+    return _streak_from_marks(study_days, marks_by_date)
 
+
+def _streak_from_marks(study_days: list[datetime.date], marks_by_date: dict[datetime.date, str]) -> int:
     streak = 0
     for day in study_days:
         if marks_by_date.get(day) == "н":
@@ -112,6 +126,49 @@ def consecutive_unexcused_count(
         else:
             break
     return streak
+
+
+def consecutive_unexcused_counts_bulk(
+    db: Session, students: list[Student], as_of_date: datetime.date, lookback_days: int = 21
+) -> dict[int, int]:
+    """То же, что `consecutive_unexcused_count`, но сразу для списка студентов
+    — было ~4 запроса на каждого из под-тысячи студентов колледжа на экране
+    «Группа риска» (см. TODO.md 5: самый тяжёлый случай N+1 из ревью, 3959
+    запросов). Группируем по study_group_id: учебные дни для периода
+    одинаковы у всех студентов одной группы, а отметки можно выбрать одним
+    запросом на группу вместо одного на студента."""
+    window_end = as_of_date - datetime.timedelta(days=1)
+    window_start = as_of_date - datetime.timedelta(days=lookback_days)
+
+    by_group: dict[int | None, list[Student]] = {}
+    for student in students:
+        by_group.setdefault(student.study_group_id, []).append(student)
+
+    result: dict[int, int] = {}
+    for study_group_id, group_students in by_group.items():
+        study_days = calendar_service.study_days_between(
+            db, window_start, window_end, study_group_id=study_group_id
+        )
+        if not study_days:
+            for student in group_students:
+                result[student.id] = 0
+            continue
+        study_days.sort(reverse=True)
+
+        student_ids = [s.id for s in group_students]
+        marks = db.execute(
+            select(AttendanceMark.student_id, AttendanceMark.date, MarkCode.code)
+            .join(MarkCode, MarkCode.id == AttendanceMark.mark_code_id)
+            .where(AttendanceMark.student_id.in_(student_ids), AttendanceMark.date.in_(study_days))
+        ).all()
+        marks_by_student: dict[int, dict[datetime.date, str]] = {}
+        for row in marks:
+            marks_by_student.setdefault(row.student_id, {})[row.date] = row.code
+
+        for student in group_students:
+            result[student.id] = _streak_from_marks(study_days, marks_by_student.get(student.id, {}))
+
+    return result
 
 
 def count_manual_exceptions(db: Session, study_group_id: int, date: datetime.date) -> int:
@@ -187,7 +244,7 @@ def get_roster(db: Session, study_group_id: int, date: datetime.date) -> dict:
                 mark = draft
                 source_is_draft = True
 
-        risk_streak = consecutive_unexcused_count(db, student.id, date)
+        risk_streak = consecutive_unexcused_count(db, student.id, date, study_group_id=student.study_group_id)
 
         last_edited_by = None
         last_edited_at = None
@@ -282,7 +339,7 @@ def submit_day(
         mark_code = mark_codes[entry["mark_code"]]
 
         basis_reference = entry.get("basis_reference")
-        basis_status, basis_deadline = _compute_basis(basis_reference)
+        basis_status = _compute_basis(basis_reference)
 
         if existing is not None:
             old_code = existing.mark_code.code
@@ -290,7 +347,6 @@ def submit_day(
             existing.comment = entry.get("comment")
             existing.basis_reference = basis_reference
             existing.basis_status = basis_status
-            existing.basis_deadline = basis_deadline
             existing.source = MarkSource.MANUAL
             existing.updated_by_user_id = user.id
             existing.updated_at = utcnow()
@@ -304,7 +360,6 @@ def submit_day(
                 source=MarkSource.MANUAL,
                 basis_reference=basis_reference,
                 basis_status=basis_status,
-                basis_deadline=basis_deadline,
                 created_by_user_id=user.id,
             )
             db.add(new_mark)
@@ -374,7 +429,7 @@ def create_absence_period(
         db, date_from, date_to, study_group_id=student.study_group_id if student else None
     )
 
-    basis_status, basis_deadline = _compute_basis(basis_reference)
+    basis_status = _compute_basis(basis_reference)
 
     for day in study_days:
         existing = db.execute(
@@ -390,7 +445,6 @@ def create_absence_period(
             existing.absence_period_id = period.id
             existing.basis_reference = basis_reference
             existing.basis_status = basis_status
-            existing.basis_deadline = basis_deadline
             existing.updated_by_user_id = user.id
             existing.updated_at = utcnow()
             log_action(
@@ -406,7 +460,6 @@ def create_absence_period(
                 absence_period_id=period.id,
                 basis_reference=basis_reference,
                 basis_status=basis_status,
-                basis_deadline=basis_deadline,
                 created_by_user_id=user.id,
             )
             db.add(new_mark)

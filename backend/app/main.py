@@ -58,6 +58,10 @@ async def lifespan(app: FastAPI):
 _docs_enabled = settings.environment == "development"
 app = FastAPI(
     title=settings.app_name,
+    # Держим в паре с "version" в frontend/package.json — единого источника
+    # правды нет (backend/frontend собираются как разные стадии одного
+    # Dockerfile, root-level VERSION-файл сюда не даёт выигрыша, см.
+    # TODO.md 5), поэтому при бампе версии меняйте оба места.
     version="1.3.0",
     lifespan=lifespan,
     docs_url="/docs" if _docs_enabled else None,
@@ -127,18 +131,33 @@ def resolve_static_file(requested_path: str, static_dir: Path) -> Path | None:
     return None
 
 
+class _ImmutableStaticFiles(StaticFiles):
+    """Файлы в /assets у Vite именованы с хэшем содержимого — при изменении
+    контента меняется и имя файла, так что старую версию можно кэшировать
+    вечно (см. TODO.md 5: без этого CDN/браузер мог держать index.html без
+    Cache-Control и после деплоя ссылаться на уже удалённые ассеты)."""
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
+
+
 if STATIC_DIR.is_dir():
     assets_dir = STATIC_DIR / "assets"
     if assets_dir.is_dir():
-        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+        app.mount("/assets", _ImmutableStaticFiles(directory=assets_dir), name="assets")
 
     # SPA-фоллбэк: отдаём реальный файл, если он есть (favicon, лого,
     # манифест), иначе index.html — дальше маршрутизацией занимается
     # React Router на клиенте. Регистрируется последним, поэтому не
     # перехватывает уже объявленные выше API-маршруты.
+    #
+    # index.html (и прочие файлы вне /assets) — без долгого кэша: иначе
+    # браузер после деплоя может взять старую версию, ссылающуюся на уже
+    # удалённые ассеты, и получить белый экран (см. TODO.md 5).
     @app.get("/{full_path:path}")
     async def spa_fallback(full_path: str):
         candidate = resolve_static_file(full_path, STATIC_DIR)
-        if candidate is not None:
-            return FileResponse(candidate)
-        return FileResponse(STATIC_DIR / "index.html")
+        target = candidate if candidate is not None else STATIC_DIR / "index.html"
+        return FileResponse(target, headers={"Cache-Control": "no-cache"})

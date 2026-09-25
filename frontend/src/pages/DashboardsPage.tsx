@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { downloadFile } from "../api/client";
 import { api, ApiError } from "../api/client";
-import { useAuth } from "../auth/AuthContext";
+import { useAuth } from "../auth/useAuth";
 import AssignCuratorModal from "../components/AssignCuratorModal";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import type {
