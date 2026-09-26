@@ -78,6 +78,21 @@ def scope_department_id(user: User, requested: int | None) -> int | None:
     return requested
 
 
+MAX_DATE_RANGE_DAYS = 366 * 2
+
+
+def validate_date_range(
+    date_from: datetime.date, date_to: datetime.date, max_days: int = MAX_DATE_RANGE_DAYS
+) -> None:
+    """Витрины/экспорт принимали любой диапазон дат без ограничения — запрос
+    за 100 лет клал бы сервер (см. TODO.md 5). 2 года с запасом покрывает
+    любой практический сценарий (учебный год + межгодовое сравнение)."""
+    if date_from > date_to:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "date_from не может быть позже date_to")
+    if (date_to - date_from).days > max_days:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Диапазон дат не может превышать {max_days} дней")
+
+
 def get_curator_group_ids(db: Session, user: User, on_date: datetime.date) -> list[int]:
     """Группы, которые ведёт пользователь (сам или как заместитель) на указанную дату."""
     assignments = (

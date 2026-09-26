@@ -11,6 +11,7 @@ import logging
 
 from aiogram import Bot
 
+from app.core.time import today_local
 from app.db import base as db_base
 from app.services import notification_service
 from bot import keyboards, messages
@@ -41,7 +42,7 @@ def _groups_needing_reminder(today: datetime.date):
 
 
 async def send_reminders(bot: Bot, kind: str, is_second: bool, today: datetime.date | None = None) -> None:
-    today = today or datetime.date.today()
+    today = today or today_local()
     # Раньше здесь была общая на весь колледж проверка "сегодня учебный
     # день?" — по субботам она либо слала напоминания всем (включая
     # курсы без занятий), либо не слала никому, включая 1 курс, у
@@ -93,7 +94,7 @@ def _dept_head_payloads(today: datetime.date) -> list[tuple[int, str, str]]:
 
 
 async def send_dept_head_digest(bot: Bot, today: datetime.date | None = None) -> None:
-    today = today or datetime.date.today()
+    today = today or today_local()
     payloads = await asyncio.to_thread(_dept_head_payloads, today)
 
     db = db_base.SessionLocal()
@@ -123,7 +124,7 @@ def _edu_department_payload(today: datetime.date) -> tuple[str, list[tuple[int, 
 
 
 async def send_edu_department_digest(bot: Bot, today: datetime.date | None = None) -> None:
-    today = today or datetime.date.today()
+    today = today or today_local()
     text, recipients = await asyncio.to_thread(_edu_department_payload, today)
 
     db = db_base.SessionLocal()
@@ -152,7 +153,7 @@ def _leadership_payload(today: datetime.date) -> tuple[str, list[tuple[int, str]
 
 
 async def send_leadership_digest(bot: Bot, today: datetime.date | None = None) -> None:
-    today = today or datetime.date.today()
+    today = today or today_local()
     text, recipients = await asyncio.to_thread(_leadership_payload, today)
 
     db = db_base.SessionLocal()
@@ -178,5 +179,5 @@ async def cleanup_old_records(bot: Bot | None = None, today: datetime.date | Non
     уведомления, записи notification_log и использованные/просроченные
     Telegram-токены копились бессрочно. `bot` не используется, но
     build_scheduler передаёт его во все задания одинаково."""
-    today = today or datetime.date.today()
+    today = today or today_local()
     await asyncio.to_thread(_cleanup, today)

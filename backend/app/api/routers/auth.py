@@ -8,7 +8,7 @@ from app.core.config import get_settings
 from app.core.password_policy import validate_password_strength
 from app.core.rate_limit import check_rate_limit, client_ip
 from app.core.security import create_access_token, hash_password, verify_password
-from app.core.time import utcnow
+from app.core.time import today_local, utcnow
 from app.db.session import get_db
 from app.models import CuratorAssignment, User
 from app.schemas.auth import (
@@ -72,7 +72,7 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
 
 @router.get("/me", response_model=MeResponse)
 def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    today = datetime.date.today()
+    today = today_local()
     assignments = db.query(CuratorAssignment).filter(CuratorAssignment.user_id == user.id).all()
     groups = [
         MeGroupInfo(id=a.study_group.id, code=a.study_group.code, course=a.study_group.course)

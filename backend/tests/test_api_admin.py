@@ -206,6 +206,79 @@ def test_group_list_shows_and_can_remove_deputy(client, admin_headers, imported,
     # исчезновение из /admin/groups в тот же день.
     from app.models import CuratorAssignment
 
+    from app.core.time import today_local
+
     assignment = db.get(CuratorAssignment, deputy_assignment_id)
     assert assignment.end_date is not None
-    assert assignment.end_date <= datetime.date.today()
+    assert assignment.end_date <= today_local()
+
+
+def test_audit_log_records_ip_address(client, admin_headers, imported, db):
+    """Раньше audit_log.ip_address нигде не заполнялся (см. TODO.md 5)."""
+    from app.models import AuditLog, MarkCode
+
+    mark_code = db.query(MarkCode).first()
+    r = client.patch(
+        f"/admin/mark-codes/{mark_code.id}", headers=admin_headers,
+        json={"counts_as_present": not mark_code.counts_as_present},
+    )
+    assert r.status_code == 200
+
+    entry = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "mark_code.flag_change", AuditLog.entity_id == str(mark_code.id))
+        .one()
+    )
+    assert entry.ip_address is not None
+
+
+def test_previously_unlogged_admin_actions_now_write_audit_log(client, admin_headers, imported, db):
+    """Раньше create_department/update_department/create_group/create_student/
+    create_user/update_leadership_digest не писали в audit_log вообще
+    (см. TODO.md 5)."""
+    from app.models import AuditLog, Department, StudyGroup, User
+
+    r = client.post("/admin/departments", headers=admin_headers, json={"name": "Аудит-тест отделение"})
+    assert r.status_code == 201
+    dept_id = r.json()["id"]
+    assert db.query(AuditLog).filter(AuditLog.action == "department.create", AuditLog.entity_id == str(dept_id)).first()
+
+    r = client.patch(f"/admin/departments/{dept_id}", headers=admin_headers, json={"name": "Аудит-тест 2"})
+    assert r.status_code == 200
+    assert db.query(AuditLog).filter(AuditLog.action == "department.rename", AuditLog.entity_id == str(dept_id)).first()
+
+    r = client.post(
+        "/admin/groups", headers=admin_headers,
+        json={"code": "AUDIT-GRP", "course": 1, "department_id": dept_id, "study_form": None},
+    )
+    assert r.status_code == 201
+    group_id = r.json()["id"]
+    assert db.query(AuditLog).filter(AuditLog.action == "group.create", AuditLog.entity_id == str(group_id)).first()
+
+    r = client.post(
+        "/admin/students", headers=admin_headers,
+        json={
+            "last_name": "Аудит", "first_name": "Тест", "middle_name": None,
+            "study_group_id": group_id, "enrolled_at": "2026-09-01",
+        },
+    )
+    assert r.status_code == 201
+    student_id = r.json()["id"]
+    assert db.query(AuditLog).filter(AuditLog.action == "student.create", AuditLog.entity_id == str(student_id)).first()
+
+    r = client.post(
+        "/admin/users", headers=admin_headers,
+        json={"username": "audituser", "full_name": "Аудит Юзер", "role": "curator", "department_id": dept_id},
+    )
+    assert r.status_code == 201
+    user_id = r.json()["id"]
+    assert db.query(AuditLog).filter(AuditLog.action == "user.create", AuditLog.entity_id == str(user_id)).first()
+
+    r = client.patch(
+        f"/admin/users/{user_id}/leadership-digest", headers=admin_headers,
+        json={"receives_leadership_digest": True},
+    )
+    assert r.status_code == 200
+    assert db.query(AuditLog).filter(
+        AuditLog.action == "user.leadership_digest_change", AuditLog.entity_id == str(user_id)
+    ).first()

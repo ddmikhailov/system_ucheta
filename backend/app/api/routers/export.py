@@ -4,7 +4,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import assert_can_access_group, get_current_user, require_management, scope_department_id
+from app.api.deps import (
+    assert_can_access_group,
+    get_current_user,
+    require_management,
+    scope_department_id,
+    validate_date_range,
+)
 from app.db.session import get_db
 from app.models import StudyGroup, User
 from app.services import export_service
@@ -20,6 +26,7 @@ def export_excel(
     user: User = Depends(require_management),
     db: Session = Depends(get_db),
 ):
+    validate_date_range(date_from, date_to)
     scope = scope_department_id(user, department_id)
     content = export_service.build_summary_workbook(db, date_from, date_to, scope)
     filename = f"itog_{date_from}_{date_to}.xlsx"
@@ -38,6 +45,7 @@ def export_pdf(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    validate_date_range(date_from, date_to)
     assert_can_access_group(db, user, study_group_id, date_to)
     if db.get(StudyGroup, study_group_id) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Группа не найдена")

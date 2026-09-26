@@ -11,6 +11,8 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.routers import admin, auth, curator, dashboards, export, notifications
 from app.core.config import get_settings
+from app.core.rate_limit import client_ip
+from app.core.request_context import set_client_ip
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -83,6 +85,10 @@ async def security_headers(request, call_next):
     """Токен хранится в localStorage (а не в httpOnly-cookie), поэтому
     защита от кликджекинга/XSS-инъекций через заголовки особенно важна —
     раньше их не было вообще (см. TODO.md 2)."""
+    # IP запроса — в contextvar, чтобы log_action() мог его подставить в
+    # audit_log без изменения сигнатуры два десятка вызовов в роутерах
+    # (см. TODO.md 5: ip_address раньше нигде не заполнялся).
+    set_client_ip(client_ip(request))
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"

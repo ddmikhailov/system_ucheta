@@ -221,4 +221,9 @@ def curator_group(db, curator_user):
 
 @pytest.fixture()
 def today() -> datetime.date:
-    return datetime.date.today()
+    # Приложение теперь везде считает "сегодня" по NOTIFICATION_TIMEZONE, а не
+    # по времени сервера (см. TODO.md 3) — тесты должны сверяться с тем же
+    # понятием "сегодня", иначе изредка расходились бы около полуночи UTC.
+    from app.core.time import today_local
+
+    return today_local()

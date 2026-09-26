@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import assert_can_access_group, get_current_user, get_curator_group_ids
 from app.core.config import get_settings
+from app.core.time import today_local
 from app.db.session import get_db
 from app.models import DaySubmission, DayType, MarkCode, Student, StudyGroup, User
 from app.schemas.curator import (
@@ -45,7 +46,7 @@ def mark_codes(user: User = Depends(get_current_user), db: Session = Depends(get
 
 @router.get("/groups", response_model=list[GroupSummary])
 def my_groups(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    today = datetime.date.today()
+    today = today_local()
     group_ids = get_curator_group_ids(db, user, today)
     result = []
     for group_id in group_ids:
@@ -136,7 +137,7 @@ def month_status(
         date_to = datetime.date(year, 12, 31)
     else:
         date_to = datetime.date(year, month + 1, 1) - datetime.timedelta(days=1)
-    today = datetime.date.today()
+    today = today_local()
     if date_to > today:
         date_to = today
 
@@ -187,7 +188,7 @@ def create_absence_period(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Дата окончания раньше даты начала")
     if (payload.date_to - payload.date_from).days > 366:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Период не может быть длиннее года")
-    today = datetime.date.today()
+    today = today_local()
     if payload.date_to > today:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Период не может уходить в будущее")
 

@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 
+from app.core.request_context import get_client_ip
 from app.models import AuditLog, User
 
 
@@ -13,6 +14,9 @@ def log_action(
     new_value: str | None = None,
     ip_address: str | None = None,
 ) -> None:
+    # ip_address раньше нигде не передавался ни одним из вызывающих кодов
+    # (см. TODO.md 5) — по умолчанию берём его из текущего запроса, вызывающий
+    # код может явно переопределить (например, из планировщика, где запроса нет).
     entry = AuditLog(
         user_id=user.id if user else None,
         action=action,
@@ -20,6 +24,6 @@ def log_action(
         entity_id=entity_id,
         old_value=old_value,
         new_value=new_value,
-        ip_address=ip_address,
+        ip_address=ip_address if ip_address is not None else get_client_ip(),
     )
     db.add(entry)

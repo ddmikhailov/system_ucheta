@@ -6,6 +6,7 @@ from aiogram.filters import CommandObject, CommandStart
 from aiogram.types import CallbackQuery, Message
 
 from app.api.deps import get_curator_group_ids
+from app.core.time import today_local
 from app.db.base import SessionLocal
 from app.models import StudyGroup, User
 from app.services import attendance_service
@@ -74,7 +75,7 @@ async def handle_all_present(callback: CallbackQuery) -> None:
             return
 
         try:
-            attendance_service.submit_day(db, group_id, date, [], user, today=datetime.date.today())
+            attendance_service.submit_day(db, group_id, date, [], user, today=today_local())
         except attendance_service.BackdateNotAllowed as exc:
             await callback.answer(str(exc), show_alert=True)
             return

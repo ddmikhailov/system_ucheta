@@ -5,6 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_admin, require_management, require_reference_editor, scope_department_id
+from app.core.time import today_local
 from app.db.session import get_db
 from app.models import (
     AcademicCalendarDay,
@@ -63,9 +64,10 @@ def list_departments(db: Session = Depends(get_db)):
     "/departments",
     response_model=DepartmentRead,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_admin)],
 )
-def create_department(payload: DepartmentCreate, db: Session = Depends(get_db)):
+def create_department(
+    payload: DepartmentCreate, user: User = Depends(require_admin), db: Session = Depends(get_db),
+):
     dept = Department(name=payload.name)
     db.add(dept)
     try:
@@ -74,18 +76,21 @@ def create_department(payload: DepartmentCreate, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "Отделение с таким названием уже существует")
     db.refresh(dept)
+    log_action(db, user, "department.create", "department", str(dept.id), new_value=dept.name)
+    db.commit()
     return dept
 
 
-@router.patch(
-    "/departments/{department_id}",
-    response_model=DepartmentRead,
-    dependencies=[Depends(require_admin)],
-)
-def update_department(department_id: int, payload: DepartmentUpdate, db: Session = Depends(get_db)):
+@router.patch("/departments/{department_id}", response_model=DepartmentRead)
+def update_department(
+    department_id: int, payload: DepartmentUpdate,
+    user: User = Depends(require_admin), db: Session = Depends(get_db),
+):
     dept = db.get(Department, department_id)
     if dept is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Отделение не найдено")
+    old_name = dept.name
+    old_active = dept.is_active
     if payload.name is not None:
         dept.name = payload.name
     if payload.is_active is not None:
@@ -96,11 +101,19 @@ def update_department(department_id: int, payload: DepartmentUpdate, db: Session
         db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "Отделение с таким названием уже существует")
     db.refresh(dept)
+    if dept.name != old_name:
+        log_action(db, user, "department.rename", "department", str(dept.id), old_value=old_name, new_value=dept.name)
+    if dept.is_active != old_active:
+        log_action(
+            db, user, "department.archive" if not dept.is_active else "department.restore",
+            "department", str(dept.id),
+        )
+    db.commit()
     return dept
 
 
 def _group_read(g: StudyGroup, today: datetime.date | None = None) -> StudyGroupRead:
-    today = today or datetime.date.today()
+    today = today or today_local()
     # Архивный куратор не должен продолжать числиться куратором группы (см.
     # TODO.md 3) — иначе группа не попадает в «Вакантные», хотя ей на самом
     # деле некому заниматься.
@@ -142,7 +155,7 @@ def list_groups(
     user: User = Depends(require_management),
     db: Session = Depends(get_db),
 ):
-    today = datetime.date.today()
+    today = today_local()
     scope = scope_department_id(user, department_id)
     q = db.query(StudyGroup)
     if scope is not None:
@@ -151,11 +164,10 @@ def list_groups(
     return [_group_read(g, today) for g in groups]
 
 
-@router.post(
-    "/groups", response_model=StudyGroupRead, status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_admin)],
-)
-def create_group(payload: StudyGroupCreate, db: Session = Depends(get_db)):
+@router.post("/groups", response_model=StudyGroupRead, status_code=status.HTTP_201_CREATED)
+def create_group(
+    payload: StudyGroupCreate, user: User = Depends(require_admin), db: Session = Depends(get_db),
+):
     group = StudyGroup(**payload.model_dump())
     db.add(group)
     try:
@@ -164,6 +176,8 @@ def create_group(payload: StudyGroupCreate, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "Группа с таким кодом уже существует")
     db.refresh(group)
+    log_action(db, user, "group.create", "study_group", str(group.id), new_value=group.code)
+    db.commit()
     return _group_read(group)
 
 
@@ -260,15 +274,16 @@ def _assert_can_manage_student(db: Session, user: User, student: Student) -> Non
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Студент не из вашего отделения")
 
 
-@router.post(
-    "/students", response_model=StudentRead, status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_admin)],
-)
-def create_student(payload: StudentCreate, db: Session = Depends(get_db)):
+@router.post("/students", response_model=StudentRead, status_code=status.HTTP_201_CREATED)
+def create_student(
+    payload: StudentCreate, user: User = Depends(require_admin), db: Session = Depends(get_db),
+):
     student = Student(**payload.model_dump())
     db.add(student)
     db.commit()
     db.refresh(student)
+    log_action(db, user, "student.create", "student", str(student.id), new_value=student.full_name)
+    db.commit()
     return StudentRead(
         id=student.id, full_name=student.full_name, study_group_id=student.study_group_id,
         status=student.status, enrolled_at=student.enrolled_at, left_at=student.left_at,
@@ -467,7 +482,7 @@ def end_curator_assignment(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Назначение не найдено")
     _assert_can_manage_group(user, assignment.study_group)
 
-    today = datetime.date.today()
+    today = today_local()
     if assignment.end_date is None or assignment.end_date > today:
         assignment.end_date = today
     log_action(db, user, "curator_assignment.end", "curator_assignment", str(assignment.id))
@@ -587,18 +602,24 @@ def create_user(payload: UserCreate, admin: User = Depends(require_admin), db: S
     db.add(user)
     db.commit()
     db.refresh(user)
+    log_action(db, admin, "user.create", "user", str(user.id), new_value=user.username)
+    db.commit()
     return _user_read(user)
 
 
-@router.patch(
-    "/users/{user_id}/leadership-digest", response_model=UserRead,
-    dependencies=[Depends(require_admin)],
-)
-def update_leadership_digest(user_id: int, payload: UserUpdateLeadershipDigest, db: Session = Depends(get_db)):
+@router.patch("/users/{user_id}/leadership-digest", response_model=UserRead)
+def update_leadership_digest(
+    user_id: int, payload: UserUpdateLeadershipDigest,
+    admin: User = Depends(require_admin), db: Session = Depends(get_db),
+):
     target = db.get(User, user_id)
     if target is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Пользователь не найден")
     target.receives_leadership_digest = payload.receives_leadership_digest
+    log_action(
+        db, admin, "user.leadership_digest_change", "user", str(target.id),
+        new_value=str(payload.receives_leadership_digest),
+    )
     db.commit()
     db.refresh(target)
     return _user_read(target)
@@ -664,7 +685,7 @@ def update_user(
                 # и оставаться "текущим" куратором группы (см. TODO.md 2/3).
                 target.telegram_chat_id = None
                 target.telegram_linked_at = None
-                today = datetime.date.today()
+                today = today_local()
                 for assignment in (
                     db.query(CuratorAssignment)
                     .filter(CuratorAssignment.user_id == target.id)

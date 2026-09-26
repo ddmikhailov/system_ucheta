@@ -3,7 +3,7 @@ import datetime
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.time import utcnow
+from app.core.time import today_local, utcnow
 from app.models import (
     AbsencePeriod,
     AttendanceMark,
@@ -70,7 +70,7 @@ def notify_if_late_edit(
 ) -> None:
     if user.role.code not in (RoleCode.CURATOR, RoleCode.DEPUTY_CURATOR):
         return
-    today = today or datetime.date.today()
+    today = today or today_local()
     # Дневная гранулярность, как и everywhere в этом модуле (can_edit_date,
     # is_on_time): "больше 48 часов" здесь — день до вчерашнего и раньше.
     # Ровно "вчера" (до 48 ч) уведомление не создаёт.
@@ -289,7 +289,7 @@ def submit_day(
     user: User,
     today: datetime.date | None = None,
 ) -> DaySubmission:
-    today = today or datetime.date.today()
+    today = today or today_local()
     if not can_edit_date(user, date, today):
         raise BackdateNotAllowed(f"Правка за {date} недоступна: это ещё не наступивший день.")
 

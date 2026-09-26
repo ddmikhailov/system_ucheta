@@ -226,3 +226,28 @@ def test_curator_discipline_and_day_overview_include_responsible_name(client, ad
     assert r.status_code == 200
     row = next(x for x in r.json() if x["study_group_id"] == curator_group.id)
     assert row["responsible_name"] == curator_user.full_name
+
+
+def test_dynamics_rejects_inverted_date_range(client, admin_headers, today):
+    """Раньше диапазон дат в витринах/экспорте не проверялся вообще (см. TODO.md 5)."""
+    r = client.get(
+        "/dashboards/dynamics", headers=admin_headers,
+        params={"date_from": today.isoformat(), "date_to": (today - datetime.timedelta(days=1)).isoformat()},
+    )
+    assert r.status_code == 400
+
+
+def test_dynamics_rejects_huge_date_range(client, admin_headers, today):
+    r = client.get(
+        "/dashboards/dynamics", headers=admin_headers,
+        params={"date_from": "2000-01-01", "date_to": today.isoformat()},
+    )
+    assert r.status_code == 400
+
+
+def test_export_excel_rejects_huge_date_range(client, admin_headers, today):
+    r = client.get(
+        "/export/excel", headers=admin_headers,
+        params={"date_from": "1900-01-01", "date_to": today.isoformat()},
+    )
+    assert r.status_code == 400
