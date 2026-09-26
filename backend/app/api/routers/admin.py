@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_admin, require_management, require_reference_editor, scope_department_id
+from app.api.deps import require_full_access, require_management, require_reference_editor, scope_department_id
+from app.core import policies
 from app.core.time import today_local
 from app.db.session import get_db
 from app.models import (
@@ -68,7 +69,7 @@ def list_departments(db: Session = Depends(get_db)):
     status_code=status.HTTP_201_CREATED,
 )
 def create_department(
-    payload: DepartmentCreate, user: User = Depends(require_admin), db: Session = Depends(get_db),
+    payload: DepartmentCreate, user: User = Depends(require_full_access), db: Session = Depends(get_db),
 ):
     dept = Department(name=payload.name)
     db.add(dept)
@@ -86,7 +87,7 @@ def create_department(
 @router.patch("/departments/{department_id}", response_model=DepartmentRead)
 def update_department(
     department_id: int, payload: DepartmentUpdate,
-    user: User = Depends(require_admin), db: Session = Depends(get_db),
+    user: User = Depends(require_full_access), db: Session = Depends(get_db),
 ):
     dept = db.get(Department, department_id)
     if dept is None:
@@ -146,9 +147,7 @@ def _group_read(g: StudyGroup, today: datetime.date | None = None) -> StudyGroup
     )
 
 
-def _assert_can_manage_group(user: User, group: StudyGroup) -> None:
-    if RoleCode(user.role.code) == RoleCode.DEPT_HEAD and group.department_id != user.department_id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Группа не относится к вашему отделению")
+_assert_can_manage_group = policies.assert_can_manage_group
 
 
 @router.get("/groups", response_model=list[StudyGroupRead])
@@ -168,7 +167,7 @@ def list_groups(
 
 @router.post("/groups", response_model=StudyGroupRead, status_code=status.HTTP_201_CREATED)
 def create_group(
-    payload: StudyGroupCreate, user: User = Depends(require_admin), db: Session = Depends(get_db),
+    payload: StudyGroupCreate, user: User = Depends(require_full_access), db: Session = Depends(get_db),
 ):
     group = StudyGroup(**payload.model_dump())
     db.add(group)
@@ -286,17 +285,12 @@ def _redact_audit_history(db: Session, entity_type: str, entity_id: str) -> None
     ).update({"old_value": "[обезличено]", "new_value": "[обезличено]"}, synchronize_session=False)
 
 
-def _assert_can_manage_student(db: Session, user: User, student: Student) -> None:
-    if RoleCode(user.role.code) != RoleCode.DEPT_HEAD:
-        return
-    group = db.get(StudyGroup, student.study_group_id)
-    if group is None or group.department_id != user.department_id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Студент не из вашего отделения")
+_assert_can_manage_student = policies.assert_can_manage_student
 
 
 @router.post("/students", response_model=StudentRead, status_code=status.HTTP_201_CREATED)
 def create_student(
-    payload: StudentCreate, user: User = Depends(require_admin), db: Session = Depends(get_db),
+    payload: StudentCreate, user: User = Depends(require_full_access), db: Session = Depends(get_db),
 ):
     student = Student(**payload.model_dump())
     db.add(student)
@@ -523,72 +517,13 @@ def _user_read(u: User) -> UserRead:
     )
 
 
-# Права на управление учётками (пароль/логин/ФИО/архив/удаление) и на смену
-# ролей — см. TODO.md 1.2/1.3/1.5. Правило:
-#   - admin — управляет кем угодно, назначает любую роль;
-#   - tutor — как admin, но не может трогать учётки admin/tutor (иначе один
-#     тьютор мог бы захватить учётку другого тьютора или администратора) и
-#     не может менять роли вообще;
-#   - dept_head — только curator/deputy_curator своего отделения, и может
-#     назначать только роли curator/deputy_curator/dept_head (не может
-#     повысить кого-то до admin/tutor/edu_department или тронуть чужого
-#     dept_head/admin/tutor/edu_department, даже в своём отделении);
-#   - edu_department — не управляет учётками вообще (раньше могло сбросить
-#     пароль администратору — TODO.md 1.2).
-_ELEVATED_ROLES = {RoleCode.ADMIN.value, RoleCode.TUTOR.value}
-_DEPT_HEAD_MANAGEABLE_ROLES = {RoleCode.CURATOR.value, RoleCode.DEPUTY_CURATOR.value}
-_DEPT_HEAD_ASSIGNABLE_ROLES = {RoleCode.CURATOR.value, RoleCode.DEPUTY_CURATOR.value, RoleCode.DEPT_HEAD.value}
-# Роли, которым обязательно нужно отделение, и роли, которым оно не нужно
-# (см. TODO.md 1.4: без этого зав. отделением/куратор без отделения получает
-# фактически доступ ко всему колледжу, т.к. фильтры по department_id=None
-# просто не применяются).
-_DEPARTMENT_REQUIRED_ROLES = {RoleCode.DEPT_HEAD.value, RoleCode.CURATOR.value, RoleCode.DEPUTY_CURATOR.value}
-_DEPARTMENT_FORBIDDEN_ROLES = {RoleCode.ADMIN.value, RoleCode.TUTOR.value, RoleCode.EDU_DEPARTMENT.value}
-
-
-def _assert_can_manage_user(admin: User, target: User) -> None:
-    if target.id == admin.id:
-        return
-    admin_role = RoleCode(admin.role.code)
-    if admin_role == RoleCode.ADMIN:
-        return
-    if admin_role == RoleCode.TUTOR:
-        if target.role.code in _ELEVATED_ROLES:
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN, "Только администратор может управлять учётками администратора/тьютора"
-            )
-        return
-    if admin_role == RoleCode.DEPT_HEAD:
-        if admin.department_id is None:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "У вас не задано отделение — обратитесь к администратору")
-        if target.department_id != admin.department_id:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Пользователь не относится к вашему отделению")
-        if target.role.code not in _DEPT_HEAD_MANAGEABLE_ROLES:
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN, "Зав. отделением может управлять только кураторами и заместителями"
-            )
-        return
-    raise HTTPException(status.HTTP_403_FORBIDDEN, "Недостаточно прав для управления пользователями")
-
-
-def _assert_can_assign_role(admin: User, new_role_code: str) -> None:
-    admin_role = RoleCode(admin.role.code)
-    if admin_role == RoleCode.ADMIN:
-        return
-    if admin_role == RoleCode.DEPT_HEAD and new_role_code in _DEPT_HEAD_ASSIGNABLE_ROLES:
-        return
-    raise HTTPException(status.HTTP_403_FORBIDDEN, "Недостаточно прав для назначения этой роли")
-
-
-def _resolve_department_for_role(role_code: str, requested_department_id: int | None) -> int | None:
-    """Отделение проставляется только там, где оно осмысленно (см. TODO.md
-    1.3/1.4): у admin/tutor/edu_department его вообще не должно быть — форма
-    создания пользователя раньше подставляла отделение всем без разбора."""
-    if role_code in _DEPARTMENT_FORBIDDEN_ROLES:
-        return None
-    if role_code in _DEPARTMENT_REQUIRED_ROLES and requested_department_id is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Для этой роли нужно указать отделение")
-    return requested_department_id
+# Правила «кто чем может управлять» — в app/core/policies.py (см. TODO.md 5:
+# раньше были размазаны по этому файлу). Алиасы ниже — чтобы не переименовывать
+# два десятка вызовов в этом роутере.
+_assert_can_manage_user = policies.assert_can_manage_user
+_assert_can_assign_role = policies.assert_can_assign_role
+_resolve_department_for_role = policies.resolve_department_for_role
+_ELEVATED_ROLES = policies.ELEVATED_ROLES
 
 
 @router.get("/users", response_model=list[UserRead])
@@ -602,7 +537,7 @@ def list_users(user: User = Depends(require_management), db: Session = Depends(g
 
 
 @router.post("/users", response_model=UserRead, status_code=status.HTTP_201_CREATED)
-def create_user(payload: UserCreate, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+def create_user(payload: UserCreate, admin: User = Depends(require_full_access), db: Session = Depends(get_db)):
     role = db.query(Role).filter(Role.code == payload.role).one_or_none()
     if role is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Неизвестная роль")
@@ -630,7 +565,7 @@ def create_user(payload: UserCreate, admin: User = Depends(require_admin), db: S
 @router.patch("/users/{user_id}/leadership-digest", response_model=UserRead)
 def update_leadership_digest(
     user_id: int, payload: UserUpdateLeadershipDigest,
-    admin: User = Depends(require_admin), db: Session = Depends(get_db),
+    admin: User = Depends(require_full_access), db: Session = Depends(get_db),
 ):
     target = db.get(User, user_id)
     if target is None:

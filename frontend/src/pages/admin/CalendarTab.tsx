@@ -2,10 +2,7 @@ import { useEffect, useState } from "react";
 import { api, ApiError } from "../../api/client";
 import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { CalendarDay, GroupCalendarOverride, StudyGroupAdmin } from "../../api/types";
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+import { todayIso } from "../../utils/date";
 
 function monthsAheadIso(n: number): string {
   const d = new Date();

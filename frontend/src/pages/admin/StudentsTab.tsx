@@ -3,10 +3,7 @@ import type { FormEvent } from "react";
 import { api, ApiError } from "../../api/client";
 import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { DeleteResult, StudentAdmin, StudyGroupAdmin } from "../../api/types";
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+import { todayIso } from "../../utils/date";
 
 const STATUS_LABELS: Record<string, string> = {
   studying: "Учится",

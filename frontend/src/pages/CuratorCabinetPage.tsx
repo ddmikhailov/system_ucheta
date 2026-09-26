@@ -6,10 +6,7 @@ import MarkCommentModal from "../components/MarkCommentModal";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import { scrollToTop } from "../utils/scroll";
 import type { GroupSummary, MarkCodeOption, MonthDayStatus, RosterResponse } from "../api/types";
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+import { todayIso } from "../utils/date";
 
 // Раньше подсказка точки в полоске месяца была просто ISO-датой (см. TODO.md 4).
 const MONTH_DOT_TITLES: Record<string, string> = {

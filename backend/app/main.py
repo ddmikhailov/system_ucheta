@@ -11,12 +11,14 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.routers import admin, auth, curator, dashboards, export, notifications
 from app.core.config import get_settings
+from app.core.observability import init_sentry
 from app.core.rate_limit import client_ip
 from app.core.request_context import set_client_ip
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 settings = get_settings()
+init_sentry(settings)
 
 # В сборке Docker сюда копируется собранный frontend/dist (см. корневой
 # Dockerfile). В локальной разработке (frontend — отдельный `npm run dev`

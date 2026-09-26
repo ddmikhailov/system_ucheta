@@ -71,6 +71,12 @@ class Settings(BaseSettings):
     # Порог для "проблемных групп" в сводке воспитательному отделу.
     problem_group_percent_threshold: float = 90.0
 
+    # Мониторинг ошибок (см. TODO.md 5) — без DSN просто выключен, ничего
+    # не отправляется и не падает: раньше 500-ки видел только тот, кто сам
+    # догадался посмотреть логи контейнера. Завести проект на sentry.io и
+    # прописать DSN сюда — отдельное организационное решение, не код.
+    sentry_dsn: str = ""
+
     @property
     def telegram_enabled(self) -> bool:
         return bool(self.telegram_bot_token)

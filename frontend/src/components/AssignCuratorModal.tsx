@@ -2,10 +2,7 @@ import { useState } from "react";
 import { api, ApiError } from "../api/client";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import type { UserAdmin } from "../api/types";
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+import { todayIso } from "../utils/date";
 
 export default function AssignCuratorModal({
   groupId,

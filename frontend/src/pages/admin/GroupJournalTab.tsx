@@ -6,10 +6,7 @@ import MarkCommentModal from "../../components/MarkCommentModal";
 import { useEscapeKey } from "../../hooks/useEscapeKey";
 import { scrollToTop } from "../../utils/scroll";
 import type { MarkCodeOption, MonthDayStatus, RosterResponse, StudyGroupAdmin } from "../../api/types";
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+import { todayIso } from "../../utils/date";
 
 const MONTH_DOT_TITLES: Record<string, string> = {
   study_day: "учебный день",

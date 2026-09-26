@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useAuth } from "../auth/useAuth";
+import { MANAGEMENT_ROLES } from "../constants/roles";
 import type { NotificationItem } from "../api/types";
 
 const POLL_MS = 60_000;
-const MANAGEMENT_ROLES = ["dept_head", "edu_department", "admin", "tutor"];
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });

@@ -14,3 +14,4 @@ reportlab==4.2.5
 aiogram==3.31.0
 APScheduler==3.11.0
 tzdata==2024.2
+sentry-sdk[fastapi]==2.70.0

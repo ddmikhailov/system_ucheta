@@ -59,9 +59,9 @@ require_management = require_roles(RoleCode.DEPT_HEAD, RoleCode.EDU_DEPARTMENT, 
 require_reference_editor = require_roles(RoleCode.EDU_DEPARTMENT, RoleCode.ADMIN, RoleCode.TUTOR)
 # Тьютор — второй полноценный администратор по всему колледжу (обновление
 # 1.2), не отдельная урезанная роль: везде, где раньше был только admin,
-# теперь и он. Имя оставлено как есть, чтобы не переименовывать во всех
-# вызовах — по смыслу это "require_full_access".
-require_admin = require_roles(RoleCode.ADMIN, RoleCode.TUTOR)
+# теперь и он. Название отражает это явно (было require_admin — вводило в
+# заблуждение, будто пускает только администратора, см. TODO.md 5).
+require_full_access = require_roles(RoleCode.ADMIN, RoleCode.TUTOR)
 
 
 def scope_department_id(user: User, requested: int | None) -> int | None:

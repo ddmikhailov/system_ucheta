@@ -15,10 +15,7 @@ import type {
   StudyGroupAdmin,
   UserAdmin,
 } from "../api/types";
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+import { todayIso } from "../utils/date";
 
 function daysAgoIso(n: number): string {
   const d = new Date();

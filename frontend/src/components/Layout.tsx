@@ -1,10 +1,8 @@
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
+import { MANAGEMENT_ROLES } from "../constants/roles";
 import NotificationBell from "./NotificationBell";
-
-const MANAGEMENT_ROLES = ["dept_head", "edu_department", "admin", "tutor"];
-const ADMIN_PANEL_ROLES = ["edu_department", "admin", "dept_head", "tutor"];
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
@@ -27,7 +25,7 @@ export default function Layout({ children }: { children: ReactNode }) {
               Витрины
             </NavLink>
           )}
-          {user && ADMIN_PANEL_ROLES.includes(user.role) && (
+          {user && MANAGEMENT_ROLES.includes(user.role) && (
             <NavLink to="/admin" className={({ isActive }) => (isActive ? "active" : "")}>
               Админка
             </NavLink>

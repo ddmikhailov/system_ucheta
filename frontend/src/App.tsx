@@ -8,8 +8,7 @@ import ChangePasswordPage from "./pages/ChangePasswordPage";
 import CuratorCabinetPage from "./pages/CuratorCabinetPage";
 import DashboardsPage from "./pages/DashboardsPage";
 import AdminPage from "./pages/AdminPage";
-
-const MANAGEMENT_ROLES = ["dept_head", "edu_department", "admin", "tutor"];
+import { MANAGEMENT_ROLES } from "./constants/roles";
 
 function RequireAuth({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
