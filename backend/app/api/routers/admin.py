@@ -10,6 +10,8 @@ from app.db.session import get_db
 from app.models import (
     AcademicCalendarDay,
     AssignmentRole,
+    AttendanceMark,
+    AuditLog,
     CuratorAssignment,
     Department,
     DayType,
@@ -257,13 +259,31 @@ def list_students(
             StudyGroup.department_id == user.department_id
         )
     students = q.order_by(Student.last_name, Student.first_name).all()
-    return [
-        StudentRead(
-            id=s.id, full_name=s.full_name, study_group_id=s.study_group_id,
-            status=s.status, enrolled_at=s.enrolled_at, left_at=s.left_at,
-        )
-        for s in students
-    ]
+    return [_student_read(s) for s in students]
+
+
+def _student_read(s: Student) -> StudentRead:
+    # Раньше отдавался только full_name, склеенный на бэкенде — фронт
+    # (StudentsTab.tsx) разбирал его обратно по пробелам для формы
+    # редактирования, что ломается на составных фамилиях/именах (см.
+    # TODO.md 5). Теперь части ФИО приходят отдельными полями напрямую
+    # из БД, full_name остаётся для отображения в таблицах как было.
+    return StudentRead(
+        id=s.id, full_name=s.full_name,
+        last_name=s.last_name, first_name=s.first_name, middle_name=s.middle_name,
+        study_group_id=s.study_group_id, status=s.status, enrolled_at=s.enrolled_at, left_at=s.left_at,
+    )
+
+
+def _redact_audit_history(db: Session, entity_type: str, entity_id: str) -> None:
+    """Обезличивание раньше останавливалось на самой записи — старые строки
+    audit_log про это же лицо (например, `student.create` хранит ФИО в
+    new_value) продолжали хранить настоящее имя даже после анонимизации
+    (см. TODO.md 5). Само действие (кто/когда обезличил) не трогаем —
+    только значения, которые могли быть ФИО/логином."""
+    db.query(AuditLog).filter(
+        AuditLog.entity_type == entity_type, AuditLog.entity_id == entity_id
+    ).update({"old_value": "[обезличено]", "new_value": "[обезличено]"}, synchronize_session=False)
 
 
 def _assert_can_manage_student(db: Session, user: User, student: Student) -> None:
@@ -284,10 +304,7 @@ def create_student(
     db.refresh(student)
     log_action(db, user, "student.create", "student", str(student.id), new_value=student.full_name)
     db.commit()
-    return StudentRead(
-        id=student.id, full_name=student.full_name, study_group_id=student.study_group_id,
-        status=student.status, enrolled_at=student.enrolled_at, left_at=student.left_at,
-    )
+    return _student_read(student)
 
 
 @router.patch("/students/{student_id}/status", response_model=StudentRead)
@@ -311,10 +328,7 @@ def update_student_status(
     log_action(db, user, "student.status_change", "student", str(student.id))
     db.commit()
     db.refresh(student)
-    return StudentRead(
-        id=student.id, full_name=student.full_name, study_group_id=student.study_group_id,
-        status=student.status, enrolled_at=student.enrolled_at, left_at=student.left_at,
-    )
+    return _student_read(student)
 
 
 @router.patch("/students/{student_id}", response_model=StudentRead)
@@ -341,10 +355,7 @@ def update_student(
     log_action(db, user, "student.update", "student", str(student.id))
     db.commit()
     db.refresh(student)
-    return StudentRead(
-        id=student.id, full_name=student.full_name, study_group_id=student.study_group_id,
-        status=student.status, enrolled_at=student.enrolled_at, left_at=student.left_at,
-    )
+    return _student_read(student)
 
 
 @router.delete("/students/{student_id}", response_model=DeleteResult)
@@ -373,6 +384,15 @@ def delete_student(
         student.last_name = "Удалённый"
         student.first_name = "студент"
         student.middle_name = None
+        # Раньше обезличивание останавливалось на ФИО студента — свободный
+        # текст в комментариях/основаниях отметок (куратор мог написать,
+        # например, "Иванов заболел, справка приложена") и старые записи
+        # audit_log, где ещё сохранилось настоящее ФИО (см. student.create
+        # ниже), по-прежнему выдавали личность (см. TODO.md 5).
+        db.query(AttendanceMark).filter(AttendanceMark.student_id == student_id).update(
+            {"comment": None, "basis_reference": None}, synchronize_session=False
+        )
+        _redact_audit_history(db, "student", str(student_id))
         log_action(db, user, "student.anonymize", "student", str(student_id))
         db.commit()
         return DeleteResult(
@@ -735,6 +755,7 @@ def delete_user(
         target.password_hash = None
         target.telegram_chat_id = None
         target.telegram_linked_at = None
+        _redact_audit_history(db, "user", str(user_id))
         log_action(db, admin, "user.anonymize", "user", str(user_id))
         db.commit()
         return DeleteResult(

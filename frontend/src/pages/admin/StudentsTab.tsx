@@ -112,17 +112,14 @@ export default function StudentsTab({ canEdit, canCreate }: { canEdit: boolean; 
     }
   }
 
-  function splitFullName(full: string): [string, string, string] {
-    const parts = full.split(" ");
-    return [parts[0] ?? "", parts[1] ?? "", parts.slice(2).join(" ")];
-  }
-
   function startEdit(s: StudentAdmin) {
-    const [last, first, middle] = splitFullName(s.full_name);
+    // Раньше ФИО разбиралось здесь по пробелам из full_name — ломалось на
+    // составных фамилиях/именах (см. TODO.md 5). API теперь отдаёт части
+    // отдельными полями напрямую из БД.
     setEditingId(s.id);
-    setEditLastName(last);
-    setEditFirstName(first);
-    setEditMiddleName(middle);
+    setEditLastName(s.last_name);
+    setEditFirstName(s.first_name);
+    setEditMiddleName(s.middle_name ?? "");
     setEditGroupId(s.study_group_id);
   }
 

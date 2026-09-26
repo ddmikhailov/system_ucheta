@@ -91,7 +91,9 @@ def test_mark_codes_flags_affect_stats(client, admin_headers, edu_department_hea
     )
     assert r.status_code == 200
 
-    db.expire_all()
+    # commit(), а не только expire_all() — см. пояснение в
+    # test_end_curator_assignment_keeps_history (MySQL REPEATABLE READ).
+    db.commit()
     after = stats_service.compute_period_stats(db, today, today, study_group_id=curator_group.id)
     assert after.absent_total == 0
     assert after.percent == 100.0

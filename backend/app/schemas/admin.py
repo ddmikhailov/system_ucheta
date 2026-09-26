@@ -61,6 +61,9 @@ _StudentStatusLiteral = Literal["studying", "academic_leave", "expelled"]
 class StudentRead(BaseModel):
     id: int
     full_name: str
+    last_name: str
+    first_name: str
+    middle_name: str | None
     study_group_id: int
     status: str
     enrolled_at: datetime.date

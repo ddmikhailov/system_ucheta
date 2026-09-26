@@ -153,6 +153,9 @@ export interface DeleteResult {
 export interface StudentAdmin {
   id: number;
   full_name: string;
+  last_name: string;
+  first_name: string;
+  middle_name: string | null;
   study_group_id: number;
   status: string;
   enrolled_at: string;

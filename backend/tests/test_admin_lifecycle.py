@@ -122,13 +122,22 @@ def test_cannot_delete_studying_student(client, admin_headers, imported, db):
 
 
 def test_delete_student_with_marks_anonymizes(client, admin_headers, curator_headers, curator_group, db, today):
+    from app.models import AttendanceMark, AuditLog
     from app.services.attendance_service import get_active_students
 
     student = get_active_students(db, curator_group.id, today)[0]
+    original_full_name = student.full_name
     client.post(
         f"/curator/groups/{curator_group.id}/day/submit?date={today}",
         headers=curator_headers,
-        json={"exceptions": [{"student_id": student.id, "mark_code": "н", "comment": None, "basis_reference": None}]},
+        json={
+            "exceptions": [
+                {
+                    "student_id": student.id, "mark_code": "б", "comment": f"{original_full_name} заболел",
+                    "basis_reference": "Справка №1",
+                }
+            ]
+        },
     )
 
     client.patch(f"/admin/students/{student.id}", headers=admin_headers, json={"status": "expelled"})
@@ -141,12 +150,23 @@ def test_delete_student_with_marks_anonymizes(client, admin_headers, curator_hea
     row = next(s for s in r.json() if s["id"] == student.id)
     assert "Удалённый" in row["full_name"]
 
+    # Свободный текст в отметках и старые записи журнала действий не должны
+    # продолжать выдавать настоящее имя после обезличивания (см. TODO.md 5).
+    marks = db.query(AttendanceMark).filter(AttendanceMark.student_id == student.id).all()
+    assert all(m.comment is None and m.basis_reference is None for m in marks)
+
+    entries = db.query(AuditLog).filter(AuditLog.entity_type == "student", AuditLog.entity_id == str(student.id)).all()
+    assert all(original_full_name not in (e.old_value or "") for e in entries)
+    assert all(original_full_name not in (e.new_value or "") for e in entries)
+
 
 def test_archive_curator_and_delete(client, admin_headers, imported, db):
-    from app.models import Role, User
+    from app.models import AuditLog, Role, User
 
     curator_role = db.query(Role).filter(Role.code == "curator").one()
     curator = db.query(User).filter(User.role_id == curator_role.id).first()
+    original_full_name = curator.full_name
+    original_username = curator.username
 
     r = client.patch(f"/admin/users/{curator.id}", headers=admin_headers, json={"is_active": False})
     assert r.status_code == 200
@@ -156,6 +176,10 @@ def test_archive_curator_and_delete(client, admin_headers, imported, db):
     assert r.status_code == 200
     # У импортированного куратора есть назначение на группу — история есть.
     assert r.json()["anonymized"] is True
+
+    entries = db.query(AuditLog).filter(AuditLog.entity_type == "user", AuditLog.entity_id == str(curator.id)).all()
+    assert all(original_full_name not in (e.old_value or "") for e in entries)
+    assert all(original_username not in (e.old_value or "") for e in entries)
 
 
 def test_cannot_archive_or_delete_self(client, admin_headers, db):
@@ -191,7 +215,12 @@ def test_end_curator_assignment_keeps_history(client, admin_headers, curator_gro
     assert r.json()["end_date"] == str(today)
 
     # Назначение осталось в базе (не удалено) — история сохранена, а не стёрта.
-    db.expire_all()
+    # commit(), а не только expire_all(): изменение сделано через другую
+    # сессию (client -> отдельный override_get_db), и на MySQL с REPEATABLE
+    # READ уже открытая транзакция этой сессии не увидит чужой коммит, пока
+    # сама не закоммитится/не откроет новую транзакцию (см. TODO.md 5 —
+    # найдено запуском тестов на настоящем MySQL, не только SQLite).
+    db.commit()
     still_there = db.get(CuratorAssignment, assignment.id)
     assert still_there is not None
     assert still_there.end_date == today

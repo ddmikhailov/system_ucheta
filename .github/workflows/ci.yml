@@ -31,6 +31,42 @@ jobs:
           pip install pip-audit
           pip-audit -r requirements.txt --skip-editable
 
+  backend-mysql:
+    # Основной job гоняет тот же набор на SQLite (быстро, без сервисов) —
+    # этот проверяет то, что SQLite не проверяет вообще: ENUM, strict mode,
+    # длины строк, collation (см. TODO.md 5).
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+          MYSQL_DATABASE: kait20_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements-dev.txt
+
+      - name: pytest (MySQL)
+        working-directory: backend
+        env:
+          JWT_SECRET: ci-only-secret-do-not-use-in-production-32chars
+          TEST_DATABASE_URL: mysql+pymysql://root@127.0.0.1:3306/kait20_test
+        run: pytest
+
   frontend:
     runs-on: ubuntu-latest
     steps:

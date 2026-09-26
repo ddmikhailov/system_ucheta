@@ -30,7 +30,33 @@ CURATOR_PASSWORD = "CuratorTest123!"
 
 @pytest.fixture()
 def test_engine(tmp_path):
-    """Изолированная SQLite-БД на каждый тест — никакого общего состояния между тестами."""
+    """Изолированная БД на каждый тест — никакого общего состояния между
+    тестами. По умолчанию SQLite (быстро, без внешних сервисов); если задан
+    TEST_DATABASE_URL — настоящий MySQL (см. TODO.md 5: ENUM/strict mode/
+    длины строк/collation в SQLite не проверяются вообще, и тесты никогда
+    не заметили бы регрессию, которая ловится только на реальной БД —
+    отдельный job в CI, `ci.yml`, гоняет весь набор именно так)."""
+    mysql_url = os.environ.get("TEST_DATABASE_URL")
+    if mysql_url:
+        # READ COMMITTED, а не дефолтный для MySQL REPEATABLE READ: тесты
+        # держат одну сессию (`db`) открытой через весь тест, попеременно
+        # читая напрямую и дергая эндпоинты через TestClient (у которого —
+        # своя, отдельная сессия на каждый запрос). При REPEATABLE READ
+        # снимок `db` фиксируется на первом запросе транзакции и не видит
+        # более поздних коммитов из другой сессии, пока сама не
+        # закоммитится — в проде это не проблема (сессия там живёт один
+        # HTTP-запрос), а в тестах превращалось в ложные падения на ровном
+        # месте (см. TODO.md 5, найдено этим самым прогоном на MySQL).
+        engine = create_engine(mysql_url, pool_pre_ping=True, isolation_level="READ COMMITTED")
+        db_base.engine = engine
+        db_base.SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+        db_base.Base.metadata.drop_all(engine)
+        db_base.Base.metadata.create_all(engine)
+        yield engine
+        db_base.Base.metadata.drop_all(engine)
+        engine.dispose()
+        return
+
     db_path = tmp_path / "test.db"
     # check_same_thread=False: планировщик теперь снимает тяжёлые синхронные
     # запросы с event loop через asyncio.to_thread (см. TODO.md 5) — в проде
@@ -114,7 +140,14 @@ def imported(seeded, db, monkeypatch):
     fixtures_dir = os.path.join(os.path.dirname(__file__), "fixtures", "import")
     monkeypatch.setattr(import_script, "DATA_DIR", fixtures_dir)
     import_script.run()
-    db.expire_all()
+    # commit(), а не только expire_all(): import_script делает всё через
+    # свою собственную сессию. Если что-то через `db` уже читало раньше
+    # (например, dept_head_user/edu_department_user — pytest не гарантирует
+    # порядок независимых фикстур), на MySQL с REPEATABLE READ у `db` уже
+    # открыта транзакция со снимком ДО импорта, и expire_all() внутри неё
+    # не поможет — снимок не обновляется, пока транзакция не завершится
+    # (см. TODO.md 5, найдено прогоном тестов на настоящем MySQL).
+    db.commit()
     return seeded
 
 
