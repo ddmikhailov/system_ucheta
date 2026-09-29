@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routers import admin, auth, curator, dashboards, export, notifications
+from app.api.routers import admin, auth, bulk_import, curator, dashboards, export, notifications
 from app.core.config import get_settings
 from app.core.observability import init_sentry
 from app.core.rate_limit import client_ip
@@ -119,6 +119,10 @@ app.include_router(dashboards.router)
 app.include_router(admin.router)
 app.include_router(export.router)
 app.include_router(notifications.router)
+# Временный роутер для разового импорта сентябрьской посещаемости — удалить
+# вместе с app/api/routers/bulk_import.py и app/services/bulk_import_service.py
+# после использования (см. пояснения в обоих файлах).
+app.include_router(bulk_import.router)
 
 
 @app.get("/health")
