@@ -17,7 +17,7 @@ from app.models import (
     StudyGroup,
     User,
 )
-from app.services import calendar_service, in_app_notification_service
+from app.services import calendar_service, group_membership_service, in_app_notification_service
 from app.services.audit_service import log_action
 
 
@@ -42,10 +42,17 @@ def _compute_basis(basis_reference: str | None) -> BasisStatus:
 
 
 def get_active_students(db: Session, study_group_id: int, as_of: datetime.date) -> list[Student]:
+    """Ростер группы на конкретную дату — по историческому членству
+    (`student_group_memberships`), а не по текущему `Student.study_group_id`
+    (см. TODO.md 3): иначе бэкдейтинг посещаемости в группе, из которой
+    студент с тех пор перевёлся, молча терял его из ростера того дня."""
+    member_ids = group_membership_service.students_ever_in_group(db, study_group_id, as_of, as_of)
+    if not member_ids:
+        return []
     stmt = (
         select(Student)
         .where(
-            Student.study_group_id == study_group_id,
+            Student.id.in_(member_ids),
             Student.enrolled_at <= as_of,
         )
         .where((Student.left_at.is_(None)) | (Student.left_at >= as_of))

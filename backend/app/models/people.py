@@ -29,6 +29,32 @@ class Student(Base):
         return " ".join(p for p in parts if p)
 
 
+class StudentGroupMembership(Base):
+    """В какой группе состоял студент и с какой по какую дату — история
+    членства, зеркалит CuratorAssignment (см. TODO.md 3: раньше перевод
+    студента в другую группу задним числом переписывал всю его историю —
+    посещаемость до перевода начинала числиться за новой группой, а старая
+    группа теряла её из отчётов)."""
+
+    __tablename__ = "student_group_memberships"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), nullable=False)
+    study_group_id: Mapped[int] = mapped_column(ForeignKey("study_groups.id"), nullable=False)
+    start_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
+
+    student: Mapped["Student"] = relationship()
+    study_group: Mapped["StudyGroup"] = relationship()
+
+    def is_active_on(self, day: datetime.date) -> bool:
+        if self.start_date > day:
+            return False
+        if self.end_date is not None and self.end_date < day:
+            return False
+        return True
+
+
 class CuratorAssignment(Base):
     """Кто ведёт группу и с какой по какую дату — с историей замен."""
 

@@ -157,6 +157,13 @@ def test_delete_student_with_marks_anonymizes(client, admin_headers, curator_hea
 
     entries = db.query(AuditLog).filter(AuditLog.entity_type == "student", AuditLog.entity_id == str(student.id)).all()
     assert all(original_full_name not in (e.old_value or "") for e in entries)
+
+    # Обезличенная (не удалённая) запись сохраняет историю членства в
+    # группе — это не "мёртвый" FK, а ровно то, зачем анонимизация вместо
+    # удаления вообще существует (см. TODO.md 3).
+    from app.models import StudentGroupMembership
+
+    assert db.query(StudentGroupMembership).filter(StudentGroupMembership.student_id == student.id).count() >= 1
     assert all(original_full_name not in (e.new_value or "") for e in entries)
 
 

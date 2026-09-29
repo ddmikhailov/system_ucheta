@@ -28,6 +28,7 @@ from app.models import (
     StudyGroup,
     User,
 )
+from app.services import group_membership_service
 
 # На сервере CSV с реальными ФИО лежат не в репозитории (он публичный), а в
 # постоянном хранилище — путь задаётся IMPORT_DATA_DIR.
@@ -156,15 +157,16 @@ def run() -> None:
             if existing is not None:
                 continue
 
-            db.add(
-                Student(
-                    last_name=row["last_name"],
-                    first_name=row["first_name"],
-                    middle_name=row["middle_name"] or None,
-                    study_group_id=group.id,
-                    enrolled_at=ENROLLED_AT,
-                )
+            student = Student(
+                last_name=row["last_name"],
+                first_name=row["first_name"],
+                middle_name=row["middle_name"] or None,
+                study_group_id=group.id,
+                enrolled_at=ENROLLED_AT,
             )
+            db.add(student)
+            db.flush()
+            group_membership_service.create_initial_membership(db, student)
             created_students += 1
         db.commit()
         print(f"+ студентов создано: {created_students} (всего в файле: {len(students_rows)})")

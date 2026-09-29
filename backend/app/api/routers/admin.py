@@ -21,6 +21,7 @@ from app.models import (
     Role,
     RoleCode,
     Student,
+    StudentGroupMembership,
     StudentStatus,
     StudyGroup,
     User,
@@ -52,6 +53,7 @@ from app.schemas.admin import (
     UserUpdate,
     UserUpdateLeadershipDigest,
 )
+from app.services import group_membership_service
 from app.services.audit_service import log_action
 from app.services.password_service import generate_temporary_password
 
@@ -296,6 +298,7 @@ def create_student(
     db.add(student)
     db.commit()
     db.refresh(student)
+    group_membership_service.create_initial_membership(db, student)
     log_action(db, user, "student.create", "student", str(student.id), new_value=student.full_name)
     db.commit()
     return _student_read(student)
@@ -336,6 +339,7 @@ def update_student(
     _assert_can_manage_student(db, user, student)
 
     data = payload.model_dump(exclude_unset=True)
+    is_group_transfer = "study_group_id" in data and data["study_group_id"] is not None and data["study_group_id"] != student.study_group_id
     if "study_group_id" in data and data["study_group_id"] is not None:
         target_group = db.get(StudyGroup, data["study_group_id"])
         if target_group is None:
@@ -344,8 +348,16 @@ def update_student(
     if "status" in data and data["status"] is not None:
         data["status"] = StudentStatus(data["status"])
 
+    new_group_id = data.get("study_group_id")
     for field, value in data.items():
         setattr(student, field, value)
+    if is_group_transfer:
+        # Перевод в другую группу переводит его дальше вперёд, но не
+        # переписывает историю посещаемости в старой группе задним числом
+        # (см. TODO.md 3) — старый FK Student.study_group_id остаётся для
+        # форм/списков "текущая группа", а кто отвечал за какой день —
+        # смотрит student_group_memberships.
+        group_membership_service.transfer_student(db, student, new_group_id, today_local(), user)
     log_action(db, user, "student.update", "student", str(student.id))
     db.commit()
     db.refresh(student)
@@ -366,6 +378,13 @@ def delete_student(
             status.HTTP_400_BAD_REQUEST,
             "Сначала переведите студента в академ. отпуск или отчислите — удалить можно только архивного",
         )
+
+    # Членство в группе само по себе не «история» в смысле этой проверки —
+    # это просто учётная запись "кто где состоял", у неё нет собственной
+    # ценности без отметок посещаемости. Без явного удаления здесь FK на
+    # student_group_memberships (она есть у каждого студента после раздела 3)
+    # обезличивал бы вообще всех студентов вместо чистого удаления.
+    db.query(StudentGroupMembership).filter(StudentGroupMembership.student_id == student_id).delete()
 
     try:
         db.delete(student)

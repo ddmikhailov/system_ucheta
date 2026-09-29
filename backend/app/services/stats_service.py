@@ -11,7 +11,7 @@ from app.models import (
     Student,
     StudyGroup,
 )
-from app.services import calendar_service
+from app.services import calendar_service, group_membership_service
 
 
 @dataclass
@@ -40,7 +40,26 @@ def _students_in_scope(
     course: int | None = None,
     study_group_id: int | None = None,
     student_id: int | None = None,
+    date_from: datetime.date | None = None,
+    date_to: datetime.date | None = None,
 ) -> list[Student]:
+    # study_group_id + дата(ы) — историческое членство, а не текущий FK
+    # (см. TODO.md 3): иначе студент, переведённый из группы в середине
+    # периода, пропадал бы из её отчёта за уже прошедшие дни, а появлялся
+    # бы в отчёте новой группы задним числом, хотя в те дни в ней не состоял.
+    if study_group_id is not None and (date_from is not None or date_to is not None):
+        as_of_from = date_from or date_to
+        as_of_to = date_to or date_from
+        historical_ids = group_membership_service.students_ever_in_group(
+            db, study_group_id, as_of_from, as_of_to
+        )
+        if not historical_ids:
+            return []
+        stmt = select(Student).where(Student.id.in_(historical_ids))
+        if student_id is not None:
+            stmt = stmt.where(Student.id == student_id)
+        return list(db.execute(stmt).scalars().all())
+
     stmt = select(Student).join(StudyGroup, StudyGroup.id == Student.study_group_id)
     if student_id is not None:
         stmt = stmt.where(Student.id == student_id)
@@ -66,8 +85,14 @@ def compute_period_stats(
     """only_submitted=True считает "в списке" только по дням, которые группа
     реально сдала — иначе несданный день молча учитывался как 100%
     присутствия (см. TODO.md 3: пустой день без единой отметки давал
-    present == in_list)."""
-    students = _students_in_scope(db, department_id, course, study_group_id, student_id)
+    present == in_list).
+
+    Группа, за которую засчитывается день, определяется историческим
+    членством на эту дату (`student_group_memberships`), а не текущим
+    `Student.study_group_id` — иначе перевод студента в другую группу задним
+    числом переписывал бы, кому принадлежит его прошлая посещаемость (см.
+    TODO.md 3)."""
+    students = _students_in_scope(db, department_id, course, study_group_id, student_id, date_from, date_to)
     if not students:
         return PeriodStats()
 
@@ -82,10 +107,19 @@ def compute_period_stats(
 
     student_ids = [s.id for s in students]
     student_by_id = {s.id: s for s in students}
+    membership_by_student = group_membership_service.membership_rows_by_student(db, student_ids)
+
+    def group_on(sid: int, d: datetime.date) -> int:
+        rows = membership_by_student.get(sid)
+        resolved = group_membership_service.resolve_group_id(rows, d) if rows else None
+        return resolved if resolved is not None else student_by_id[sid].study_group_id
 
     submitted_pairs: set[tuple[int, datetime.date]] | None = None
     if only_submitted:
-        group_ids = {s.study_group_id for s in students}
+        group_ids = {study_group_id} if study_group_id is not None else set()
+        for rows in membership_by_student.values():
+            group_ids.update(r.study_group_id for r in rows)
+        group_ids.discard(None)
         submission_rows = db.execute(
             select(DaySubmission.study_group_id, DaySubmission.date).where(
                 DaySubmission.study_group_id.in_(group_ids), DaySubmission.date.in_(study_days)
@@ -103,18 +137,26 @@ def compute_period_stats(
     study_days_set = set(study_days)
 
     for student in students:
-        enrolled_days = {
-            d for d in study_days_set
-            if student.enrolled_at <= d and (student.left_at is None or student.left_at >= d)
-            and (submitted_pairs is None or (student.study_group_id, d) in submitted_pairs)
-        }
+        enrolled_days = set()
+        for d in study_days_set:
+            if not (student.enrolled_at <= d and (student.left_at is None or student.left_at >= d)):
+                continue
+            day_group = group_on(student.id, d)
+            if study_group_id is not None and day_group != study_group_id:
+                # В этот день студент состоял в другой группе — не его день
+                # в ЭТОМ отчёте (см. пояснение выше).
+                continue
+            if submitted_pairs is not None and (day_group, d) not in submitted_pairs:
+                continue
+            enrolled_days.add(d)
         stats.in_list += len(enrolled_days)
 
     for row in marks:
-        if submitted_pairs is not None:
-            student = student_by_id.get(row.student_id)
-            if student is None or (student.study_group_id, row.date) not in submitted_pairs:
-                continue
+        day_group = group_on(row.student_id, row.date)
+        if study_group_id is not None and day_group != study_group_id:
+            continue
+        if submitted_pairs is not None and (day_group, row.date) not in submitted_pairs:
+            continue
         stats.by_code[row.code] = stats.by_code.get(row.code, 0) + 1
         if row.code == "о":
             stats.late += 1
