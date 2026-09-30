@@ -3,10 +3,13 @@
 эндпоинт, удалить после использования вместе с bulk_import_service.py).
 
 Двухфазный: без ?commit=true — только разбор и отчёт, ничего не пишет в БД.
-Если в отчёте есть ненайденные группы/студенты/нераспознанные коды — commit
-всё равно откатывается (raise), чтобы нельзя было случайно записать частичные
-данные, не увидев отчёт целиком (см. решение в чате: "показать и
-остановиться")."""
+Если в отчёте есть ненайденные группы или нераспознанные коды — commit
+всё равно откатывается, чтобы нельзя было случайно записать частичные данные,
+не увидев отчёт целиком (см. решение в чате: "показать и остановиться").
+Ненайденные студенты (см. students_not_found) — не блокирующая проблема:
+по решению администратора (сверка ФИО с реальными ростерами показала, что
+это уже отчисленные/переведённые студенты, которых в этих группах нет) их
+отметки просто пропускаются, остальной импорт группы продолжается."""
 import calendar
 import datetime
 
@@ -93,13 +96,16 @@ async def import_september_attendance(
         )
         plan.append({"group": group, "matched_marks": matched_marks, "study_days": study_days})
 
-    has_problems = bool(report["groups_not_found"] or report["students_not_found"] or report["unrecognized_codes"])
+    # students_not_found не блокирует commit (см. докстринг модуля) — только
+    # groups_not_found/unrecognized_codes, где не решить, что делать, без
+    # исправления исходных данных.
+    has_problems = bool(report["groups_not_found"] or report["unrecognized_codes"])
 
     if not commit or has_problems:
         report["written"] = False
         if commit and has_problems:
             report["refused_reason"] = (
-                "Есть ненайденные группы/студенты или нераспознанные коды — ничего не записано. "
+                "Есть ненайденные группы или нераспознанные коды — ничего не записано. "
                 "Исправьте и повторите."
             )
         return report

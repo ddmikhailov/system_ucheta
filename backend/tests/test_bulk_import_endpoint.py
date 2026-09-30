@@ -91,8 +91,18 @@ def test_commit_writes_marks_and_submissions(client, admin_headers, curator_grou
     assert submission.submitted_by_user_id == mark.created_by_user_id
 
 
-def test_commit_refuses_when_student_not_found(client, admin_headers, curator_group, db):
-    data = _build_workbook(curator_group.code, [_student_row(1, "Несуществующий Студент Иванович", {21: "н"})])
+def test_commit_skips_student_not_found_but_writes_rest(client, admin_headers, curator_group, db):
+    """Ненайденный студент не блокирует весь импорт (решение администратора
+    при разборе реальных данных — такие ФИО оказались уже отчисленными/
+    переведёнными студентами) — его отметка просто пропускается."""
+    student = db.query(Student).filter(Student.study_group_id == curator_group.id).first()
+    data = _build_workbook(
+        curator_group.code,
+        [
+            _student_row(1, "Несуществующий Студент Иванович", {21: "н"}),
+            _student_row(2, student.full_name, {21: "б"}),
+        ],
+    )
 
     r = client.post(
         "/admin/_temp-september-import?commit=true", headers=admin_headers,
@@ -100,9 +110,11 @@ def test_commit_refuses_when_student_not_found(client, admin_headers, curator_gr
     )
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["written"] is False
+    assert body["written"] is True
     assert body["students_not_found"] == [{"group": curator_group.code, "student": "Несуществующий Студент Иванович"}]
-    assert db.query(AttendanceMark).count() == 0
+
+    mark = db.query(AttendanceMark).filter(AttendanceMark.student_id == student.id).one()
+    assert mark.mark_code.code == "б"
 
 
 def test_commit_refuses_when_unrecognized_code(client, admin_headers, curator_group, db):

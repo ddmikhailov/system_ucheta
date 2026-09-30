@@ -76,6 +76,20 @@ def test_unrecognized_code_reported_not_silently_dropped():
     assert sheet.unrecognized == [("Тестов Иван Иванович", 7, "эл")]
 
 
+def test_code_aliases_resolved_per_admin_decision():
+    """Решения по конкретным разночтениям, принятые при разборе реального
+    сентябрьского импорта (см. CODE_ALIASES): "-" и "на отчисление" не дают
+    отметки вообще, "3" — опечатка/похожесть на "з" (заявление)."""
+    data = _build_workbook(
+        "ИИ112",
+        student_rows=[_student_row(1, "Тестов Иван Иванович", {2: "-", 3: "3", 4: "на отчисление"})],
+    )
+    sheets = parse_attendance_workbook(data)
+    sheet = sheets[0]
+    assert sheet.marks_by_student == {"Тестов Иван Иванович": {3: "з"}}
+    assert sheet.unrecognized == []
+
+
 def test_missing_header_row_reports_error_not_crash():
     wb = openpyxl.Workbook()
     ws = wb.active

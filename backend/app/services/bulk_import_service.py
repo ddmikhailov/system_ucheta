@@ -11,6 +11,16 @@ from dataclasses import dataclass, field
 
 MARK_CODES = {"о", "и", "б", "з", "п", "р", "у", "н"}
 
+# Разночтения из реальных таблиц, разобранные вручную с администратором
+# (см. обсуждение в чате при импорте сентября 2026) — не общий словарь
+# алиасов, а фиксированные решения по конкретным встретившимся кодам.
+# None означает "не записывать отметку вообще" (не найдено основания).
+CODE_ALIASES: dict[str, str | None] = {
+    "-": None,  # у куратора не было повода поставить отметку
+    "3": "з",  # опечатка/визуальная похожесть с "з" (заявление)
+    "на отчисление": None,  # решение принято, но приказа ещё нет — отметку не ставим
+}
+
 
 @dataclass
 class ParsedGroupSheet:
@@ -78,6 +88,10 @@ def parse_attendance_workbook(
                     continue
                 if code in MARK_CODES:
                     sheet.marks_by_student.setdefault(fio, {})[day] = code
+                elif code in CODE_ALIASES:
+                    resolved = CODE_ALIASES[code]
+                    if resolved is not None:
+                        sheet.marks_by_student.setdefault(fio, {})[day] = resolved
                 else:
                     sheet.unrecognized.append((fio, day, str(val)))
         results.append(sheet)
