@@ -7,7 +7,7 @@ import MarkCommentModal from "../../components/MarkCommentModal";
 import { useEscapeKey } from "../../hooks/useEscapeKey";
 import { scrollToTop } from "../../utils/scroll";
 import type { MarkCodeOption, MonthDayStatus, RosterResponse, StudyGroupAdmin } from "../../api/types";
-import { todayIso } from "../../utils/date";
+import { formatServerDateTime, todayIso } from "../../utils/date";
 
 const MONTH_DOT_TITLES: Record<string, string> = {
   study_day: "учебный день",
@@ -16,11 +16,6 @@ const MONTH_DOT_TITLES: Record<string, string> = {
   vacation: "каникулы",
   remote: "ЭФО",
 };
-
-function formatDateTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-}
 
 interface PendingMark {
   mark_code: string;
@@ -382,7 +377,7 @@ export default function GroupJournalTab() {
             const entry = roster?.entries.find((e) => e.student_id === showCommentFor);
             if (!entry?.last_edited_by) return null;
             return entry.last_edited_at
-              ? `${entry.last_edited_by}, ${formatDateTime(entry.last_edited_at)}`
+              ? `${entry.last_edited_by}, ${formatServerDateTime(entry.last_edited_at)}`
               : entry.last_edited_by;
           })()}
           onClose={() => setShowCommentFor(null)}

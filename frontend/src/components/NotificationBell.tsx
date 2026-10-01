@@ -4,12 +4,9 @@ import { api } from "../api/client";
 import { useAuth } from "../auth/useAuth";
 import { MANAGEMENT_ROLES } from "../constants/roles";
 import type { NotificationItem } from "../api/types";
+import { formatServerDateTime } from "../utils/date";
 
 const POLL_MS = 60_000;
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-}
 
 export default function NotificationBell() {
   const { user } = useAuth();
@@ -99,7 +96,7 @@ export default function NotificationBell() {
                 onClick={() => openNotification(n)}
               >
                 <span>{n.message}</span>
-                <time>{formatDateTime(n.created_at)}</time>
+                <time>{formatServerDateTime(n.created_at)}</time>
               </li>
             ))}
           </ul>
