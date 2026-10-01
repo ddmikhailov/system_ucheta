@@ -1,22 +1,24 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { api, ApiError } from "../../api/client";
+import { STUDENT_STATUS_LABELS } from "../../constants/studentStatus";
 import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
-import type { DeleteResult, StudentAdmin, StudyGroupAdmin } from "../../api/types";
+import type { StudentAdmin, StudyGroupAdmin } from "../../api/types";
 import { todayIso } from "../../utils/date";
 
-const STATUS_LABELS: Record<string, string> = {
-  studying: "Учится",
-  academic_leave: "Академ. отпуск",
-  expelled: "Отчислен",
-};
-
-export default function StudentsTab({ canEdit, canCreate }: { canEdit: boolean; canCreate: boolean }) {
+// Здесь только список, поиск и добавление. Всё управление конкретным
+// студентом (ФИО, перевод, статус, удаление) — на его личной карточке.
+export default function StudentsTab({ canCreate }: { canEdit?: boolean; canCreate: boolean }) {
+  const location = useLocation();
   const [groups, setGroups] = useState<StudyGroupAdmin[]>([]);
   const [groupId, setGroupId] = useState<number | null>(null);
   const [students, setStudents] = useState<StudentAdmin[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // Сообщение приходит после удаления студента на его карточке.
+  const [notice, setNotice] = useState<string | null>(
+    (location.state as { notice?: string } | null)?.notice ?? null
+  );
   useScrollToTopOnChange(error, notice);
   const [busy, setBusy] = useState(false);
 
@@ -24,12 +26,6 @@ export default function StudentsTab({ canEdit, canCreate }: { canEdit: boolean; 
   const [firstName, setFirstName] = useState("");
   const [middleName, setMiddleName] = useState("");
   const [enrolledAt, setEnrolledAt] = useState(todayIso());
-
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editLastName, setEditLastName] = useState("");
-  const [editFirstName, setEditFirstName] = useState("");
-  const [editMiddleName, setEditMiddleName] = useState("");
-  const [editGroupId, setEditGroupId] = useState<number | null>(null);
 
   // Отчисленные/в академе не мешаются в основном списке группы.
   const [showArchived, setShowArchived] = useState(false);
@@ -82,79 +78,13 @@ export default function StudentsTab({ canEdit, canCreate }: { canEdit: boolean; 
     }
   }
 
-  // Смена статуса раньше применялась сразу по выбору в select с датой "сегодня"
-  // без возможности её поменять и без подтверждения (см. TODO.md 4) — теперь
-  // выбор статуса только открывает форму с датой и явным подтверждением.
-  const [pendingStatusStudentId, setPendingStatusStudentId] = useState<number | null>(null);
-  const [pendingStatus, setPendingStatus] = useState("studying");
-  const [pendingLeftAt, setPendingLeftAt] = useState(todayIso());
-
-  function startStatusChange(student: StudentAdmin, status: string) {
-    if (status === student.status) return;
-    setPendingStatusStudentId(student.id);
-    setPendingStatus(status);
-    setPendingLeftAt(todayIso());
-  }
-
-  async function confirmStatusChange(student: StudentAdmin) {
-    const left_at = pendingStatus !== "studying" ? pendingLeftAt : null;
-    if (!window.confirm(`Сменить статус «${student.full_name}» на «${STATUS_LABELS[pendingStatus] ?? pendingStatus}»?`)) return;
-    setError(null);
-    try {
-      await api.patch(`/admin/students/${student.id}/status`, { status: pendingStatus, left_at });
-      setPendingStatusStudentId(null);
-      loadStudents();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось изменить статус");
-    }
-  }
-
-  function startEdit(s: StudentAdmin) {
-    // Раньше ФИО разбиралось здесь по пробелам из full_name — ломалось на
-    // составных фамилиях/именах (см. TODO.md 5). API теперь отдаёт части
-    // отдельными полями напрямую из БД.
-    setEditingId(s.id);
-    setEditLastName(s.last_name);
-    setEditFirstName(s.first_name);
-    setEditMiddleName(s.middle_name ?? "");
-    setEditGroupId(s.study_group_id);
-  }
-
-  async function saveEdit(studentId: number) {
-    setError(null);
-    try {
-      await api.patch(`/admin/students/${studentId}`, {
-        last_name: editLastName,
-        first_name: editFirstName,
-        middle_name: editMiddleName || null,
-        study_group_id: editGroupId,
-      });
-      setEditingId(null);
-      loadStudents();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось сохранить");
-    }
-  }
-
-  async function removeStudent(s: StudentAdmin) {
-    if (!window.confirm(`Удалить студента «${s.full_name}» насовсем?`)) return;
-    setError(null);
-    setNotice(null);
-    try {
-      const res = await api.delete<DeleteResult>(`/admin/students/${s.id}`);
-      setNotice(res.detail);
-      loadStudents();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось удалить");
-    }
-  }
-
   const isSearching = searchQuery.trim().length > 0;
   const searchedStudents = isSearching
     ? students.filter((s) => s.full_name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
     : students;
   const visibleStudents = showArchived ? searchedStudents : searchedStudents.filter((s) => s.status === "studying");
   const archivedCount = searchedStudents.length - searchedStudents.filter((s) => s.status === "studying").length;
+  const groupCode = (id: number) => groups.find((g) => g.id === id)?.code ?? "—";
 
   return (
     <div>
@@ -164,6 +94,22 @@ export default function StudentsTab({ canEdit, canCreate }: { canEdit: boolean; 
           {notice} <button className="link-btn" onClick={() => setNotice(null)}>Скрыть</button>
         </div>
       )}
+
+      {canCreate && (
+        <div className="add-block">
+          <p className="add-block__title">Добавить студента в выбранную группу</p>
+          <form className="inline-form" onSubmit={handleCreate}>
+            <input placeholder="Фамилия" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
+            <input placeholder="Имя" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
+            <input placeholder="Отчество" value={middleName} onChange={(e) => setMiddleName(e.target.value)} />
+            <input type="date" value={enrolledAt} onChange={(e) => setEnrolledAt(e.target.value)} />
+            <button type="submit" disabled={busy || groupId === null}>
+              Добавить студента
+            </button>
+          </form>
+        </div>
+      )}
+
       <div className="toolbar">
         <select value={groupId ?? ""} onChange={(e) => setGroupId(Number(e.target.value))} disabled={isSearching}>
           {groups.map((g) => (
@@ -187,111 +133,29 @@ export default function StudentsTab({ canEdit, canCreate }: { canEdit: boolean; 
             <th>Статус</th>
             <th>Зачислен</th>
             <th>Выбыл</th>
-            {canEdit && <th>Управление</th>}
           </tr>
         </thead>
         <tbody>
           {visibleStudents.map((s) => (
             <tr key={s.id}>
-              {editingId === s.id ? (
-                <>
-                  <td>
-                    <input value={editLastName} onChange={(e) => setEditLastName(e.target.value)} placeholder="Фамилия" />
-                    <input value={editFirstName} onChange={(e) => setEditFirstName(e.target.value)} placeholder="Имя" />
-                    <input value={editMiddleName} onChange={(e) => setEditMiddleName(e.target.value)} placeholder="Отчество" />
-                  </td>
-                  <td>
-                    <select value={editGroupId ?? ""} onChange={(e) => setEditGroupId(Number(e.target.value))}>
-                      {groups.map((g) => (
-                        <option key={g.id} value={g.id}>
-                          {g.code}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                </>
-              ) : (
-                <>
-                  <td>{s.full_name}</td>
-                  <td>{groups.find((g) => g.id === s.study_group_id)?.code ?? "—"}</td>
-                </>
-              )}
-              <td>
-                {canEdit ? (
-                  pendingStatusStudentId === s.id ? (
-                    <div className="inline-form" style={{ marginTop: 0 }}>
-                      <span>{STATUS_LABELS[pendingStatus] ?? pendingStatus}</span>
-                      {pendingStatus !== "studying" && (
-                        <input type="date" value={pendingLeftAt} onChange={(e) => setPendingLeftAt(e.target.value)} />
-                      )}
-                      <button className="link-btn" onClick={() => confirmStatusChange(s)}>
-                        Подтвердить
-                      </button>
-                      <button className="link-btn" onClick={() => setPendingStatusStudentId(null)}>
-                        Отмена
-                      </button>
-                    </div>
-                  ) : (
-                    <select value={s.status} onChange={(e) => startStatusChange(s, e.target.value)}>
-                      {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                  )
-                ) : (
-                  STATUS_LABELS[s.status] ?? s.status
-                )}
+              <td data-label="ФИО">
+                <Link to={`/students/${s.id}`} className="link-btn">
+                  {s.full_name}
+                </Link>
               </td>
-              <td>{s.enrolled_at}</td>
-              <td>{s.left_at ?? "—"}</td>
-              {canEdit && (
-                <td className="admin-row-actions">
-                  {editingId === s.id ? (
-                    <>
-                      <button className="link-btn" onClick={() => saveEdit(s.id)}>
-                        Сохранить
-                      </button>
-                      <button className="link-btn" onClick={() => setEditingId(null)}>
-                        Отмена
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button className="link-btn" onClick={() => startEdit(s)}>
-                        Изменить
-                      </button>
-                      {s.status !== "studying" && (
-                        <button className="link-btn" onClick={() => removeStudent(s)}>
-                          Удалить насовсем
-                        </button>
-                      )}
-                    </>
-                  )}
-                </td>
-              )}
+              <td data-label="Группа">{groupCode(s.study_group_id)}</td>
+              <td data-label="Статус">{STUDENT_STATUS_LABELS[s.status] ?? s.status}</td>
+              <td data-label="Зачислен">{s.enrolled_at}</td>
+              <td data-label="Выбыл">{s.left_at ?? "—"}</td>
             </tr>
           ))}
           {visibleStudents.length === 0 && (
             <tr>
-              <td colSpan={canEdit ? 6 : 5}>В группе нет студентов.</td>
+              <td colSpan={5}>В группе нет студентов.</td>
             </tr>
           )}
         </tbody>
       </table>
-
-      {canCreate && (
-        <form className="inline-form" onSubmit={handleCreate}>
-          <input placeholder="Фамилия" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
-          <input placeholder="Имя" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
-          <input placeholder="Отчество" value={middleName} onChange={(e) => setMiddleName(e.target.value)} />
-          <input type="date" value={enrolledAt} onChange={(e) => setEnrolledAt(e.target.value)} />
-          <button type="submit" disabled={busy || groupId === null}>
-            Добавить студента
-          </button>
-        </form>
-      )}
 
       {archivedCount > 0 && (
         <p className="hint archive-toggle">

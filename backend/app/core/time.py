@@ -11,6 +11,16 @@ def utcnow() -> datetime.datetime:
     return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
 
 
+def utc_to_local(value: datetime.datetime) -> datetime.datetime:
+    """Наивный UTC (так лежит в БД) → наивное местное время колледжа
+    (`NOTIFICATION_TIMEZONE`). Браузер не отличит такой datetime от местного
+    и покажет его со сдвигом на часовой пояс, поэтому «во сколько» переводим
+    на сервере."""
+    settings = get_settings()
+    aware = value.replace(tzinfo=datetime.timezone.utc).astimezone(ZoneInfo(settings.notification_timezone))
+    return aware.replace(tzinfo=None)
+
+
 def today_local() -> datetime.date:
     """«Сегодня» с точки зрения пользователей колледжа (`NOTIFICATION_TIMEZONE`,
     по умолчанию Europe/Moscow), а не сервера. Сервер обычно работает в UTC —

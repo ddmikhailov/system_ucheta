@@ -37,6 +37,11 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:5173"]
 
+    # Сколько обратных прокси стоит перед приложением (Amvera — один). Из
+    # X-Forwarded-For берётся адрес, добавленный ближайшим доверенным прокси,
+    # т.е. N-й с конца: левые записи клиент может подделать (см. rate_limit.py).
+    trusted_proxy_count: int = 1
+
     # Порог для подсветки риска: количество кодов "н" подряд.
     risk_threshold_consecutive_unexcused: int = 3
 

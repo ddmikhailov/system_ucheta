@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../../api/client";
+import DayActionsBar from "../../components/DayActionsBar";
 import MarkCodeButtons from "../../components/MarkCodeButtons";
 import MarkCommentModal from "../../components/MarkCommentModal";
 import { useEscapeKey } from "../../hooks/useEscapeKey";
@@ -54,6 +55,7 @@ export default function GroupJournalTab() {
   const [groupsLoaded, setGroupsLoaded] = useState(false);
   const [groupsError, setGroupsError] = useState<string | null>(null);
   const [riskThreshold, setRiskThreshold] = useState(3);
+  const [firstPeriod, setFirstPeriod] = useState("");
 
   function loadGroups() {
     api
@@ -86,6 +88,7 @@ export default function GroupJournalTab() {
     try {
       const r = await api.get<RosterResponse>(`/curator/groups/${groupId}/day?date=${date}`);
       setRoster(r);
+      setFirstPeriod(r.first_period != null ? String(r.first_period) : "");
       const initialPending: Record<number, PendingMark> = {};
       for (const entry of r.entries) {
         if (entry.mark_code && !entry.is_locked) {
@@ -151,11 +154,12 @@ export default function GroupJournalTab() {
     setError(null);
     try {
       const path = allPresent
-        ? `/curator/groups/${groupId}/day/mark-all-present?date=${date}${confirmed ? "&confirm=true" : ""}`
+        ? `/curator/groups/${groupId}/day/mark-all-present?date=${date}${confirmed ? "&confirm=true" : ""}${firstPeriod ? `&first_period=${firstPeriod}` : ""}`
         : `/curator/groups/${groupId}/day/submit?date=${date}`;
       const body = allPresent
         ? undefined
         : {
+            first_period: firstPeriod ? Number(firstPeriod) : null,
             exceptions: Object.entries(pending).map(([studentId, p]) => ({
               student_id: Number(studentId),
               mark_code: p.mark_code,
@@ -165,6 +169,7 @@ export default function GroupJournalTab() {
           };
       const updated = await api.post<RosterResponse>(path, body);
       setRoster(updated);
+      setFirstPeriod(updated.first_period != null ? String(updated.first_period) : "");
       loadMonthStatus();
       loadGroups();
       scrollToTop();
@@ -267,6 +272,23 @@ export default function GroupJournalTab() {
               : "День не активирован куратором — можно заполнить самостоятельно"}
           </div>
 
+          <DayActionsBar
+            absentCount={absentCount}
+            busy={busy}
+            firstPeriod={firstPeriod}
+            onFirstPeriodChange={setFirstPeriod}
+            submitLabel="Сохранить день"
+            onAllPresent={() => {
+              if (
+                absentCount > 0 &&
+                !window.confirm(`Отметки отсутствующих (${absentCount}) будут сброшены. Отметить всех присутствующими?`)
+              )
+                return;
+              submitDay(true);
+            }}
+            onSubmit={() => submitDay(false)}
+          />
+
           <p className="hint mark-code-legend">
             {markCodes.map((m) => (
               <span key={m.code}>
@@ -292,7 +314,11 @@ export default function GroupJournalTab() {
                 const hasComment = Boolean(current?.comment || current?.basis_reference);
                 return (
                   <tr key={entry.student_id} className={risky ? "risk-row" : ""}>
-                    <td data-label="ФИО">{entry.full_name}</td>
+                    <td data-label="ФИО">
+                      <Link to={`/students/${entry.student_id}`} className="link-btn">
+                        {entry.full_name}
+                      </Link>
+                    </td>
                     <td data-label="Статус">
                       {entry.is_locked ? (
                         <span className="locked-badge" title={entry.basis_reference ?? ""}>
@@ -330,15 +356,6 @@ export default function GroupJournalTab() {
             </tbody>
           </table>
 
-          <div className="actions actions-sticky-mobile">
-            <span className="absent-counter">Отсутствуют: {absentCount}</span>
-            <button onClick={() => submitDay(true)} disabled={busy}>
-              Все присутствуют
-            </button>
-            <button onClick={() => submitDay(false)} disabled={busy}>
-              Сохранить день
-            </button>
-          </div>
         </>
       )}
 

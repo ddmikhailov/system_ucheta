@@ -1057,3 +1057,211 @@ select:hover {
     color: var(--muted);
   }
 }
+
+
+/* --- Блоки «добавить …» стоят над таблицей, а не под ней: внизу длинного
+   списка их приходилось долго искать --- */
+
+.add-block {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+
+.add-block .inline-form {
+  margin-top: 0;
+}
+
+.add-block__title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* --- Панель «Все присутствуют / Сдать день» над списком студентов --- */
+
+.day-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.day-actions .absent-counter {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.day-actions__period {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-left: auto;
+}
+
+.day-actions__period select {
+  width: auto;
+}
+
+/* --- Карточка студента --- */
+
+.student-card {
+  max-width: 880px;
+}
+
+.student-card__header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.student-card__header h2 {
+  margin: 0;
+}
+
+.student-card__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.student-card__item {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+}
+
+.student-card__item dt {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.student-card__item dd {
+  margin: 2px 0 0;
+  font-weight: 600;
+}
+
+.student-card__section {
+  margin: 24px 0 8px;
+}
+
+.student-card__danger {
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.danger-btn {
+  color: var(--danger);
+}
+
+button.danger-btn:not(:disabled) {
+  border-color: var(--danger);
+}
+
+.danger-zone {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.actions button.danger-btn:last-child,
+.actions button.danger-btn {
+  background: var(--card-bg);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}
+
+.actions button.danger-btn:last-child:hover:not(:disabled) {
+  background: var(--danger);
+  color: #fff;
+}
+
+.actions button.danger-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Ссылка-«кнопка» (Link), например имя студента в списке и «назад» на карточке */
+a.link-btn {
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 2px 4px;
+  text-decoration: none;
+}
+
+a.link-btn:hover {
+  text-decoration: underline;
+}
+
+/* --- Свод «всего / к 1 паре» --- */
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.summary-table th,
+.summary-table td {
+  white-space: nowrap;
+}
+
+.summary-table tr.summary-first-row td {
+  background: var(--primary-light);
+}
+
+.summary-table tr.summary-all-row td {
+  border-top: 2px solid var(--border);
+}
+
+.modal.modal-wide {
+  max-width: 720px;
+}
+
+.month-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 12px;
+}
+
+.month-nav__label {
+  min-width: 150px;
+  text-align: center;
+  font-weight: 700;
+}
+
+tr.day-nonworking td {
+  color: var(--muted);
+  background: transparent;
+}
+
+tr.day-absent td {
+  background: var(--danger-bg);
+}
+
+tr.day-not-submitted td {
+  background: var(--warn-bg);
+}

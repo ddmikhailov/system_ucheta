@@ -65,6 +65,18 @@ export default function DepartmentsTab({ canEdit }: { canEdit: boolean }) {
   return (
     <div>
       {error && <div className="error-text">{error}</div>}
+      {canEdit && (
+        <div className="add-block">
+          <p className="add-block__title">Добавить отделение</p>
+          <form className="inline-form" onSubmit={handleCreate}>
+            <input placeholder="Новое отделение" value={name} onChange={(e) => setName(e.target.value)} required />
+            <button type="submit" disabled={busy}>
+              Добавить
+            </button>
+          </form>
+        </div>
+      )}
+
       <table className="dash-table">
         <thead>
           <tr>
@@ -111,15 +123,6 @@ export default function DepartmentsTab({ canEdit }: { canEdit: boolean }) {
           ))}
         </tbody>
       </table>
-
-      {canEdit && (
-        <form className="inline-form" onSubmit={handleCreate}>
-          <input placeholder="Новое отделение" value={name} onChange={(e) => setName(e.target.value)} required />
-          <button type="submit" disabled={busy}>
-            Добавить
-          </button>
-        </form>
-      )}
     </div>
   );
 }

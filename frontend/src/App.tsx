@@ -8,6 +8,7 @@ import ChangePasswordPage from "./pages/ChangePasswordPage";
 import CuratorCabinetPage from "./pages/CuratorCabinetPage";
 import DashboardsPage from "./pages/DashboardsPage";
 import AdminPage from "./pages/AdminPage";
+import StudentCardPage from "./pages/StudentCardPage";
 import { MANAGEMENT_ROLES } from "./constants/roles";
 
 function RequireAuth({ children }: { children: ReactElement }) {
@@ -97,6 +98,16 @@ export default function App() {
                     <AdminPage />
                   </Layout>
                 </RequireAdminAccess>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/students/:studentId"
+            element={
+              <RequireAuth>
+                <Layout>
+                  <StudentCardPage />
+                </Layout>
               </RequireAuth>
             }
           />

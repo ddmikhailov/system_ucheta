@@ -38,6 +38,7 @@ export interface RosterResponse {
   is_submitted: boolean;
   submitted_at: string | null;
   is_on_time: boolean | null;
+  first_period: number | null;
   entries: RosterEntry[];
 }
 
@@ -104,23 +105,6 @@ export interface CuratorDisciplineRow {
   late: number;
   missed: number;
   total_study_days: number;
-}
-
-export interface StudentMarkHistoryEntry {
-  date: string;
-  mark_code: string;
-  mark_name: string;
-  basis_reference: string | null;
-  basis_status: string;
-}
-
-export interface StudentCard {
-  student_id: number;
-  full_name: string;
-  group_code: string;
-  status: string;
-  percent_period: number;
-  history: StudentMarkHistoryEntry[];
 }
 
 // --- Admin ---
@@ -212,4 +196,166 @@ export interface NotificationItem {
   entity_id: string | null;
   created_at: string;
   read_at: string | null;
+}
+
+export interface GroupDeletionPreview {
+  code: string;
+  students: number;
+  attendance_marks: number;
+  day_submissions: number;
+  absence_periods: number;
+  curator_assignments: number;
+}
+
+export interface StudentCardGroup {
+  id: number;
+  code: string;
+  course: number;
+  study_form: string | null;
+  is_active: boolean;
+  department_id: number;
+  department_name: string;
+}
+
+export interface StudentCardMembership {
+  group_id: number;
+  group_code: string;
+  start_date: string;
+  end_date: string | null;
+}
+
+export interface StudentCardMark {
+  date: string;
+  code: string;
+  name: string;
+  comment: string | null;
+  basis_reference: string | null;
+}
+
+export interface StudentCardStats {
+  date_from: string;
+  date_to: string;
+  in_list: number;
+  present: number;
+  absent_total: number;
+  absent_excused: number;
+  absent_unexcused: number;
+  late: number;
+  percent: number;
+  by_code: Record<string, number>;
+}
+
+export interface StudentCard {
+  id: number;
+  full_name: string;
+  last_name: string;
+  first_name: string;
+  middle_name: string | null;
+  status: string;
+  enrolled_at: string;
+  left_at: string | null;
+  group: StudentCardGroup;
+  curator_name: string | null;
+  deputy_name: string | null;
+  group_history: StudentCardMembership[];
+  stats: StudentCardStats;
+  recent_marks: StudentCardMark[];
+}
+
+export interface SummaryCode {
+  code: string;
+  name: string;
+}
+
+export interface SummaryLine {
+  date: string | null;
+  department: string;
+  slice_name: string;
+  groups: number;
+  groups_submitted: number;
+  headcount: number;
+  counted: number;
+  present: number;
+  absent: number;
+  percent: number | null;
+  by_code: Record<string, number>;
+}
+
+export interface SummaryGroupDay {
+  date: string;
+  department: string;
+  group_id: number;
+  group_code: string;
+  course: number;
+  headcount: number;
+  is_submitted: boolean;
+  present: number | null;
+  absent: number | null;
+  percent: number | null;
+  first_period: number | null;
+  by_code: Record<string, number>;
+}
+
+export interface AttendanceSummary {
+  codes: SummaryCode[];
+  daily: SummaryLine[];
+  period: SummaryLine[];
+  group_days: SummaryGroupDay[];
+}
+
+export interface StudentDayAttendance {
+  date: string;
+  day_type: string;
+  status: string;
+  group_code: string | null;
+  mark_code: string | null;
+  mark_name: string | null;
+  counts_as_present: boolean | null;
+  is_excused: boolean | null;
+  comment: string | null;
+  basis_reference: string | null;
+}
+
+export interface StudentMonthSummary {
+  study_days: number;
+  present: number;
+  absent: number;
+  absent_excused: number;
+  absent_unexcused: number;
+  late: number;
+  not_submitted: number;
+  percent: number | null;
+  by_code: Record<string, number>;
+}
+
+export interface StudentMonthAttendance {
+  student_id: number;
+  year: number;
+  month: number;
+  first_month: string;
+  summary: StudentMonthSummary;
+  days: StudentDayAttendance[];
+}
+
+export interface CuratorDayRow {
+  date: string;
+  status: string;
+  submitted_at_local: string | null;
+  submitted_by: string | null;
+  first_period: number | null;
+  days_late: number | null;
+}
+
+export interface CuratorDaysRead {
+  study_group_id: number;
+  group_code: string;
+  responsible_name: string | null;
+  date_from: string;
+  date_to: string;
+  on_time: number;
+  late: number;
+  missed: number;
+  total_study_days: number;
+  average_on_time_submission: string | null;
+  days: CuratorDayRow[];
 }

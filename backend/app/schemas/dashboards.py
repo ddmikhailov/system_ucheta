@@ -63,3 +63,72 @@ class StudentCard(BaseModel):
     history: list[StudentMarkHistoryEntry]
 
 
+class SummaryCode(BaseModel):
+    code: str
+    name: str
+
+
+class SummaryLineRead(BaseModel):
+    """Строка свода: отделение (или «Все отделения») × срез («Всего» /
+    «К 1 паре»), за день (`date`) или за весь период (`date is None`)."""
+
+    date: datetime.date | None
+    department: str
+    slice_name: str
+    groups: int
+    groups_submitted: int
+    headcount: int
+    counted: int
+    present: int
+    absent: int
+    percent: float | None
+    by_code: dict[str, int]
+
+
+class SummaryGroupDayRead(BaseModel):
+    date: datetime.date
+    department: str
+    group_id: int
+    group_code: str
+    course: int
+    headcount: int
+    is_submitted: bool
+    present: int | None
+    absent: int | None
+    percent: float | None
+    first_period: int | None
+    by_code: dict[str, int]
+
+
+class SummaryRead(BaseModel):
+    codes: list[SummaryCode]
+    daily: list[SummaryLineRead]
+    period: list[SummaryLineRead]
+    group_days: list[SummaryGroupDayRead]
+
+
+class CuratorDayRow(BaseModel):
+    date: datetime.date
+    # on_time — сдано в день занятия; late — задним числом; missed — не сдано.
+    status: str
+    # Местное время колледжа (уже переведено с UTC на сервере), время
+    # ПОСЛЕДНЕЙ сдачи дня; None, если день не сдан.
+    submitted_at_local: datetime.datetime | None
+    submitted_by: str | None
+    first_period: int | None
+    days_late: int | None
+
+
+class CuratorDaysRead(BaseModel):
+    study_group_id: int
+    group_code: str
+    responsible_name: str | None
+    date_from: datetime.date
+    date_to: datetime.date
+    on_time: int
+    late: int
+    missed: int
+    total_study_days: int
+    # Среднее время сдачи по дням «вовремя», ЧЧ:ММ; None, если таких нет.
+    average_on_time_submission: str | None
+    days: list[CuratorDayRow]

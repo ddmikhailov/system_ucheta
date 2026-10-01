@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { api, ApiError } from "../../api/client";
 import AssignCuratorModal from "../../components/AssignCuratorModal";
+import DeleteGroupForeverModal from "../../components/DeleteGroupForeverModal";
 import { useEscapeKey } from "../../hooks/useEscapeKey";
 import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { DeleteResult, DepartmentAdmin, StudyGroupAdmin, UserAdmin } from "../../api/types";
@@ -71,6 +72,34 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
           {notice} <button className="link-btn" onClick={() => setNotice(null)}>Скрыть</button>
         </div>
       )}
+      {canCreate && (
+        <div className="add-block">
+          <p className="add-block__title">Добавить группу</p>
+          <form className="inline-form" onSubmit={handleCreate}>
+            <input placeholder="Код группы" value={code} onChange={(e) => setCode(e.target.value)} required />
+            <input
+              type="number"
+              min={1}
+              max={4}
+              value={course}
+              onChange={(e) => setCourse(Number(e.target.value))}
+              style={{ width: 60 }}
+            />
+            <select value={departmentId ?? ""} onChange={(e) => setDepartmentId(Number(e.target.value))}>
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+            <input placeholder="Форма обучения (необязательно)" value={studyForm} onChange={(e) => setStudyForm(e.target.value)} />
+            <button type="submit" disabled={busy}>
+              Добавить группу
+            </button>
+          </form>
+        </div>
+      )}
+
       <table className="dash-table">
         <thead>
           <tr>
@@ -102,35 +131,11 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
         </tbody>
       </table>
 
-      {canCreate && (
-        <form className="inline-form" onSubmit={handleCreate}>
-          <input placeholder="Код группы" value={code} onChange={(e) => setCode(e.target.value)} required />
-          <input
-            type="number"
-            min={1}
-            max={4}
-            value={course}
-            onChange={(e) => setCourse(Number(e.target.value))}
-            style={{ width: 60 }}
-          />
-          <select value={departmentId ?? ""} onChange={(e) => setDepartmentId(Number(e.target.value))}>
-            {departments.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </select>
-          <input placeholder="Форма обучения (необязательно)" value={studyForm} onChange={(e) => setStudyForm(e.target.value)} />
-          <button type="submit" disabled={busy}>
-            Добавить группу
-          </button>
-        </form>
-      )}
-
       {detailGroup && (
         <GroupDetailModal
           group={detailGroup}
           curators={curators}
+          canDeleteForever={canCreate}
           onClose={() => setDetailId(null)}
           onChanged={load}
           setNotice={setNotice}
@@ -152,6 +157,7 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
 function GroupDetailModal({
   group,
   curators,
+  canDeleteForever,
   onClose,
   onChanged,
   setNotice,
@@ -159,6 +165,7 @@ function GroupDetailModal({
 }: {
   group: StudyGroupAdmin;
   curators: UserAdmin[];
+  canDeleteForever: boolean;
   onClose: () => void;
   onChanged: () => void;
   setNotice: (n: string | null) => void;
@@ -168,6 +175,7 @@ function GroupDetailModal({
   const [editCourse, setEditCourse] = useState(group.course);
   const [editStudyForm, setEditStudyForm] = useState(group.study_form ?? "");
   const [assigning, setAssigning] = useState(false);
+  const [deletingForever, setDeletingForever] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   useEscapeKey(onClose);
 
@@ -292,12 +300,36 @@ function GroupDetailModal({
           <button className="link-btn" onClick={toggleActive}>
             {group.is_active ? "В архив" : "Вернуть из архива"}
           </button>
-          {!group.is_active && (
-            <button className="link-btn" onClick={removeGroup}>
-              Удалить насовсем
-            </button>
-          )}
         </div>
+
+        {canDeleteForever ? (
+          <div className="danger-zone">
+            <button className="danger-btn" onClick={() => setDeletingForever(true)}>
+              Удалить группу навсегда…
+            </button>
+          </div>
+        ) : (
+          !group.is_active && (
+            <div className="danger-zone">
+              <button className="danger-btn" onClick={removeGroup}>
+                Удалить насовсем
+              </button>
+            </div>
+          )
+        )}
+
+        {deletingForever && (
+          <DeleteGroupForeverModal
+            groupId={group.id}
+            groupCode={group.code}
+            onClose={() => setDeletingForever(false)}
+            onDeleted={(detail) => {
+              setNotice(detail);
+              onChanged();
+              onClose();
+            }}
+          />
+        )}
 
         {assigning && (
           <AssignCuratorModal

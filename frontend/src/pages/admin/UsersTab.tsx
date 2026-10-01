@@ -140,6 +140,35 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
         </div>
       )}
 
+      {canCreate && (
+        <div className="add-block">
+          <p className="add-block__title">Добавить пользователя</p>
+          <form className="inline-form" onSubmit={handleCreate}>
+            <input placeholder="ФИО" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
+            <input placeholder="Логин" value={username} onChange={(e) => setUsername(e.target.value)} required />
+            <select value={role} onChange={(e) => setRole(e.target.value)}>
+              {Object.entries(ROLE_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            {roleNeedsDepartment && (
+              <select value={departmentId ?? ""} onChange={(e) => setDepartmentId(Number(e.target.value))}>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <button type="submit" disabled={busy}>
+              Добавить пользователя
+            </button>
+          </form>
+        </div>
+      )}
+
       <div className="toolbar">
         <input placeholder="Поиск по ФИО" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
         <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
@@ -211,32 +240,6 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
             Вперёд →
           </button>
         </div>
-      )}
-
-      {canCreate && (
-        <form className="inline-form" onSubmit={handleCreate}>
-          <input placeholder="ФИО" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
-          <input placeholder="Логин" value={username} onChange={(e) => setUsername(e.target.value)} required />
-          <select value={role} onChange={(e) => setRole(e.target.value)}>
-            {Object.entries(ROLE_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-          {roleNeedsDepartment && (
-            <select value={departmentId ?? ""} onChange={(e) => setDepartmentId(Number(e.target.value))}>
-              {departments.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          )}
-          <button type="submit" disabled={busy}>
-            Добавить пользователя
-          </button>
-        </form>
       )}
 
       {profileUser && (

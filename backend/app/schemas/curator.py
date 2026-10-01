@@ -26,6 +26,7 @@ class RosterResponse(BaseModel):
     is_submitted: bool
     submitted_at: datetime.datetime | None
     is_on_time: bool | None
+    first_period: int | None = None
     entries: list[RosterEntry]
 
 
@@ -40,6 +41,7 @@ class MarkExceptionInput(BaseModel):
 
 class SubmitDayRequest(BaseModel):
     exceptions: list[MarkExceptionInput] = []
+    first_period: int | None = Field(default=None, ge=1, le=10)
 
 
 class GroupSummary(BaseModel):

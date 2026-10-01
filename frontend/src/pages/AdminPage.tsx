@@ -73,7 +73,7 @@ export default function AdminPage() {
 
       {tab === "departments" && <DepartmentsTab canEdit={isAdmin} />}
       {tab === "groups" && <GroupsTab canEdit={canManageStructure} canCreate={isAdmin} />}
-      {tab === "students" && <StudentsTab canEdit={canManageStructure} canCreate={isAdmin} />}
+      {tab === "students" && <StudentsTab canCreate={isAdmin} />}
       {tab === "mark-codes" && <MarkCodesTab canEdit={isReferenceEditor} />}
       {tab === "users" && <UsersTab canEdit={canManageStructure} canCreate={isAdmin} />}
       {tab === "calendar" && <CalendarTab canEdit={isReferenceEditor} />}

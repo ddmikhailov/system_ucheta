@@ -62,6 +62,11 @@ require_reference_editor = require_roles(RoleCode.EDU_DEPARTMENT, RoleCode.ADMIN
 # теперь и он. Название отражает это явно (было require_admin — вводило в
 # заблуждение, будто пускает только администратора, см. TODO.md 5).
 require_full_access = require_roles(RoleCode.ADMIN, RoleCode.TUTOR)
+# Правка/удаление групп и студентов — админ/тьютор по колледжу и зав.
+# отделением в своём отделении. Воспитательный отдел структуру не правит
+# (в интерфейсе у него эти вкладки только для чтения), раньше бэкенд
+# пускал его через require_management.
+require_structure_editor = require_roles(RoleCode.ADMIN, RoleCode.TUTOR, RoleCode.DEPT_HEAD)
 
 
 def scope_department_id(user: User, requested: int | None) -> int | None:

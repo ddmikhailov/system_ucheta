@@ -7,6 +7,8 @@ docker-entrypoint.sh). Раньше вход не был ограничен по
 import time
 from collections import defaultdict, deque
 
+from app.core.config import get_settings
+
 _attempts: dict[str, deque[float]] = defaultdict(deque)
 
 
@@ -24,11 +26,15 @@ def check_rate_limit(key: str, max_attempts: int, window_seconds: int) -> bool:
 
 
 def client_ip(request) -> str:
-    """Amvera (и любой другой обратный прокси перед приложением) — единственный
-    путь снаружи, поэтому первому IP из X-Forwarded-For можно доверять
-    настолько же, насколько самому прокси; если заголовка нет — берём IP
-    транспортного соединения напрямую."""
+    """Каждый доверенный прокси дописывает в X-Forwarded-For адрес того, от кого
+    получил запрос, поэтому доверять можно только записям справа: N-я с конца
+    (N = TRUSTED_PROXY_COUNT) — реальный клиент. Левые записи клиент задаёт
+    сам — раньше бралась первая, и лимит входа обходился подменой заголовка.
+    Если заголовка нет или он короче — IP транспортного соединения."""
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
-        return forwarded.split(",")[0].strip()
+        hops = [h.strip() for h in forwarded.split(",") if h.strip()]
+        count = get_settings().trusted_proxy_count
+        if count > 0 and len(hops) >= count:
+            return hops[-count]
     return request.client.host if request.client else "unknown"

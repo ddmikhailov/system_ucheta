@@ -21,6 +21,10 @@ from app.services import calendar_service, group_membership_service, in_app_noti
 from app.services.audit_service import log_action
 
 
+MIN_FIRST_PERIOD = 1
+MAX_FIRST_PERIOD = 10
+
+
 class BackdateNotAllowed(Exception):
     pass
 
@@ -284,6 +288,7 @@ def get_roster(db: Session, study_group_id: int, date: datetime.date) -> dict:
         "is_submitted": submission is not None,
         "submitted_at": submission.submitted_at if submission else None,
         "is_on_time": submission.is_on_time if submission else None,
+        "first_period": submission.first_period if submission else None,
         "entries": entries,
     }
 
@@ -295,7 +300,12 @@ def submit_day(
     exceptions: list[dict],
     user: User,
     today: datetime.date | None = None,
+    first_period: int | None = None,
 ) -> DaySubmission:
+    if first_period is not None and not (MIN_FIRST_PERIOD <= first_period <= MAX_FIRST_PERIOD):
+        raise InvalidSubmission(
+            f"Пара должна быть от {MIN_FIRST_PERIOD} до {MAX_FIRST_PERIOD}, получено {first_period}"
+        )
     today = today or today_local()
     if not can_edit_date(user, date, today):
         raise BackdateNotAllowed(f"Правка за {date} недоступна: это ещё не наступивший день.")
@@ -390,6 +400,7 @@ def submit_day(
             submitted_by_user_id=user.id,
             submitted_at=utcnow(),
             is_on_time=is_on_time,
+            first_period=first_period,
         )
         db.add(submission)
         log_action(db, user, "day.submit", "day_submission", f"{study_group_id}:{date}")
@@ -397,6 +408,10 @@ def submit_day(
         submission.submitted_by_user_id = user.id
         submission.submitted_at = utcnow()
         submission.is_on_time = is_on_time
+        # None — «не менять»: повторная сдача (например, «Все присутствуют»
+        # без выбора пары) не должна стирать уже выставленную пару.
+        if first_period is not None:
+            submission.first_period = first_period
         log_action(db, user, "day.resubmit", "day_submission", f"{study_group_id}:{date}")
 
     group = db.get(StudyGroup, study_group_id)

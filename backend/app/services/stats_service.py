@@ -11,6 +11,7 @@ from app.models import (
     Student,
     StudyGroup,
 )
+from app.core.time import utc_to_local
 from app.services import calendar_service, group_membership_service
 
 
@@ -315,6 +316,76 @@ def curator_discipline(
             }
         )
     return rows
+
+
+def curator_discipline_days(
+    db: Session,
+    group: StudyGroup,
+    date_from: datetime.date,
+    date_to: datetime.date,
+) -> dict:
+    """Дисциплина по одной группе день за днём: сдан ли день, когда (местное
+    время колледжа) и кем. `submitted_at` в БД — время ПОСЛЕДНЕЙ сдачи: при
+    пересдаче дня оно обновляется."""
+    study_days = calendar_service.study_days_between(
+        db, date_from, date_to, study_group_id=group.id, course=group.course
+    )
+    submissions = {}
+    if study_days:
+        submissions = {
+            s.date: s
+            for s in db.execute(
+                select(DaySubmission).where(
+                    DaySubmission.study_group_id == group.id, DaySubmission.date.in_(study_days)
+                )
+            ).scalars().all()
+        }
+
+    days = []
+    on_time_minutes: list[int] = []
+    for day in study_days:
+        submission = submissions.get(day)
+        if submission is None:
+            days.append(
+                {
+                    "date": day, "status": "missed", "submitted_at_local": None, "submitted_by": None,
+                    "first_period": None, "days_late": None,
+                }
+            )
+            continue
+        local = utc_to_local(submission.submitted_at)
+        if submission.is_on_time:
+            on_time_minutes.append(local.hour * 60 + local.minute)
+        days.append(
+            {
+                "date": day,
+                "status": "on_time" if submission.is_on_time else "late",
+                "submitted_at_local": local,
+                "submitted_by": submission.submitted_by.full_name,
+                "first_period": submission.first_period,
+                "days_late": None if submission.is_on_time else max((local.date() - day).days, 0),
+            }
+        )
+
+    average = None
+    if on_time_minutes:
+        mean = round(sum(on_time_minutes) / len(on_time_minutes))
+        average = f"{mean // 60:02d}:{mean % 60:02d}"
+    on_time = sum(1 for d in days if d["status"] == "on_time")
+    late = sum(1 for d in days if d["status"] == "late")
+    return {
+        "study_group_id": group.id,
+        "group_code": group.code,
+        "responsible_name": _current_responsible_name(group, date_to),
+        "date_from": date_from,
+        "date_to": date_to,
+        "on_time": on_time,
+        "late": late,
+        "missed": len(days) - on_time - late,
+        "total_study_days": len(days),
+        "average_on_time_submission": average,
+        "days": days,
+    }
 
 
 def risk_students(

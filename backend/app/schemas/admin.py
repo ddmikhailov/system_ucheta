@@ -55,6 +55,18 @@ class DeleteResult(BaseModel):
     detail: str
 
 
+class GroupDeletionPreview(BaseModel):
+    """Что будет безвозвратно удалено вместе с группой — показывается в
+    окне подтверждения до самого удаления."""
+
+    code: str
+    students: int
+    attendance_marks: int
+    day_submissions: int
+    absence_periods: int
+    curator_assignments: int
+
+
 _StudentStatusLiteral = Literal["studying", "academic_leave", "expelled"]
 
 

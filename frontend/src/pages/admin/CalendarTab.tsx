@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { api, ApiError } from "../../api/client";
 import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { CalendarDay, GroupCalendarOverride, StudyGroupAdmin } from "../../api/types";
-import { todayIso } from "../../utils/date";
+import { toIso, todayIso } from "../../utils/date";
 
 function monthsAheadIso(n: number): string {
   const d = new Date();
   d.setMonth(d.getMonth() + n);
-  return d.toISOString().slice(0, 10);
+  return toIso(d);
 }
 
 function formatDateRu(iso: string): string {
@@ -78,7 +78,7 @@ export default function CalendarTab({ canEdit }: { canEdit: boolean }) {
     const cur = new Date(from + "T00:00:00");
     const end = new Date(to + "T00:00:00");
     while (cur <= end) {
-      result.push(cur.toISOString().slice(0, 10));
+      result.push(toIso(cur));
       cur.setDate(cur.getDate() + 1);
     }
     return result;
@@ -163,6 +163,32 @@ export default function CalendarTab({ canEdit }: { canEdit: boolean }) {
       </div>
 
       <h4>Общий календарь (весь колледж)</h4>
+      {canEdit && (
+        <div className="add-block">
+          <p className="add-block__title">Добавить исключение для всего колледжа</p>
+          <div className="inline-form">
+            <input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} title="Дата (начало диапазона)" />
+            <span>—</span>
+            <input
+              type="date"
+              value={newDateTo}
+              onChange={(e) => setNewDateTo(e.target.value)}
+              title="Конец диапазона — необязательно, для каникул на несколько дней"
+            />
+            <select value={newType} onChange={(e) => setNewType(e.target.value)}>
+              {Object.entries(DAY_TYPE_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <button onClick={addException} disabled={bulkBusy}>
+              {bulkBusy ? "Сохраняем…" : "Сохранить"}
+            </button>
+          </div>
+        </div>
+      )}
+
       <table className="dash-table">
         <thead>
           <tr>
@@ -193,29 +219,6 @@ export default function CalendarTab({ canEdit }: { canEdit: boolean }) {
         </tbody>
       </table>
 
-      {canEdit && (
-        <div className="inline-form">
-          <input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} title="Дата (начало диапазона)" />
-          <span>—</span>
-          <input
-            type="date"
-            value={newDateTo}
-            onChange={(e) => setNewDateTo(e.target.value)}
-            title="Конец диапазона — необязательно, для каникул на несколько дней"
-          />
-          <select value={newType} onChange={(e) => setNewType(e.target.value)}>
-            {Object.entries(DAY_TYPE_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <button onClick={addException} disabled={bulkBusy}>
-            {bulkBusy ? "Сохраняем…" : "Сохранить"}
-          </button>
-        </div>
-      )}
-
       <h4>Исключения по конкретной группе</h4>
       <div className="toolbar">
         <select value={overrideGroupId ?? ""} onChange={(e) => setOverrideGroupId(Number(e.target.value))}>
@@ -226,6 +229,23 @@ export default function CalendarTab({ canEdit }: { canEdit: boolean }) {
           ))}
         </select>
       </div>
+
+      {canEdit && (
+        <div className="add-block">
+          <p className="add-block__title">Добавить исключение для выбранной группы</p>
+          <div className="inline-form">
+            <input type="date" value={overrideDate} onChange={(e) => setOverrideDate(e.target.value)} />
+            <select value={overrideType} onChange={(e) => setOverrideType(e.target.value)}>
+              {Object.entries(DAY_TYPE_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <button onClick={addGroupOverride}>Сохранить для группы</button>
+          </div>
+        </div>
+      )}
 
       <table className="dash-table">
         <thead>
@@ -256,20 +276,6 @@ export default function CalendarTab({ canEdit }: { canEdit: boolean }) {
           )}
         </tbody>
       </table>
-
-      {canEdit && (
-        <div className="inline-form">
-          <input type="date" value={overrideDate} onChange={(e) => setOverrideDate(e.target.value)} />
-          <select value={overrideType} onChange={(e) => setOverrideType(e.target.value)}>
-            {Object.entries(DAY_TYPE_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <button onClick={addGroupOverride}>Сохранить для группы</button>
-        </div>
-      )}
     </div>
   );
 }

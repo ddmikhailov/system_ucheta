@@ -1,6 +1,6 @@
 import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import assert_can_access_group, get_current_user, get_curator_group_ids
@@ -80,7 +80,8 @@ def submit_day(
     assert_can_access_group(db, user, study_group_id, date)
     try:
         attendance_service.submit_day(
-            db, study_group_id, date, [e.model_dump() for e in payload.exceptions], user
+            db, study_group_id, date, [e.model_dump() for e in payload.exceptions], user,
+            first_period=payload.first_period,
         )
     except attendance_service.BackdateNotAllowed as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc))
@@ -94,6 +95,7 @@ def mark_all_present(
     study_group_id: int,
     date: datetime.date,
     confirm: bool = False,
+    first_period: int | None = Query(default=None, ge=1, le=10),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -111,7 +113,7 @@ def mark_all_present(
                 "повторите запрос с confirm=true, если это действительно нужно.",
             )
     try:
-        attendance_service.submit_day(db, study_group_id, date, [], user)
+        attendance_service.submit_day(db, study_group_id, date, [], user, first_period=first_period)
     except attendance_service.BackdateNotAllowed as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc))
     return attendance_service.get_roster(db, study_group_id, date)

@@ -47,6 +47,9 @@ class DaySubmission(Base):
         DateTime, default=utcnow, nullable=False
     )
     is_on_time: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # К какой паре группа пришла в этот день (1, 2, ...) — выставляет куратор
+    # при сдаче дня; нужна для свода «всего / к 1 паре» в выгрузке.
+    first_period: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     study_group: Mapped["StudyGroup"] = relationship()
     submitted_by: Mapped["User"] = relationship()

@@ -1,19 +1,23 @@
 import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_full_access, require_management, require_reference_editor, scope_department_id
+from app.api.deps import (
+    require_full_access, require_management, require_reference_editor, require_structure_editor, scope_department_id,
+)
 from app.core import policies
 from app.core.time import today_local
 from app.db.session import get_db
 from app.models import (
+    AbsencePeriod,
     AcademicCalendarDay,
     AssignmentRole,
     AttendanceMark,
     AuditLog,
     CuratorAssignment,
+    DaySubmission,
     Department,
     DayType,
     GroupCalendarOverride,
@@ -37,6 +41,7 @@ from app.schemas.admin import (
     DepartmentUpdate,
     GroupCalendarOverrideRead,
     GroupCalendarOverrideUpsert,
+    GroupDeletionPreview,
     MarkCodeRead,
     MarkCodeUpdate,
     SetPasswordRequest,
@@ -187,7 +192,7 @@ def create_group(
 @router.patch("/groups/{group_id}", response_model=StudyGroupRead)
 def update_group(
     group_id: int, payload: StudyGroupUpdate,
-    user: User = Depends(require_management), db: Session = Depends(get_db),
+    user: User = Depends(require_structure_editor), db: Session = Depends(get_db),
 ):
     group = db.get(StudyGroup, group_id)
     if group is None:
@@ -215,15 +220,111 @@ def update_group(
     return _group_read(group)
 
 
+def _group_student_ids(db: Session, group_id: int) -> list[int]:
+    return [sid for (sid,) in db.query(Student.id).filter(Student.study_group_id == group_id).all()]
+
+
+def _count_rows(db: Session, model, column, values: list[int]) -> int:
+    if not values:
+        return 0
+    return db.query(model).filter(column.in_(values)).count()
+
+
+@router.get("/groups/{group_id}/deletion-preview", response_model=GroupDeletionPreview)
+def group_deletion_preview(
+    group_id: int,
+    user: User = Depends(require_full_access), db: Session = Depends(get_db),
+):
+    group = db.get(StudyGroup, group_id)
+    if group is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Группа не найдена")
+    student_ids = _group_student_ids(db, group_id)
+    return GroupDeletionPreview(
+        code=group.code,
+        students=len(student_ids),
+        attendance_marks=_count_rows(db, AttendanceMark, AttendanceMark.student_id, student_ids),
+        day_submissions=db.query(DaySubmission).filter(DaySubmission.study_group_id == group_id).count(),
+        absence_periods=_count_rows(db, AbsencePeriod, AbsencePeriod.student_id, student_ids),
+        curator_assignments=db.query(CuratorAssignment).filter(CuratorAssignment.study_group_id == group_id).count(),
+    )
+
+
+def _delete_group_completely(db: Session, user: User, group: StudyGroup) -> DeleteResult:
+    """Удаление группы вместе со всем, что к ней относится: студенты, их
+    отметки и длительные отсутствия, сдачи дней, назначения кураторов,
+    исключения календаря. Необратимо — поэтому вызывается только явно
+    (force + подтверждение кодом группы) и только администратором/тьютором.
+
+    Студенты, которые раньше состояли в группе, но уже переведены в другую,
+    не удаляются — у них убирается только запись о членстве в этой группе."""
+    group_id = group.id
+    code = group.code
+    student_ids = _group_student_ids(db, group_id)
+
+    counts = {
+        "students": len(student_ids),
+        "marks": _count_rows(db, AttendanceMark, AttendanceMark.student_id, student_ids),
+        "submissions": db.query(DaySubmission).filter(DaySubmission.study_group_id == group_id).count(),
+    }
+
+    if student_ids:
+        db.query(AttendanceMark).filter(AttendanceMark.student_id.in_(student_ids)).delete(synchronize_session=False)
+        db.query(AbsencePeriod).filter(AbsencePeriod.student_id.in_(student_ids)).delete(synchronize_session=False)
+        db.query(StudentGroupMembership).filter(
+            StudentGroupMembership.student_id.in_(student_ids)
+        ).delete(synchronize_session=False)
+        for student_id in student_ids:
+            # ФИО осталось бы в audit_log (student.create хранит его в
+            # new_value) — стираем, как при обезличивании студента.
+            _redact_audit_history(db, "student", str(student_id))
+        db.query(Student).filter(Student.id.in_(student_ids)).delete(synchronize_session=False)
+
+    db.query(StudentGroupMembership).filter(
+        StudentGroupMembership.study_group_id == group_id
+    ).delete(synchronize_session=False)
+    db.query(DaySubmission).filter(DaySubmission.study_group_id == group_id).delete(synchronize_session=False)
+    db.query(CuratorAssignment).filter(CuratorAssignment.study_group_id == group_id).delete(synchronize_session=False)
+    db.query(GroupCalendarOverride).filter(
+        GroupCalendarOverride.study_group_id == group_id
+    ).delete(synchronize_session=False)
+    db.expire_all()
+    db.delete(db.get(StudyGroup, group_id))
+
+    log_action(
+        db, user, "group.delete_cascade", "study_group", str(group_id), old_value=code,
+        new_value=f"students={counts['students']}, marks={counts['marks']}, submissions={counts['submissions']}",
+    )
+    db.commit()
+    return DeleteResult(
+        deleted=True, anonymized=False,
+        detail=(
+            f"Группа {code} удалена навсегда: студентов — {counts['students']}, "
+            f"отметок — {counts['marks']}, сданных дней — {counts['submissions']}"
+        ),
+    )
+
+
 @router.delete("/groups/{group_id}", response_model=DeleteResult)
 def delete_group(
     group_id: int,
-    user: User = Depends(require_management), db: Session = Depends(get_db),
+    force: bool = False,
+    confirm_code: str | None = Query(default=None, max_length=32),
+    user: User = Depends(require_structure_editor), db: Session = Depends(get_db),
 ):
     group = db.get(StudyGroup, group_id)
     if group is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Группа не найдена")
     _assert_can_manage_group(user, group)
+    if force:
+        if user.role.code not in policies.ELEVATED_ROLES:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Полное удаление группы с историей доступно только администратору/тьютору"
+            )
+        if confirm_code != group.code:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, "Для полного удаления укажите код группы в confirm_code"
+            )
+        return _delete_group_completely(db, user, group)
     if group.is_active:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
@@ -307,7 +408,7 @@ def create_student(
 @router.patch("/students/{student_id}/status", response_model=StudentRead)
 def update_student_status(
     student_id: int, payload: StudentUpdateStatus,
-    user: User = Depends(require_management), db: Session = Depends(get_db),
+    user: User = Depends(require_structure_editor), db: Session = Depends(get_db),
 ):
     student = db.get(Student, student_id)
     if student is None:
@@ -331,7 +432,7 @@ def update_student_status(
 @router.patch("/students/{student_id}", response_model=StudentRead)
 def update_student(
     student_id: int, payload: StudentUpdate,
-    user: User = Depends(require_management), db: Session = Depends(get_db),
+    user: User = Depends(require_structure_editor), db: Session = Depends(get_db),
 ):
     student = db.get(Student, student_id)
     if student is None:
@@ -367,7 +468,7 @@ def update_student(
 @router.delete("/students/{student_id}", response_model=DeleteResult)
 def delete_student(
     student_id: int,
-    user: User = Depends(require_management), db: Session = Depends(get_db),
+    user: User = Depends(require_structure_editor), db: Session = Depends(get_db),
 ):
     student = db.get(Student, student_id)
     if student is None:
@@ -622,9 +723,14 @@ def update_user(
         # Отделение приводим в соответствие новой роли — иначе, например,
         # только что назначенный admin/tutor остаётся числиться в старом
         # отделении, что путает scope-проверки (см. TODO.md 1.4).
-        target.department_id = _resolve_department_for_role(
-            payload.role, payload.department_id if payload.department_id is not None else target.department_id
+        # Зав. отделением не может переносить людей между отделениями через
+        # смену роли — отделение остаётся тем, что уже у цели (= его собственное).
+        requested_department_id = (
+            target.department_id
+            if RoleCode(admin.role.code) == RoleCode.DEPT_HEAD or payload.department_id is None
+            else payload.department_id
         )
+        target.department_id = _resolve_department_for_role(payload.role, requested_department_id)
         log_action(db, admin, "user.role_change", "user", str(target.id), old_value=old_role, new_value=payload.role)
 
     if payload.username is not None and payload.username != target.username:

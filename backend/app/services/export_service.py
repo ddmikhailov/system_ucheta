@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import AttendanceMark, MarkCode, StudyGroup
-from app.services import calendar_service, stats_service
+from app.services import calendar_service, stats_service, summary_service
 from app.services.attendance_service import get_active_students
 
 # Стандартные шрифты reportlab (Helvetica) не содержат кириллицу — без TTF
@@ -110,11 +110,89 @@ def build_summary_workbook(
         length = max(len(str(cell.value or "")) for cell in column_cells)
         ws.column_dimensions[column_cells[0].column_letter].width = min(max(length + 2, 10), 40)
 
+    _add_summary_sheets(wb, db, date_from, date_to, department_id)
     _add_group_sheets(wb, db, groups, date_from, date_to)
 
     buffer = io.BytesIO()
     wb.save(buffer)
     return buffer.getvalue()
+
+
+def _style_header(ws) -> None:
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    ws.freeze_panes = "A2"
+
+
+def _autosize(ws) -> None:
+    for column_cells in ws.columns:
+        length = max(len(str(cell.value or "")) for cell in column_cells)
+        ws.column_dimensions[column_cells[0].column_letter].width = min(max(length + 2, 10), 40)
+
+
+def _add_summary_sheets(
+    wb: Workbook, db: Session, date_from: datetime.date, date_to: datetime.date, department_id: int | None
+) -> None:
+    summary = summary_service.build_summary(db, date_from, date_to, department_id)
+    codes = summary.codes
+    code_headers = [f"{code.upper()} — {name}" for code, name in codes]
+
+    def code_cells(totals: summary_service.SummaryTotals) -> list[int]:
+        return [totals.by_code.get(code, 0) for code, _ in codes]
+
+    # --- Свод по дням: дата × отделение × («всего» | «к 1 паре») ---
+    ws = wb.create_sheet("Свод по дням")
+    ws.append(
+        ["Дата", "Отделение", "Срез", "Групп", "Групп сдали", "Численность", "Учтено студентов",
+         "Прибыли", "Отсутствуют", "Посещаемость, %"] + code_headers
+    )
+    _style_header(ws)
+    for line in summary.daily:
+        t = line.totals
+        ws.append(
+            [line.date, _safe_cell(line.department), line.slice_name, line.groups, t.groups_submitted,
+             t.headcount, t.counted, t.present, t.absent, t.percent] + code_cells(t)
+        )
+        ws.cell(row=ws.max_row, column=1).number_format = "DD.MM.YYYY"
+    _autosize(ws)
+
+    # --- Свод за период: отделение × срез, суммы по всем дням ---
+    ws = wb.create_sheet("Свод за период")
+    ws.append(
+        ["Отделение", "Срез", "Групп", "Групп-дней сдано", "Студенто-дней в списках", "Студенто-дней учтено",
+         "Прибыли", "Отсутствуют", "Посещаемость, %"] + code_headers
+    )
+    _style_header(ws)
+    for line in summary.period:
+        t = line.totals
+        ws.append(
+            [_safe_cell(line.department), line.slice_name, line.groups, t.groups_submitted, t.headcount,
+             t.counted, t.present, t.absent, t.percent] + code_cells(t)
+        )
+    _autosize(ws)
+
+    # --- По группам и дням: как лист «По дням» из образца свода ---
+    ws = wb.create_sheet("По группам и дням")
+    ws.append(
+        ["Дата", "Отделение", "Группа", "Курс", "Численность", "День сдан", "Прибыли", "Отсутствуют",
+         "Посещаемость, %", "К какой паре пришли"] + code_headers
+    )
+    _style_header(ws)
+    for r in summary.group_days:
+        t = summary_service.totals_for([r])
+        if r.is_submitted:
+            period_cell = r.first_period if r.first_period is not None else "не указана"
+        else:
+            period_cell = None
+        ws.append(
+            [r.date, _safe_cell(r.department_name), _safe_cell(r.group_code), r.course, r.headcount,
+             "да" if r.is_submitted else "нет", r.present if r.is_submitted else None,
+             r.absent if r.is_submitted else None, t.percent, period_cell]
+            + ([r.by_code.get(code, 0) for code, _ in codes] if r.is_submitted else [None] * len(codes))
+        )
+        ws.cell(row=ws.max_row, column=1).number_format = "DD.MM.YYYY"
+    _autosize(ws)
 
 
 def _add_group_sheets(wb: Workbook, db: Session, groups: list[StudyGroup], date_from: datetime.date, date_to: datetime.date) -> None:

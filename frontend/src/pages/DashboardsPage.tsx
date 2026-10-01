@@ -1,26 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { downloadFile } from "../api/client";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/useAuth";
 import AssignCuratorModal from "../components/AssignCuratorModal";
-import { useEscapeKey } from "../hooks/useEscapeKey";
+import AttendanceSummaryView from "../components/AttendanceSummary";
+import CuratorDaysModal from "../components/CuratorDaysModal";
 import type {
   CuratorDisciplineRow,
   DayOverviewRow,
   DepartmentAdmin,
   DynamicsPoint,
   RiskStudentRow,
-  StudentCard,
   StudyGroupAdmin,
   UserAdmin,
 } from "../api/types";
-import { todayIso } from "../utils/date";
+import { toIso, todayIso } from "../utils/date";
 
 function daysAgoIso(n: number): string {
   const d = new Date();
   d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
+  return toIso(d);
 }
 
 // Даты в API приходят в ISO (YYYY-MM-DD) — на экране показываем в привычном
@@ -30,7 +30,7 @@ function formatDateRu(iso: string): string {
   return `${d}.${m}.${y}`;
 }
 
-type Tab = "day" | "dynamics" | "risk" | "discipline" | "vacant";
+type Tab = "day" | "summary" | "dynamics" | "risk" | "discipline" | "vacant";
 
 export default function DashboardsPage() {
   const { user } = useAuth();
@@ -55,7 +55,7 @@ export default function DashboardsPage() {
   const [disciplineRows, setDisciplineRows] = useState<CuratorDisciplineRow[]>([]);
 
   const [courseFilter, setCourseFilter] = useState<number | "all">("all");
-  const [openStudentId, setOpenStudentId] = useState<number | null>(null);
+  const [openDisciplineGroupId, setOpenDisciplineGroupId] = useState<number | null>(null);
 
   const [groups, setGroups] = useState<StudyGroupAdmin[]>([]);
   const [curators, setCurators] = useState<UserAdmin[]>([]);
@@ -170,6 +170,9 @@ export default function DashboardsPage() {
         <button className={tab === "day" ? "active" : ""} onClick={() => setTab("day")}>
           {isDeptHead ? "День по отделению" : "День по колледжу"}
         </button>
+        <button className={tab === "summary" ? "active" : ""} onClick={() => setTab("summary")}>
+          Свод
+        </button>
         <button className={tab === "dynamics" ? "active" : ""} onClick={() => setTab("dynamics")}>
           Динамика
         </button>
@@ -186,7 +189,7 @@ export default function DashboardsPage() {
           <select
             value={exportDepartmentId}
             onChange={(e) => setExportDepartmentId(e.target.value === "all" ? "all" : Number(e.target.value))}
-            title="Отделение для экспорта"
+            title="Отделение для свода и экспорта"
           >
             <option value="all">Весь колледж</option>
             {departments.map((d) => (
@@ -221,7 +224,7 @@ export default function DashboardsPage() {
         </div>
       )}
 
-      {(tab === "dynamics" || tab === "discipline") && (
+      {(tab === "dynamics" || tab === "discipline" || tab === "summary") && (
         <div className="toolbar">
           <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
           <span>—</span>
@@ -271,6 +274,14 @@ export default function DashboardsPage() {
         </table>
       )}
 
+      {tab === "summary" && (
+        <AttendanceSummaryView
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          departmentId={canFilterDepartment ? exportDepartmentId : "all"}
+        />
+      )}
+
       {tab === "dynamics" && (
         <>
           <DynamicsChart points={dynamicsPoints} />
@@ -312,9 +323,9 @@ export default function DashboardsPage() {
             {riskRows.map((r) => (
               <tr key={r.student_id} className="risk-row">
                 <td>
-                  <button className="link-btn" onClick={() => setOpenStudentId(r.student_id)}>
+                  <Link to={`/students/${r.student_id}`} className="link-btn">
                     {r.full_name}
-                  </button>
+                  </Link>
                 </td>
                 <td>{r.group_code}</td>
                 <td>{r.streak}</td>
@@ -327,6 +338,10 @@ export default function DashboardsPage() {
             )}
           </tbody>
         </table>
+      )}
+
+      {tab === "discipline" && isDeptHead && (
+        <p className="hint">Нажмите на строку, чтобы увидеть по дням, во сколько сдавался день и кем.</p>
       )}
 
       {tab === "discipline" && (
@@ -344,7 +359,12 @@ export default function DashboardsPage() {
           </thead>
           <tbody>
             {disciplineRows.map((r) => (
-              <tr key={r.study_group_id} className={r.missed > 0 ? "not-submitted-row" : ""}>
+              <tr
+                key={r.study_group_id}
+                className={`${r.missed > 0 ? "not-submitted-row" : ""}${isDeptHead ? " clickable-row" : ""}`}
+                onClick={isDeptHead ? () => setOpenDisciplineGroupId(r.study_group_id) : undefined}
+                title={isDeptHead ? "Показать по дням: во сколько сдавали" : undefined}
+              >
                 <td>{r.code}</td>
                 <td>{r.course}</td>
                 <td>{r.responsible_name ?? "нет куратора"}</td>
@@ -393,8 +413,13 @@ export default function DashboardsPage() {
         </>
       )}
 
-      {openStudentId !== null && (
-        <StudentCardModal studentId={openStudentId} dateFrom={dateFrom} dateTo={dateTo} onClose={() => setOpenStudentId(null)} />
+      {openDisciplineGroupId !== null && (
+        <CuratorDaysModal
+          studyGroupId={openDisciplineGroupId}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onClose={() => setOpenDisciplineGroupId(null)}
+        />
       )}
 
       {assigningGroupId !== null && (
@@ -408,73 +433,6 @@ export default function DashboardsPage() {
           }}
         />
       )}
-    </div>
-  );
-}
-
-function StudentCardModal({
-  studentId,
-  dateFrom,
-  dateTo,
-  onClose,
-}: {
-  studentId: number;
-  dateFrom: string;
-  dateTo: string;
-  onClose: () => void;
-}) {
-  const [card, setCard] = useState<StudentCard | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  useEscapeKey(onClose);
-
-  useEffect(() => {
-    api
-      .get<StudentCard>(`/dashboards/students/${studentId}?date_from=${dateFrom}&date_to=${dateTo}`)
-      .then(setCard)
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка загрузки"));
-  }, [studentId, dateFrom, dateTo]);
-
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label="Карточка студента" onClick={(e) => e.stopPropagation()}>
-        {error && <div className="error-text">{error}</div>}
-        {card && (
-          <>
-            <h3>{card.full_name}</h3>
-            <p>
-              Группа {card.group_code} · присутствие за период {formatDateRu(dateFrom)}–{formatDateRu(dateTo)}:{" "}
-              {card.percent_period}%
-            </p>
-            <p className="hint">Период задаётся вкладкой «Динамика» — измените его там, если нужен другой диапазон.</p>
-            <table className="dash-table">
-              <thead>
-                <tr>
-                  <th>Дата</th>
-                  <th>Код</th>
-                  <th>Основание</th>
-                </tr>
-              </thead>
-              <tbody>
-                {card.history.map((h, i) => (
-                  <tr key={i}>
-                    <td>{formatDateRu(h.date)}</td>
-                    <td>{h.mark_name}</td>
-                    <td>{h.basis_reference ?? "—"}</td>
-                  </tr>
-                ))}
-                {card.history.length === 0 && (
-                  <tr>
-                    <td colSpan={3}>Пропусков за период нет.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </>
-        )}
-        <div className="actions">
-          <button onClick={onClose}>Закрыть</button>
-        </div>
-      </div>
     </div>
   );
 }
