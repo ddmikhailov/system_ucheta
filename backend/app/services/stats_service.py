@@ -173,7 +173,7 @@ def compute_period_stats(
 
 def _current_responsible_name(group: StudyGroup, as_of: datetime.date) -> str | None:
     """Замещающий, если он сейчас активен, иначе куратор — тот же приоритет,
-    что и в напоминаниях (notification_service.get_responsible_user), но без
+    что и в уведомлениях, но без
     циклического импорта. Нужен, чтобы «Дисциплина кураторов» и «День по
     колледжу» показывали, к кому идти, а не только код группы (см. TODO.md 3)."""
     deputy = next(

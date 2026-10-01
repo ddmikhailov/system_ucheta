@@ -1,9 +1,6 @@
-import asyncio
 import logging
-from contextlib import asynccontextmanager
 from pathlib import Path
 
-from aiogram import Bot
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -16,7 +13,6 @@ from app.core.rate_limit import client_ip
 from app.core.request_context import set_client_ip
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 settings = get_settings()
 init_sentry(settings)
 
@@ -24,35 +20,6 @@ init_sentry(settings)
 # Dockerfile). В локальной разработке (frontend — отдельный `npm run dev`
 # на 5173) этой папки нет, и весь блок ниже просто не активируется.
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    bot: Bot | None = None
-    background_tasks: list[asyncio.Task] = []
-    scheduler = None
-
-    if settings.telegram_enabled and settings.embed_workers:
-        from app.worker_runtime import build_scheduler, run_bot_polling
-
-        bot = Bot(token=settings.telegram_bot_token)
-        background_tasks.append(asyncio.create_task(run_bot_polling(bot)))
-        scheduler = build_scheduler(bot)
-        scheduler.start()
-        logger.info("Бот и планировщик запущены внутри основного процесса.")
-    elif settings.telegram_enabled:
-        logger.info("EMBED_WORKERS=false — бот и планировщик должны быть запущены отдельными процессами.")
-    else:
-        logger.info("TELEGRAM_BOT_TOKEN не задан — бот и планировщик отключены.")
-
-    yield
-
-    if scheduler is not None:
-        scheduler.shutdown(wait=False)
-    for task in background_tasks:
-        task.cancel()
-    if bot is not None:
-        await bot.session.close()
 
 
 # Swagger/OpenAPI отдаёт полную карту API (роли, поля, эндпоинты) кому
@@ -67,7 +34,6 @@ app = FastAPI(
     # Dockerfile, root-level VERSION-файл сюда не даёт выигрыша, см.
     # TODO.md 5), поэтому при бампе версии меняйте оба места.
     version="1.3.0",
-    lifespan=lifespan,
     docs_url="/docs" if _docs_enabled else None,
     redoc_url="/redoc" if _docs_enabled else None,
     openapi_url="/openapi.json" if _docs_enabled else None,

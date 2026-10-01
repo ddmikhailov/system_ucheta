@@ -1,5 +1,5 @@
-"""М6: внутриплатформенные уведомления — единственный канал сейчас,
-раз Telegram скрыт из интерфейса."""
+"""М6: внутриплатформенные уведомления (колокольчик в шапке) — единственный
+канал уведомлений."""
 import datetime
 
 
@@ -84,3 +84,53 @@ def test_cannot_read_someone_elses_notification(client, curator_headers, curator
 
     r = client.post(f"/notifications/{notif_id}/read", headers=admin_headers)
     assert r.status_code == 404
+
+
+def test_reading_purges_notifications_read_long_ago_but_keeps_the_rest(client, db, dept_head_user, dept_head_headers):
+    """Ночное задание планировщика, чистившее старое, ушло вместе с ботом —
+    теперь прочитанное больше 90 дней назад удаляется при отметке «прочитано»."""
+    from app.core.time import utcnow
+    from app.models import InAppNotification
+
+    now = utcnow()
+
+    def add(message, created_days_ago, read_days_ago):
+        row = InAppNotification(
+            user_id=dept_head_user.id, kind="late_edit", message=message,
+            created_at=now - datetime.timedelta(days=created_days_ago),
+            read_at=None if read_days_ago is None else now - datetime.timedelta(days=read_days_ago),
+        )
+        db.add(row)
+        return row
+
+    add("прочитано давно", 200, 100)
+    add("прочитано недавно", 20, 10)
+    add("не прочитано, но старое", 300, None)
+    fresh = add("новое", 1, None)
+    db.commit()
+
+    r = client.post(f"/notifications/{fresh.id}/read", headers=dept_head_headers)
+    assert r.status_code == 200, r.text
+
+    db.expire_all()
+    left = {n.message for n in db.query(InAppNotification).filter(InAppNotification.user_id == dept_head_user.id)}
+    assert left == {"прочитано недавно", "не прочитано, но старое", "новое"}
+
+
+def test_mark_all_read_also_purges_old_read(client, db, dept_head_user, dept_head_headers):
+    from app.core.time import utcnow
+    from app.models import InAppNotification
+
+    now = utcnow()
+    db.add(InAppNotification(
+        user_id=dept_head_user.id, kind="late_edit", message="давно прочитано",
+        created_at=now - datetime.timedelta(days=150), read_at=now - datetime.timedelta(days=120),
+    ))
+    db.add(InAppNotification(user_id=dept_head_user.id, kind="late_edit", message="свежее", created_at=now))
+    db.commit()
+
+    assert client.post("/notifications/read-all", headers=dept_head_headers).status_code == 200
+
+    db.expire_all()
+    messages = {n.message for n in db.query(InAppNotification).filter(InAppNotification.user_id == dept_head_user.id)}
+    assert messages == {"свежее"}

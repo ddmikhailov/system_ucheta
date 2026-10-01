@@ -37,8 +37,8 @@ def notify_late_edit(
     db: Session, group: StudyGroup, editor: User, date: datetime.date, hours_late: float,
 ) -> None:
     """Куратор отредактировал день больше чем через 48 часов после него —
-    зав. отделением должен об этом узнать (обновление 1.1). Единственный
-    канал сейчас — колокольчик в интерфейсе: Telegram скрыт."""
+    зав. отделением должен об этом узнать (обновление 1.1). Канал —
+    колокольчик в интерфейсе."""
     dept_head = dept_head_for(db, group.department_id)
     if dept_head is None or dept_head.id == editor.id:
         return
@@ -47,4 +47,19 @@ def notify_late_edit(
         f"{editor.full_name} отредактировал(а) посещение группы {group.code} за "
         f"{date.strftime('%d.%m.%Y')} — спустя {int(hours_late)} ч. после дня.",
         entity_type="study_group_day", entity_id=f"{group.id}:{date.isoformat()}",
+    )
+
+
+def purge_old_read(db: Session, user_id: int, keep_days: int = 90) -> int:
+    """Удаляет у пользователя уведомления, прочитанные больше keep_days назад —
+    раньше этим занималось ночное задание планировщика, которого больше нет.
+    Непрочитанные не трогаем, сколько бы им ни было."""
+    cutoff = utcnow() - datetime.timedelta(days=keep_days)
+    return (
+        db.query(InAppNotification)
+        .filter(
+            InAppNotification.user_id == user_id,
+            InAppNotification.read_at < cutoff,
+        )
+        .delete(synchronize_session=False)
     )

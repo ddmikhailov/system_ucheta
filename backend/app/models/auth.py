@@ -35,9 +35,6 @@ class User(Base):
     # стандартное название роли.
     display_title: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
-    telegram_chat_id: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
-    telegram_linked_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
-
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     locked_until: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
@@ -52,10 +49,6 @@ class User(Base):
     # немедленно, а не только через 12 часов по истечении срока (см.
     # TODO.md 2: раньше отозвать выданный токен было нечем).
     token_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-
-    # "Руководство" из раздела про бота — не отдельная роль с правами доступа,
-    # а просто список получателей пятничного дайджеста (см. концепцию).
-    receives_leadership_digest: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, default=utcnow, nullable=False

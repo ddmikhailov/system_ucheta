@@ -56,7 +56,6 @@ from app.schemas.admin import (
     UserCreate,
     UserRead,
     UserUpdate,
-    UserUpdateLeadershipDigest,
 )
 from app.services import group_membership_service
 from app.services.audit_service import log_action
@@ -629,11 +628,9 @@ def _user_read(u: User) -> UserRead:
         id=u.id, username=u.username, full_name=u.full_name, role=u.role.code,
         display_title=u.display_title,
         department_id=u.department_id, is_active=u.is_active,
-        telegram_linked=u.telegram_chat_id is not None,
         has_password=u.password_hash is not None,
         must_change_password=u.must_change_password,
         is_locked=u.is_locked,
-        receives_leadership_digest=u.receives_leadership_digest,
     )
 
 
@@ -680,24 +677,6 @@ def create_user(payload: UserCreate, admin: User = Depends(require_full_access),
     log_action(db, admin, "user.create", "user", str(user.id), new_value=user.username)
     db.commit()
     return _user_read(user)
-
-
-@router.patch("/users/{user_id}/leadership-digest", response_model=UserRead)
-def update_leadership_digest(
-    user_id: int, payload: UserUpdateLeadershipDigest,
-    admin: User = Depends(require_full_access), db: Session = Depends(get_db),
-):
-    target = db.get(User, user_id)
-    if target is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Пользователь не найден")
-    target.receives_leadership_digest = payload.receives_leadership_digest
-    log_action(
-        db, admin, "user.leadership_digest_change", "user", str(target.id),
-        new_value=str(payload.receives_leadership_digest),
-    )
-    db.commit()
-    db.refresh(target)
-    return _user_read(target)
 
 
 @router.patch("/users/{user_id}", response_model=UserRead)
@@ -760,11 +739,8 @@ def update_user(
             target.is_active = payload.is_active
             target.token_version += 1
             if not payload.is_active:
-                # Архивный пользователь не должен продолжать действовать
-                # через бота (сдавать день, получать напоминания/дайджесты)
-                # и оставаться "текущим" куратором группы (см. TODO.md 2/3).
-                target.telegram_chat_id = None
-                target.telegram_linked_at = None
+                # Архивный пользователь не должен оставаться "текущим"
+                # куратором группы (см. TODO.md 2/3).
                 today = today_local()
                 for assignment in (
                     db.query(CuratorAssignment)
@@ -813,8 +789,6 @@ def delete_user(
         target.username = placeholder
         target.full_name = "Удалённый пользователь"
         target.password_hash = None
-        target.telegram_chat_id = None
-        target.telegram_linked_at = None
         _redact_audit_history(db, "user", str(user_id))
         log_action(db, admin, "user.anonymize", "user", str(user_id))
         db.commit()

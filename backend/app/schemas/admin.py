@@ -145,15 +145,9 @@ class UserRead(BaseModel):
     display_title: str | None
     department_id: int | None
     is_active: bool
-    telegram_linked: bool
     has_password: bool
     must_change_password: bool
     is_locked: bool
-    receives_leadership_digest: bool
-
-
-class UserUpdateLeadershipDigest(BaseModel):
-    receives_leadership_digest: bool
 
 
 class UserUpdate(BaseModel):

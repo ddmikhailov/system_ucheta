@@ -58,10 +58,10 @@ def test_engine(tmp_path):
         return
 
     db_path = tmp_path / "test.db"
-    # check_same_thread=False: планировщик теперь снимает тяжёлые синхронные
-    # запросы с event loop через asyncio.to_thread (см. TODO.md 5) — в проде
-    # это MySQL и потоки его не смущают, но SQLite по умолчанию запрещает
-    # использовать соединение не из того потока, где оно создано.
+    # check_same_thread=False: синхронные эндпоинты FastAPI выполняются в пуле
+    # потоков — в проде это MySQL и потоки его не смущают, но SQLite по
+    # умолчанию запрещает использовать соединение не из того потока, где
+    # оно создано.
     engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
 
     # SQLite не проверяет внешние ключи по умолчанию — в проде (MySQL/InnoDB)

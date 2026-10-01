@@ -290,11 +290,6 @@ function UserProfileModal({
   const [editRole, setEditRole] = useState(user.role);
   const [editDepartmentId, setEditDepartmentId] = useState(user.department_id);
 
-  // Дайджест руководству могут переключать только admin/tutor (эндпоинт
-  // отдаёт 403 остальным) — раньше чекбокс показывался и зав. отделением,
-  // у которых сохранение падало с ошибкой (см. TODO.md 4).
-  const canToggleDigest = me?.role === "admin" || me?.role === "tutor";
-
   const [customPasswordOpen, setCustomPasswordOpen] = useState(false);
   const [customPasswordValue, setCustomPasswordValue] = useState("");
   const [issuedPassword, setIssuedPassword] = useState<SetPasswordResult | null>(null);
@@ -381,18 +376,6 @@ function UserProfileModal({
       onClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Не удалось удалить");
-    }
-  }
-
-  async function toggleLeadershipDigest() {
-    setError(null);
-    try {
-      await api.patch(`/admin/users/${user.id}/leadership-digest`, {
-        receives_leadership_digest: !user.receives_leadership_digest,
-      });
-      onChanged();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось сохранить");
     }
   }
 
@@ -487,19 +470,6 @@ function UserProfileModal({
               </button>
             )}
           </div>
-        )}
-
-        {canToggleDigest && (
-          <label style={{ marginTop: "10px" }}>
-            <input
-              type="checkbox"
-              checked={user.receives_leadership_digest}
-              disabled={!user.telegram_linked}
-              onChange={toggleLeadershipDigest}
-            />{" "}
-            Получает пятничный дайджест руководству
-            {!user.telegram_linked && <span className="hint"> (нужно сначала привязать Telegram)</span>}
-          </label>
         )}
 
         <hr />

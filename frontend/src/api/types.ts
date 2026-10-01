@@ -12,7 +12,6 @@ export interface MeResponse {
   department_name: string | null;
   groups: MeGroupInfo[];
   dept_head_name: string | null;
-  telegram_linked: boolean;
   must_change_password: boolean;
   // Заполнено только в ответе POST /auth/change-password.
   access_token?: string | null;
@@ -164,11 +163,9 @@ export interface UserAdmin {
   display_title: string | null;
   department_id: number | null;
   is_active: boolean;
-  telegram_linked: boolean;
   has_password: boolean;
   must_change_password: boolean;
   is_locked: boolean;
-  receives_leadership_digest: boolean;
 }
 
 export interface SetPasswordResult {

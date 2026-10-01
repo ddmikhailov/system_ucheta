@@ -51,7 +51,7 @@ export default function CuratorCabinetPage() {
       .then((gs) => {
         setGroups(gs);
         setGroupsLoaded(true);
-        // Ссылка "Открыть" из Telegram уже задаёт группу — не перезатираем её.
+        // Ссылка из уведомления уже задаёт группу (?group=) — не перезатираем её.
         if (gs.length > 0 && groupId === null) setGroupId(gs[0].id);
       })
       .catch((err) => {

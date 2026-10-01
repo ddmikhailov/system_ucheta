@@ -144,37 +144,6 @@ def test_calendar_edit_forbidden_for_dept_head(client, dept_head_headers):
     assert r.status_code == 403
 
 
-def test_leadership_digest_flag_toggle(client, admin_headers, imported, db):
-    from app.models import User
-
-    admin = db.query(User).filter(User.username == "admin").one()
-    r = client.get("/admin/users", headers=admin_headers)
-    row = next(u for u in r.json() if u["id"] == admin.id)
-    assert row["receives_leadership_digest"] is False
-
-    r = client.patch(
-        f"/admin/users/{admin.id}/leadership-digest", headers=admin_headers,
-        json={"receives_leadership_digest": True},
-    )
-    assert r.status_code == 200
-    assert r.json()["receives_leadership_digest"] is True
-
-    r = client.get("/admin/users", headers=admin_headers)
-    row = next(u for u in r.json() if u["id"] == admin.id)
-    assert row["receives_leadership_digest"] is True
-
-
-def test_leadership_digest_flag_forbidden_for_edu_department(client, edu_department_headers, imported, db):
-    from app.models import User
-
-    admin = db.query(User).filter(User.username == "admin").one()
-    r = client.patch(
-        f"/admin/users/{admin.id}/leadership-digest", headers=edu_department_headers,
-        json={"receives_leadership_digest": True},
-    )
-    assert r.status_code == 403
-
-
 def test_group_list_shows_and_can_remove_deputy(client, admin_headers, imported, db):
     """Раньше заместителя не было видно в /admin/groups и снять его было
     нечем на фронте (см. TODO.md 3)."""
@@ -236,7 +205,7 @@ def test_audit_log_records_ip_address(client, admin_headers, imported, db):
 
 def test_previously_unlogged_admin_actions_now_write_audit_log(client, admin_headers, imported, db):
     """Раньше create_department/update_department/create_group/create_student/
-    create_user/update_leadership_digest не писали в audit_log вообще
+    create_user не писали в audit_log вообще
     (см. TODO.md 5)."""
     from app.models import AuditLog, Department, StudyGroup, User
 
@@ -275,12 +244,3 @@ def test_previously_unlogged_admin_actions_now_write_audit_log(client, admin_hea
     assert r.status_code == 201
     user_id = r.json()["id"]
     assert db.query(AuditLog).filter(AuditLog.action == "user.create", AuditLog.entity_id == str(user_id)).first()
-
-    r = client.patch(
-        f"/admin/users/{user_id}/leadership-digest", headers=admin_headers,
-        json={"receives_leadership_digest": True},
-    )
-    assert r.status_code == 200
-    assert db.query(AuditLog).filter(
-        AuditLog.action == "user.leadership_digest_change", AuditLog.entity_id == str(user_id)
-    ).first()

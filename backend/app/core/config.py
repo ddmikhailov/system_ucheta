@@ -49,42 +49,15 @@ class Settings(BaseSettings):
     max_failed_login_attempts: int = 5
     lockout_minutes: int = 15
 
-    # --- Telegram-бот и планировщик (этап 2) ---
-    # По умолчанию бот и планировщик работают внутри основного процесса
-    # (asyncio-задачи в lifespan FastAPI) — одно приложение, один контейнер.
-    # false — только если сознательно разносите их по отдельным процессам
-    # (тогда bot/main.py и scheduler/main.py запускаются самостоятельно).
-    embed_workers: bool = True
-    telegram_bot_token: str = ""
-    telegram_bot_username: str = ""
-    telegram_link_token_ttl_minutes: int = 10
+    # Часовой пояс колледжа: по нему считаются «сегодня» (можно ли править
+    # день, сдан ли вовремя) и время сдачи в разборе дисциплины.
     notification_timezone: str = "Europe/Moscow"
-    # Публичный адрес веб-интерфейса — для кнопки «Открыть» в напоминаниях.
-    # Фронтенд и API отдаются одним процессом на одном порту (см. main.py),
-    # поэтому дефолт — порт самого приложения (8000), а не dev-сервера Vite
-    # (5173): раньше значения по умолчанию здесь и в .env.example расходились
-    # (см. TODO.md 5), и ссылка в напоминании могла вести не туда.
-    web_app_base_url: str = "http://localhost:8000"
-
-    # Время ежедневных рассылок (день недели у пятничного дайджеста фиксирован в коде).
-    reminder_first_time: str = "10:00"
-    reminder_second_time: str = "15:00"
-    dept_head_digest_time: str = "15:30"
-    edu_department_digest_time: str = "16:00"
-    leadership_digest_time: str = "16:30"
-
-    # Порог для "проблемных групп" в сводке воспитательному отделу.
-    problem_group_percent_threshold: float = 90.0
 
     # Мониторинг ошибок (см. TODO.md 5) — без DSN просто выключен, ничего
     # не отправляется и не падает: раньше 500-ки видел только тот, кто сам
     # догадался посмотреть логи контейнера. Завести проект на sentry.io и
     # прописать DSN сюда — отдельное организационное решение, не код.
     sentry_dsn: str = ""
-
-    @property
-    def telegram_enabled(self) -> bool:
-        return bool(self.telegram_bot_token)
 
     @property
     def database_url(self) -> str:

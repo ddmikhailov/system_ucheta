@@ -5,6 +5,7 @@ from app.api.deps import get_current_user
 from app.core.time import utcnow
 from app.db.session import get_db
 from app.models import InAppNotification, User
+from app.services import in_app_notification_service
 from app.schemas.notifications import NotificationRead, UnreadCountResponse
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
@@ -43,8 +44,9 @@ def mark_read(notification_id: int, user: User = Depends(get_current_user), db: 
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Уведомление не найдено")
     if notification.read_at is None:
         notification.read_at = utcnow()
-        db.commit()
-        db.refresh(notification)
+    in_app_notification_service.purge_old_read(db, user.id)
+    db.commit()
+    db.refresh(notification)
     return notification
 
 
@@ -55,5 +57,6 @@ def mark_all_read(user: User = Depends(get_current_user), db: Session = Depends(
         .filter(InAppNotification.user_id == user.id, InAppNotification.read_at.is_(None))
         .update({"read_at": utcnow()})
     )
+    in_app_notification_service.purge_old_read(db, user.id)
     db.commit()
     return {"ok": True}

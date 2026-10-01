@@ -16,11 +16,9 @@ from app.schemas.auth import (
     LoginRequest,
     MeGroupInfo,
     MeResponse,
-    TelegramLinkResponse,
     TokenResponse,
 )
 from app.services.audit_service import log_action
-from app.services.telegram_link_service import build_deep_link, create_link_token, unlink_telegram
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
@@ -100,7 +98,6 @@ def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
         department_name=user.department.name if user.department else None,
         groups=groups,
         dept_head_name=dept_head_name,
-        telegram_linked=user.telegram_chat_id is not None,
         must_change_password=user.must_change_password,
     )
 
@@ -139,17 +136,3 @@ def change_password(
     response = me(user, db)
     response.access_token = create_access_token(user.id, user.role.code, user.token_version)
     return response
-
-
-@router.post("/telegram/link", response_model=TelegramLinkResponse)
-def telegram_link(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if not settings.telegram_enabled:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Telegram-бот не настроен")
-    token = create_link_token(db, user)
-    return TelegramLinkResponse(deep_link=build_deep_link(token.token), expires_at=token.expires_at.isoformat())
-
-
-@router.post("/telegram/unlink", response_model=MeResponse)
-def telegram_unlink(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    unlink_telegram(db, user)
-    return me(user, db)
