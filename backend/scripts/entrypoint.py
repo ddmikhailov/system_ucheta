@@ -30,6 +30,7 @@ DB_RETRY_INTERVAL_SECONDS = 3
 IS_WINDOWS = os.name == "nt"
 PERSISTENT_IMPORT_DIR = Path("/data/import")
 IMPORT_FILES = ("students.csv", "curators.csv", "groups.csv")
+REGISTRY_FILE = "registry.xlsx"
 PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
 
 
@@ -152,6 +153,22 @@ def import_data_dir_if_enabled(environ: Mapping[str, str]) -> str | None:
     return import_dir
 
 
+def registry_file_if_enabled(environ: Mapping[str, str]) -> str | None:
+    """Загрузка реестра контингента (scripts.import_registry) — тоже разовая:
+    включается IMPORT_REGISTRY_ON_START=true на один запуск и выключается
+    обратно. Файл registry.xlsx лежит в той же папке, что и выгрузки импорта.
+    Возвращает путь к файлу или None."""
+    if environ.get("IMPORT_REGISTRY_ON_START", "false") != "true":
+        return None
+    import_dir = environ.get("IMPORT_DATA_DIR") or default_import_dir()
+    path = os.path.join(import_dir, REGISTRY_FILE)
+    if not os.path.isfile(path):
+        log(f"IMPORT_REGISTRY_ON_START=true, но файла {path} нет — загрузка реестра пропущена.")
+        return None
+    log(f"IMPORT_REGISTRY_ON_START=true — загрузка реестра из {path}...")
+    return path
+
+
 def main(environ: Mapping[str, str] = os.environ) -> None:
     check_python_version()
 
@@ -173,6 +190,10 @@ def main(environ: Mapping[str, str] = os.environ) -> None:
     import_dir = import_data_dir_if_enabled(environ)
     if import_dir is not None:
         run_step("-m", "scripts.import_source_data", env={**environ, "IMPORT_DATA_DIR": import_dir})
+
+    registry_path = registry_file_if_enabled(environ)
+    if registry_path is not None:
+        run_step("-m", "scripts.import_registry", registry_path, "--apply")
 
     log("Запуск приложения...")
     port = str(int(environ.get("PORT") or "8000"))

@@ -241,3 +241,21 @@ def test_load_env_file_without_a_file_changes_nothing(tmp_path):
 def test_empty_port_from_env_example_style_file_falls_back_to_default(recorded):
     entrypoint.main({"PORT": ""})
     assert recorded["exec"][1][-1] == "8000"
+
+
+def test_registry_import_runs_only_when_enabled_and_file_exists(recorded, tmp_path):
+    (tmp_path / entrypoint.REGISTRY_FILE).write_text("x", encoding="utf-8")
+
+    entrypoint.main({"IMPORT_REGISTRY_ON_START": "true", "IMPORT_DATA_DIR": str(tmp_path)})
+
+    args = [s for s, _ in recorded["steps"]][-1]
+    assert args == ["-m", "scripts.import_registry", str(tmp_path / entrypoint.REGISTRY_FILE), "--apply"]
+    assert recorded["exec"] is not None
+
+
+def test_registry_import_skipped_when_disabled_or_file_missing(recorded, tmp_path):
+    (tmp_path / entrypoint.REGISTRY_FILE).write_text("x", encoding="utf-8")
+    entrypoint.main({"IMPORT_REGISTRY_ON_START": "false", "IMPORT_DATA_DIR": str(tmp_path)})
+    entrypoint.main({"IMPORT_REGISTRY_ON_START": "true", "IMPORT_DATA_DIR": str(tmp_path / "нет")})
+
+    assert not any("scripts.import_registry" in s for s, _ in recorded["steps"])
