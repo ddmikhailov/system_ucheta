@@ -31,6 +31,7 @@ IS_WINDOWS = os.name == "nt"
 PERSISTENT_IMPORT_DIR = Path("/data/import")
 IMPORT_FILES = ("students.csv", "curators.csv", "groups.csv")
 REGISTRY_FILE = "registry.xlsx"
+CURATORS_FILE_PREFIX = "curators_"  # curators_<Отделение>.tsv
 PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
 
 
@@ -169,6 +170,23 @@ def registry_file_if_enabled(environ: Mapping[str, str]) -> str | None:
     return path
 
 
+def curator_lists_if_enabled(environ: Mapping[str, str]) -> list[tuple[str, str]]:
+    """Списки кураторов отделений (scripts.import_curators): файлы
+    curators_<Отделение>.tsv рядом с выгрузками импорта. Включается разово
+    IMPORT_CURATORS_ON_START=true. Возвращает пары (путь, отделение)."""
+    if environ.get("IMPORT_CURATORS_ON_START", "false") != "true":
+        return []
+    import_dir = environ.get("IMPORT_DATA_DIR") or default_import_dir()
+    found = []
+    if os.path.isdir(import_dir):
+        for name in sorted(os.listdir(import_dir)):
+            if name.startswith(CURATORS_FILE_PREFIX) and name.endswith(".tsv"):
+                found.append((os.path.join(import_dir, name), name[len(CURATORS_FILE_PREFIX):-len(".tsv")]))
+    if not found:
+        log(f"IMPORT_CURATORS_ON_START=true, но файлов {CURATORS_FILE_PREFIX}<Отделение>.tsv в {import_dir} нет.")
+    return found
+
+
 def main(environ: Mapping[str, str] = os.environ) -> None:
     check_python_version()
 
@@ -194,6 +212,10 @@ def main(environ: Mapping[str, str] = os.environ) -> None:
     registry_path = registry_file_if_enabled(environ)
     if registry_path is not None:
         run_step("-m", "scripts.import_registry", registry_path, "--apply")
+
+    for curators_path, department in curator_lists_if_enabled(environ):
+        log(f"Кураторы отделения {department}...")
+        run_step("-m", "scripts.import_curators", curators_path, department, "--apply")
 
     log("Запуск приложения...")
     port = str(int(environ.get("PORT") or "8000"))

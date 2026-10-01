@@ -26,6 +26,7 @@ backend/_test_seed.db
 # См. backend/scripts/import/data/README.md.
 backend/scripts/import/data/*.csv
 backend/scripts/import/data/*.xlsx
+backend/scripts/import/data/*.tsv
 
 # IDE
 .vscode/

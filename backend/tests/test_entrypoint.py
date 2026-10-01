@@ -259,3 +259,21 @@ def test_registry_import_skipped_when_disabled_or_file_missing(recorded, tmp_pat
     entrypoint.main({"IMPORT_REGISTRY_ON_START": "true", "IMPORT_DATA_DIR": str(tmp_path / "нет")})
 
     assert not any("scripts.import_registry" in s for s, _ in recorded["steps"])
+
+
+def test_curator_lists_run_per_department_file_when_enabled(recorded, tmp_path):
+    (tmp_path / "curators_Кибер.tsv").write_text("x", encoding="utf-8")
+    (tmp_path / "другое.tsv").write_text("x", encoding="utf-8")
+
+    entrypoint.main({"IMPORT_CURATORS_ON_START": "true", "IMPORT_DATA_DIR": str(tmp_path)})
+
+    args = [s for s, _ in recorded["steps"]][-1]
+    assert args == ["-m", "scripts.import_curators", str(tmp_path / "curators_Кибер.tsv"), "Кибер", "--apply"]
+
+
+def test_curator_lists_skipped_when_disabled(recorded, tmp_path):
+    (tmp_path / "curators_Кибер.tsv").write_text("x", encoding="utf-8")
+
+    entrypoint.main({"IMPORT_CURATORS_ON_START": "false", "IMPORT_DATA_DIR": str(tmp_path)})
+
+    assert not any("scripts.import_curators" in s for s, _ in recorded["steps"])

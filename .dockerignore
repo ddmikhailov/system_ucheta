@@ -22,6 +22,7 @@ TODO.md
 # Персональные данные — на сервер кладутся отдельно, не через сборку образа
 backend/scripts/import/data/*.csv
 backend/scripts/import/data/*.xlsx
+backend/scripts/import/data/*.tsv
 
 # Python
 **/__pycache__
