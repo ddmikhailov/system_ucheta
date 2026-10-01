@@ -199,3 +199,66 @@ def test_dashboards_summary_scoped_and_protected(client, dept_head_headers, cura
     assert r.status_code == 200
     assert {x["department"] for x in r.json()["daily"]} <= {"Диджитал"}
     assert client.get(f"/dashboards/summary?date_from={day}&date_to={day}", headers=curator_headers).status_code == 403
+
+
+def test_summary_filters_by_course_group_and_pair(client, admin_headers, db, imported, today):
+    (first, second, _), day = _two_groups_with_day(db, today)
+    admin = _admin(db)
+    attendance_service.submit_day(db, first.id, day, [], admin, first_period=1)
+    attendance_service.submit_day(db, second.id, day, [], admin, first_period=2)
+    second_roster = len(attendance_service.get_active_students(db, second.id, day))
+
+    # пара: срез «К 2 паре» берёт только группы с парой 2
+    r = client.get(f"/dashboards/summary?date_from={day}&date_to={day}&pair=2", headers=admin_headers)
+    lines = {(x["department"], x["slice_name"]): x for x in r.json()["daily"]}
+    assert ("Диджитал", "К 1 паре") not in lines
+    pair_line = lines[("Диджитал", "К 2 паре")]
+    assert pair_line["groups_submitted"] == 1 and pair_line["counted"] == second_roster
+
+    # курс: только группы 2 курса
+    r = client.get(
+        f"/dashboards/summary?date_from={day}&date_to={day}&course=2&include_group_days=true", headers=admin_headers
+    )
+    assert {g["course"] for g in r.json()["group_days"]} == {2}
+
+    # группа: одна группа, и итоги совпадают с её строкой
+    r = client.get(
+        f"/dashboards/summary?date_from={day}&date_to={day}&study_group_id={first.id}&include_group_days=true",
+        headers=admin_headers,
+    )
+    body = r.json()
+    assert {g["group_code"] for g in body["group_days"]} == {first.code}
+    total = next(x for x in body["daily"] if x["slice_name"] == "Всего")
+    assert total["groups"] == 1 and total["headcount"] == body["group_days"][0]["headcount"]
+
+    # коды отдают признак «считается присутствием» — по нему фронт выбирает «только пропуски»
+    flags = {c["code"]: c["counts_as_present"] for c in body["codes"]}
+    assert flags["о"] is True and flags["н"] is False
+
+
+def test_summary_pair_out_of_range_rejected(client, admin_headers, imported, today):
+    r = client.get(f"/dashboards/summary?date_from={today}&date_to={today}&pair=0", headers=admin_headers)
+    assert r.status_code == 422
+
+
+def test_excel_export_honours_group_and_course_filters(client, admin_headers, db, imported, today):
+    (first, second, _), day = _two_groups_with_day(db, today)
+    admin = _admin(db)
+    attendance_service.submit_day(db, first.id, day, [], admin, first_period=2)
+
+    r = client.get(
+        f"/export/excel?date_from={day}&date_to={day}&study_group_id={first.id}&pair=2", headers=admin_headers
+    )
+    assert r.status_code == 200
+    wb = openpyxl.load_workbook(io.BytesIO(r.content))
+    assert wb["ИТОГ"].max_row == 2  # заголовок + одна группа
+    assert first.code in wb.sheetnames and second.code not in wb.sheetnames
+    rows = list(wb["По группам и дням"].iter_rows(values_only=True))[1:]
+    assert {row[2] for row in rows} == {first.code}
+    slices = {row[2] for row in wb["Свод по дням"].iter_rows(values_only=True)}
+    assert "К 2 паре" in slices
+
+    r = client.get(f"/export/excel?date_from={day}&date_to={day}&course=2", headers=admin_headers)
+    wb = openpyxl.load_workbook(io.BytesIO(r.content))
+    courses = {row[3] for row in wb["По группам и дням"].iter_rows(values_only=True) if isinstance(row[3], int)}
+    assert courses == {2}

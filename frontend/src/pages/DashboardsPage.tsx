@@ -5,6 +5,8 @@ import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/useAuth";
 import AssignCuratorModal from "../components/AssignCuratorModal";
 import AttendanceSummaryView from "../components/AttendanceSummary";
+import { defaultSummaryFilters, summaryExportParams } from "../utils/summaryFilters";
+import type { SummaryFilters } from "../utils/summaryFilters";
 import CuratorDaysModal from "../components/CuratorDaysModal";
 import type {
   CuratorDisciplineRow,
@@ -64,6 +66,8 @@ export default function DashboardsPage() {
 
   const [departments, setDepartments] = useState<DepartmentAdmin[]>([]);
   const [exportDepartmentId, setExportDepartmentId] = useState<number | "all">("all");
+  // Фильтры «Свода» живут здесь, чтобы выгрузка в Excel брала тот же отбор.
+  const [summaryFilters, setSummaryFilters] = useState<SummaryFilters>(defaultSummaryFilters);
   const [exportError, setExportError] = useState<string | null>(null);
 
   const courses = useMemo(
@@ -152,14 +156,18 @@ export default function DashboardsPage() {
 
   // Экспорт раньше всегда брал диапазон вкладки "Динамика", даже если открыта
   // "День"/"Группа риска" — там теперь берём выбранный день (see TODO.md 4).
-  const exportDateFrom = tab === "day" || tab === "risk" ? date : dateFrom;
-  const exportDateTo = tab === "day" || tab === "risk" ? date : dateTo;
+  const exportDateFrom = tab === "summary" ? summaryFilters.dateFrom : tab === "day" || tab === "risk" ? date : dateFrom;
+  const exportDateTo = tab === "summary" ? summaryFilters.dateTo : tab === "day" || tab === "risk" ? date : dateTo;
 
   function handleExport() {
     setExportError(null);
     const deptParam = canFilterDepartment && exportDepartmentId !== "all" ? `&department_id=${exportDepartmentId}` : "";
+    const query =
+      tab === "summary"
+        ? summaryExportParams(summaryFilters, canFilterDepartment)
+        : `date_from=${exportDateFrom}&date_to=${exportDateTo}${deptParam}`;
     downloadFile(
-      `/export/excel?date_from=${exportDateFrom}&date_to=${exportDateTo}${deptParam}`,
+      `/export/excel?${query}`,
       `itog_${exportDateFrom}_${exportDateTo}.xlsx`,
     ).catch((err) => setExportError(err instanceof ApiError ? err.message : "Не удалось скачать файл"));
   }
@@ -185,7 +193,7 @@ export default function DashboardsPage() {
         <button className={tab === "vacant" ? "active" : ""} onClick={() => setTab("vacant")}>
           Вакантные группы{vacantGroups.length > 0 ? ` (${vacantGroups.length})` : ""}
         </button>
-        {canFilterDepartment && (
+        {canFilterDepartment && tab !== "summary" && (
           <select
             value={exportDepartmentId}
             onChange={(e) => setExportDepartmentId(e.target.value === "all" ? "all" : Number(e.target.value))}
@@ -224,7 +232,7 @@ export default function DashboardsPage() {
         </div>
       )}
 
-      {(tab === "dynamics" || tab === "discipline" || tab === "summary") && (
+      {(tab === "dynamics" || tab === "discipline") && (
         <div className="toolbar">
           <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
           <span>—</span>
@@ -276,9 +284,11 @@ export default function DashboardsPage() {
 
       {tab === "summary" && (
         <AttendanceSummaryView
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          departmentId={canFilterDepartment ? exportDepartmentId : "all"}
+          filters={summaryFilters}
+          onChange={setSummaryFilters}
+          canFilterDepartment={canFilterDepartment}
+          departments={departments}
+          groups={groups}
         />
       )}
 

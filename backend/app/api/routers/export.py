@@ -1,6 +1,6 @@
 import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
@@ -23,12 +23,17 @@ def export_excel(
     date_from: datetime.date,
     date_to: datetime.date,
     department_id: int | None = None,
+    course: int | None = None,
+    study_group_id: int | None = None,
+    pair: int = Query(default=1, ge=1, le=10),
     user: User = Depends(require_management),
     db: Session = Depends(get_db),
 ):
     validate_date_range(date_from, date_to)
     scope = scope_department_id(user, department_id)
-    content = export_service.build_summary_workbook(db, date_from, date_to, scope)
+    content = export_service.build_summary_workbook(
+        db, date_from, date_to, scope, course=course, study_group_id=study_group_id, pair=pair
+    )
     filename = f"itog_{date_from}_{date_to}.xlsx"
     return Response(
         content=content,

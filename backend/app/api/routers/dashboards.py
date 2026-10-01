@@ -1,6 +1,6 @@
 import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_management, require_roles, scope_department_id, validate_date_range
@@ -70,6 +70,9 @@ def summary(
     date_from: datetime.date,
     date_to: datetime.date,
     department_id: int | None = None,
+    course: int | None = None,
+    study_group_id: int | None = None,
+    pair: int = Query(default=1, ge=1, le=10),
     include_group_days: bool = False,
     user: User = Depends(require_management),
     db: Session = Depends(get_db),
@@ -79,7 +82,7 @@ def summary(
     по явному запросу (include_group_days)."""
     validate_date_range(date_from, date_to)
     scope = scope_department_id(user, department_id)
-    result = summary_service.build_summary(db, date_from, date_to, scope)
+    result = summary_service.build_summary(db, date_from, date_to, scope, course, study_group_id, pair)
     group_days = []
     if include_group_days:
         for r in result.group_days:
@@ -93,7 +96,7 @@ def summary(
                 )
             )
     return SummaryRead(
-        codes=[SummaryCode(code=c, name=n) for c, n in result.codes],
+        codes=[SummaryCode(code=c.code, name=c.name, counts_as_present=c.counts_as_present) for c in result.codes],
         daily=[_line_read(x) for x in result.daily],
         period=[_line_read(x) for x in result.period],
         group_days=group_days,

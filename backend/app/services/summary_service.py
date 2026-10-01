@@ -82,8 +82,12 @@ def totals_for(rows: list[GroupDayRow]) -> SummaryTotals:
     return totals
 
 
+def is_pair(row: GroupDayRow, pair: int) -> bool:
+    return row.is_submitted and row.first_period == pair
+
+
 def is_first_period(row: GroupDayRow) -> bool:
-    return row.is_submitted and row.first_period == FIRST_PERIOD
+    return is_pair(row, FIRST_PERIOD)
 
 
 def collect_group_day_rows(
@@ -91,6 +95,8 @@ def collect_group_day_rows(
     date_from: datetime.date,
     date_to: datetime.date,
     department_id: int | None = None,
+    course: int | None = None,
+    study_group_id: int | None = None,
 ) -> list[GroupDayRow]:
     stmt = (
         select(StudyGroup, Department.name)
@@ -99,6 +105,10 @@ def collect_group_day_rows(
     )
     if department_id is not None:
         stmt = stmt.where(StudyGroup.department_id == department_id)
+    if course is not None:
+        stmt = stmt.where(StudyGroup.course == course)
+    if study_group_id is not None:
+        stmt = stmt.where(StudyGroup.id == study_group_id)
     group_rows = db.execute(stmt.order_by(StudyGroup.course, StudyGroup.code)).all()
     if not group_rows:
         return []
@@ -188,6 +198,10 @@ SLICE_ALL = "Всего"
 SLICE_FIRST_PERIOD = "К 1 паре"
 
 
+def pair_slice_label(pair: int) -> str:
+    return f"К {pair} паре"
+
+
 @dataclass
 class SummaryLine:
     """Одна строка свода: отделение (или «Все отделения») × срез («Всего» /
@@ -202,23 +216,30 @@ class SummaryLine:
 
 @dataclass
 class Summary:
-    codes: list[tuple[str, str]]  # (код, название) — столбцы по кодам отметок
+    codes: list["CodeColumn"]  # столбцы по кодам отметок
     daily: list[SummaryLine]
     period: list[SummaryLine]
     group_days: list[GroupDayRow]
 
 
-def code_columns(db: Session, rows: list[GroupDayRow]) -> list[tuple[str, str]]:
+@dataclass
+class CodeColumn:
+    code: str
+    name: str
+    counts_as_present: bool
+
+
+def code_columns(db: Session, rows: list[GroupDayRow]) -> list[CodeColumn]:
     """Сначала активные коды по sort_order, затем встретившиеся в данных, но
     уже отключённые — иначе отметки по отключённому коду молча пропали бы."""
     all_codes = db.execute(select(MarkCode).order_by(MarkCode.sort_order, MarkCode.id)).scalars().all()
     used = {code for row in rows for code in row.by_code}
-    return [(c.code, c.name) for c in all_codes if c.is_active or c.code in used]
+    return [CodeColumn(c.code, c.name, c.counts_as_present) for c in all_codes if c.is_active or c.code in used]
 
 
-def _slices(rows: list[GroupDayRow]):
+def _slices(rows: list[GroupDayRow], pair: int):
     yield SLICE_ALL, rows
-    yield SLICE_FIRST_PERIOD, [r for r in rows if is_first_period(r)]
+    yield pair_slice_label(pair), [r for r in rows if is_pair(r, pair)]
 
 
 def _scopes(rows: list[GroupDayRow], departments: list[str]):
@@ -233,8 +254,11 @@ def build_summary(
     date_from: datetime.date,
     date_to: datetime.date,
     department_id: int | None = None,
+    course: int | None = None,
+    study_group_id: int | None = None,
+    pair: int = FIRST_PERIOD,
 ) -> Summary:
-    rows = collect_group_day_rows(db, date_from, date_to, department_id)
+    rows = collect_group_day_rows(db, date_from, date_to, department_id, course, study_group_id)
     departments = sorted({r.department_name for r in rows})
 
     daily: list[SummaryLine] = []
@@ -243,7 +267,7 @@ def build_summary(
         for scope_name, scope_rows in _scopes(day_rows, departments):
             if not scope_rows:
                 continue
-            for slice_name, slice_rows in _slices(scope_rows):
+            for slice_name, slice_rows in _slices(scope_rows, pair):
                 daily.append(
                     SummaryLine(day, scope_name, slice_name, len({r.group_id for r in slice_rows}), totals_for(slice_rows))
                 )
@@ -252,7 +276,7 @@ def build_summary(
     for scope_name, scope_rows in _scopes(rows, departments):
         if not scope_rows:
             continue
-        for slice_name, slice_rows in _slices(scope_rows):
+        for slice_name, slice_rows in _slices(scope_rows, pair):
             period.append(
                 SummaryLine(None, scope_name, slice_name, len({r.group_id for r in slice_rows}), totals_for(slice_rows))
             )

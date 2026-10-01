@@ -66,6 +66,9 @@ class StudentCard(BaseModel):
 class SummaryCode(BaseModel):
     code: str
     name: str
+    # Код считается присутствием (например, «опоздание») — фронт по нему
+    # отличает пропуски при выборе столбцов.
+    counts_as_present: bool
 
 
 class SummaryLineRead(BaseModel):

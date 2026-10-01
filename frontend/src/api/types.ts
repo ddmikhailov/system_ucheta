@@ -265,6 +265,7 @@ export interface StudentCard {
 export interface SummaryCode {
   code: string;
   name: string;
+  counts_as_present: boolean;
 }
 
 export interface SummaryLine {

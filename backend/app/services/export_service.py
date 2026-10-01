@@ -64,6 +64,9 @@ def build_summary_workbook(
     date_from: datetime.date,
     date_to: datetime.date,
     department_id: int | None = None,
+    course: int | None = None,
+    study_group_id: int | None = None,
+    pair: int = 1,
 ) -> bytes:
     """Аналог листа ИТОГ: по строке на группу, числа вместо формул."""
     wb = Workbook()
@@ -82,6 +85,10 @@ def build_summary_workbook(
     stmt = select(StudyGroup).where(StudyGroup.is_active.is_(True))
     if department_id is not None:
         stmt = stmt.where(StudyGroup.department_id == department_id)
+    if course is not None:
+        stmt = stmt.where(StudyGroup.course == course)
+    if study_group_id is not None:
+        stmt = stmt.where(StudyGroup.id == study_group_id)
     groups = list(db.execute(stmt.order_by(StudyGroup.course, StudyGroup.code)).scalars().all())
 
     for group in groups:
@@ -110,7 +117,7 @@ def build_summary_workbook(
         length = max(len(str(cell.value or "")) for cell in column_cells)
         ws.column_dimensions[column_cells[0].column_letter].width = min(max(length + 2, 10), 40)
 
-    _add_summary_sheets(wb, db, date_from, date_to, department_id)
+    _add_summary_sheets(wb, db, date_from, date_to, department_id, course, study_group_id, pair)
     _add_group_sheets(wb, db, groups, date_from, date_to)
 
     buffer = io.BytesIO()
@@ -132,14 +139,15 @@ def _autosize(ws) -> None:
 
 
 def _add_summary_sheets(
-    wb: Workbook, db: Session, date_from: datetime.date, date_to: datetime.date, department_id: int | None
+    wb: Workbook, db: Session, date_from: datetime.date, date_to: datetime.date, department_id: int | None,
+    course: int | None = None, study_group_id: int | None = None, pair: int = 1,
 ) -> None:
-    summary = summary_service.build_summary(db, date_from, date_to, department_id)
+    summary = summary_service.build_summary(db, date_from, date_to, department_id, course, study_group_id, pair)
     codes = summary.codes
-    code_headers = [f"{code.upper()} — {name}" for code, name in codes]
+    code_headers = [f"{c.code.upper()} — {c.name}" for c in codes]
 
     def code_cells(totals: summary_service.SummaryTotals) -> list[int]:
-        return [totals.by_code.get(code, 0) for code, _ in codes]
+        return [totals.by_code.get(c.code, 0) for c in codes]
 
     # --- Свод по дням: дата × отделение × («всего» | «к 1 паре») ---
     ws = wb.create_sheet("Свод по дням")
@@ -189,7 +197,7 @@ def _add_summary_sheets(
             [r.date, _safe_cell(r.department_name), _safe_cell(r.group_code), r.course, r.headcount,
              "да" if r.is_submitted else "нет", r.present if r.is_submitted else None,
              r.absent if r.is_submitted else None, t.percent, period_cell]
-            + ([r.by_code.get(code, 0) for code, _ in codes] if r.is_submitted else [None] * len(codes))
+            + ([r.by_code.get(c.code, 0) for c in codes] if r.is_submitted else [None] * len(codes))
         )
         ws.cell(row=ws.max_row, column=1).number_format = "DD.MM.YYYY"
     _autosize(ws)
