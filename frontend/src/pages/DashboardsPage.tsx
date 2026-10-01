@@ -1,11 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { downloadFile } from "../api/client";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/useAuth";
 import AssignCuratorModal from "../components/AssignCuratorModal";
 import AttendanceSummaryView from "../components/AttendanceSummary";
-import { defaultSummaryFilters, summaryExportParams } from "../utils/summaryFilters";
+import {
+  filtersToParams,
+  initialSummaryFilters,
+  sanitizeSummaryFilters,
+  saveFilters,
+  summaryExportParams,
+} from "../utils/summaryFilters";
 import type { SummaryFilters } from "../utils/summaryFilters";
 import CuratorDaysModal from "../components/CuratorDaysModal";
 import type {
@@ -33,6 +39,7 @@ function formatDateRu(iso: string): string {
 }
 
 type Tab = "day" | "summary" | "dynamics" | "risk" | "discipline" | "vacant";
+const TABS: Tab[] = ["day", "summary", "dynamics", "risk", "discipline", "vacant"];
 
 export default function DashboardsPage() {
   const { user } = useAuth();
@@ -42,7 +49,11 @@ export default function DashboardsPage() {
   // одного отделения; зав. отделением и так видит только своё (см. TODO.md 4).
   const canFilterDepartment = user?.role === "admin" || user?.role === "tutor" || user?.role === "edu_department";
 
-  const [tab, setTab] = useState<Tab>("day");
+  // Вкладка и фильтры «Свода» живут в адресной строке — ссылкой можно поделиться,
+  // а при обычном заходе подставляется последний сохранённый выбор.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get("tab") as Tab | null;
+  const [tab, setTab] = useState<Tab>(tabFromUrl && TABS.includes(tabFromUrl) ? tabFromUrl : "day");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -67,8 +78,26 @@ export default function DashboardsPage() {
   const [departments, setDepartments] = useState<DepartmentAdmin[]>([]);
   const [exportDepartmentId, setExportDepartmentId] = useState<number | "all">("all");
   // Фильтры «Свода» живут здесь, чтобы выгрузка в Excel брала тот же отбор.
-  const [summaryFilters, setSummaryFilters] = useState<SummaryFilters>(defaultSummaryFilters);
+  const [rawSummaryFilters, setSummaryFilters] = useState<SummaryFilters>(() => initialSummaryFilters(searchParams));
   const [exportError, setExportError] = useState<string | null>(null);
+
+  // Запомненная/пришедшая по ссылке группа или отделение могут быть недоступны.
+  const summaryFilters = useMemo(
+    () => sanitizeSummaryFilters(rawSummaryFilters, groups, canFilterDepartment),
+    [rawSummaryFilters, groups, canFilterDepartment],
+  );
+
+  useEffect(() => saveFilters(summaryFilters), [summaryFilters]);
+
+  useEffect(() => {
+    if (tab === "summary") {
+      const params = filtersToParams(summaryFilters, false);
+      params.set("tab", "summary");
+      setSearchParams(params, { replace: true });
+    } else {
+      setSearchParams({ tab }, { replace: true });
+    }
+  }, [tab, summaryFilters, setSearchParams]);
 
   const courses = useMemo(
     () => Array.from(new Set(dayRows.map((r) => r.course))).sort((a, b) => a - b),

@@ -8,13 +8,15 @@ import type {
   SummaryGroupDay,
   SummaryLine,
 } from "../api/types";
-import { toIso, todayIso } from "../utils/date";
-import { daysAgoIso, defaultSummaryFilters } from "../utils/summaryFilters";
-import type { SliceMode, SummaryFilters } from "../utils/summaryFilters";
+import {
+  SUMMARY_PRESETS,
+  buildSummaryLink,
+  defaultSummaryFilters,
+} from "../utils/summaryFilters";
+import type { SliceMode, SummaryFilters, SummaryView } from "../utils/summaryFilters";
 
-type View = "daily" | "period" | "groups";
 
-const VIEW_LABELS: Record<View, string> = {
+const VIEW_LABELS: Record<SummaryView, string> = {
   daily: "По дням",
   period: "За период",
   groups: "По группам и дням",
@@ -32,26 +34,6 @@ function formatDateRu(iso: string): string {
 function percentText(value: number | null): string {
   return value === null ? "—" : `${value}%`;
 }
-
-// ---- быстрые периоды ----
-
-function monthStartIso(offset: number): string {
-  const now = new Date();
-  return toIso(new Date(now.getFullYear(), now.getMonth() + offset, 1));
-}
-
-function monthEndIso(offset: number): string {
-  const now = new Date();
-  return toIso(new Date(now.getFullYear(), now.getMonth() + offset + 1, 0));
-}
-
-const PRESETS: { label: string; range: () => [string, string] }[] = [
-  { label: "Сегодня", range: () => [todayIso(), todayIso()] },
-  { label: "Вчера", range: () => [daysAgoIso(1), daysAgoIso(1)] },
-  { label: "7 дней", range: () => [daysAgoIso(6), todayIso()] },
-  { label: "Этот месяц", range: () => [monthStartIso(0), todayIso()] },
-  { label: "Прошлый месяц", range: () => [monthStartIso(-1), monthEndIso(-1)] },
-];
 
 // ---- сортировка ----
 
@@ -181,14 +163,14 @@ export default function AttendanceSummaryView({
   departments: DepartmentAdmin[];
   groups: StudyGroupAdmin[];
 }) {
-  const [view, setView] = useState<View>("daily");
+  const [copied, setCopied] = useState(false);
   const [sort, setSort] = useState<Sort | null>(null);
   const [groupQuery, setGroupQuery] = useState("");
   const [result, setResult] = useState<{ key: string; data: AttendanceSummary | null; error: string | null } | null>(
     null,
   );
 
-  const { dateFrom, dateTo, departmentId, course, groupId, pair } = filters;
+  const { dateFrom, dateTo, departmentId, course, groupId, pair, view } = filters;
   const rangeInvalid = dateFrom > dateTo;
   const requestKey = `${dateFrom}|${dateTo}|${departmentId}|${course}|${groupId}|${pair}|${view}`;
 
@@ -283,9 +265,21 @@ export default function AttendanceSummaryView({
     onChange({ ...next, groupId: stillThere ? next.groupId : "all" });
   }
 
-  function changeView(next: View) {
-    setView(next);
+  function changeView(next: SummaryView) {
+    update({ view: next });
     setSort(null);
+  }
+
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(buildSummaryLink(filters));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      // Без доступа к буферу обмена ссылку можно взять из адресной строки —
+      // она всегда совпадает с выбранными фильтрами.
+      window.prompt("Скопируйте ссылку:", buildSummaryLink(filters));
+    }
   }
 
   function toggleSort(key: string) {
@@ -354,22 +348,25 @@ export default function AttendanceSummaryView({
     <div>
       <div className="filter-bar">
         <div className="filter-bar__row">
-          {PRESETS.map((p) => {
+          {SUMMARY_PRESETS.map((p) => {
             const [from, to] = p.range();
-            const active = dateFrom === from && dateTo === to;
             return (
               <button
-                key={p.label}
-                className={`chip${active ? " active" : ""}`}
-                onClick={() => update({ dateFrom: from, dateTo: to })}
+                key={p.key}
+                className={`chip${filters.preset === p.key ? " active" : ""}`}
+                onClick={() => update({ dateFrom: from, dateTo: to, preset: p.key })}
               >
                 {p.label}
               </button>
             );
           })}
-          <input type="date" value={dateFrom} onChange={(e) => update({ dateFrom: e.target.value })} />
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => update({ dateFrom: e.target.value, preset: null })}
+          />
           <span>—</span>
-          <input type="date" value={dateTo} onChange={(e) => update({ dateTo: e.target.value })} />
+          <input type="date" value={dateTo} onChange={(e) => update({ dateTo: e.target.value, preset: null })} />
         </div>
 
         <div className="filter-bar__row">
@@ -491,11 +488,15 @@ export default function AttendanceSummaryView({
           >
             Сбросить
           </button>
+
+          <button className="link-btn" onClick={copyLink} title="Ссылка откроет «Свод» с этими же фильтрами и датами">
+            {copied ? "Ссылка скопирована" : "Копировать ссылку"}
+          </button>
         </div>
       </div>
 
       <div className="toolbar">
-        {(Object.keys(VIEW_LABELS) as View[]).map((v) => (
+        {(Object.keys(VIEW_LABELS) as SummaryView[]).map((v) => (
           <button key={v} className={view === v ? "active" : ""} onClick={() => changeView(v)}>
             {VIEW_LABELS[v]}
           </button>
