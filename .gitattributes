@@ -1,5 +1,2 @@
-# Скрипты запуска в Linux-контейнере — всегда LF, иначе shebang ломается,
-# если репозиторий выгружается на Windows.
-*.sh text eol=lf
+# Dockerfile собирается в Linux — всегда LF, даже если репозиторий выгружен на Windows.
 Dockerfile text eol=lf
-docker-entrypoint.sh text eol=lf

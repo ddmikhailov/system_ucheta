@@ -23,8 +23,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ .
 COPY --from=frontend-build /frontend/dist ./static
 
-RUN chmod +x /app/docker-entrypoint.sh
-
 # Контейнер работал от root без необходимости (см. TODO.md 2) — /app не
 # нужно ничего писать во время работы (БД внешняя, статика read-only),
 # только entrypoint на старте (миграции/seed) должен успеть выполниться от
@@ -38,4 +36,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)" || exit 1
 
-CMD ["/app/docker-entrypoint.sh"]
+CMD ["python", "-m", "scripts.entrypoint"]
