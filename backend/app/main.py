@@ -16,9 +16,9 @@ logging.basicConfig(level=logging.INFO)
 settings = get_settings()
 init_sentry(settings)
 
-# В сборке Docker сюда копируется собранный frontend/dist (см. корневой
-# Dockerfile). В локальной разработке (frontend — отдельный `npm run dev`
-# на 5173) этой папки нет, и весь блок ниже просто не активируется.
+# Сюда кладётся собранный фронтенд (frontend/dist → backend/static). В
+# локальной разработке (frontend — отдельный `npm run dev` на 5173) этой папки
+# нет, и весь блок ниже просто не активируется.
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
@@ -29,10 +29,11 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 _docs_enabled = settings.environment == "development"
 app = FastAPI(
     title=settings.app_name,
-    # Держим в паре с "version" в frontend/package.json — единого источника
-    # правды нет (backend/frontend собираются как разные стадии одного
-    # Dockerfile, root-level VERSION-файл сюда не даёт выигрыша, см.
-    # TODO.md 5), поэтому при бампе версии меняйте оба места.
+    # Держим в паре с "version" в frontend/package.json и backend/pyproject.toml —
+    # единого источника правды нет (backend и frontend собираются раздельно,
+    # общий VERSION-файл сюда не даёт выигрыша, см. TODO.md 5), поэтому при
+    # бампе версии меняйте все три места;
+    # tests/test_versions.py проверяет, что они не разошлись.
     version="1.3.0",
     docs_url="/docs" if _docs_enabled else None,
     redoc_url="/redoc" if _docs_enabled else None,

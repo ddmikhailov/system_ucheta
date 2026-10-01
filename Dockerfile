@@ -18,7 +18,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# --require-hashes: ставим только то, что есть в lock-файле, с проверкой хэшей.
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 
 COPY backend/ .
 COPY --from=frontend-build /frontend/dist ./static

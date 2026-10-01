@@ -35,3 +35,6 @@ backend/scripts/import/data/*.csv
 
 # Локальные настройки инструментов разработки
 .claude/
+
+# Версия для передачи администратору (tools/build_release.py) — собирается, не хранится
+release/

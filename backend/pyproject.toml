@@ -1,0 +1,12 @@
+# Объявление версий backend. Зависимости здесь НЕ перечислены: их список —
+# requirements.in, а requirements.txt / requirements-dev.txt — lock-файлы с
+# точными версиями и хэшами (см. README, «Зависимости и версии»).
+#
+# requires-python — единственный источник правды о версии Python: по нему
+# scripts/entrypoint.py отказывается стартовать на другой версии, а тест
+# tests/test_versions.py следит, чтобы объявленные версии не разошлись.
+[project]
+name = "kait20-backend"
+version = "1.3.0"
+description = "КАИТ-20 — платформа учёта посещаемости (backend)"
+requires-python = ">=3.14,<3.15"

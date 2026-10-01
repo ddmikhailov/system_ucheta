@@ -1,0 +1,20 @@
+# Прямые зависимости backend (то, что мы импортируем сами) — с точными версиями.
+# requirements.txt — это lock-файл: из этого списка он получает ВСЕ пакеты, включая
+# зависимости зависимостей, с версиями и хэшами. Руками requirements.txt не правим.
+# Как обновить lock — см. README, раздел «Зависимости и версии».
+fastapi==0.141.1
+starlette==1.7.0
+uvicorn[standard]==0.34.0
+sqlalchemy==2.0.54
+alembic==1.14.0
+pymysql==1.1.1
+cryptography==50.0.1
+pydantic==2.13.5
+pydantic-settings==2.15.0
+argon2-cffi==23.1.0
+pyjwt==2.15.0
+openpyxl==3.1.5
+reportlab==4.2.5
+tzdata==2024.2
+sentry-sdk[fastapi]==2.70.0
+python-dotenv==1.2.4

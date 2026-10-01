@@ -61,10 +61,11 @@ def recorded(monkeypatch):
     """Подменяет ожидание базы, запуск шагов и exec — ничего реального не стартует."""
     calls = {"steps": [], "exec": None}
     monkeypatch.setattr(entrypoint, "wait_for_database", lambda connect: None)
+    monkeypatch.setattr(entrypoint, "IS_WINDOWS", False)  # по умолчанию проверяем Linux-ветку (exec)
 
-    def fake_run(args, check, env):
+    def fake_run(args, check=False, env=None):
         calls["steps"].append((args[1:], env))
-        return subprocess.CompletedProcess(args, 0)
+        return subprocess.CompletedProcess(args, calls.get("returncode", 0))
 
     monkeypatch.setattr(entrypoint.subprocess, "run", fake_run)
     monkeypatch.setattr(entrypoint.os, "execvp", lambda file, argv: calls.__setitem__("exec", (file, argv)))
@@ -125,7 +126,7 @@ def test_import_skipped_when_files_are_missing(recorded, tmp_path):
 
 
 def test_failed_migration_stops_startup_with_its_exit_code(monkeypatch, recorded):
-    def failing_run(args, check, env):
+    def failing_run(args, check=False, env=None):
         recorded["steps"].append((args[1:], env))
         raise subprocess.CalledProcessError(3, args)
 
@@ -137,3 +138,106 @@ def test_failed_migration_stops_startup_with_its_exit_code(monkeypatch, recorded
     assert exc.value.code == 3
     assert len(recorded["steps"]) == 1  # справочники уже не запускались
     assert recorded["exec"] is None  # и приложение не стартовало
+
+
+def _pyproject(tmp_path, spec):
+    path = tmp_path / "pyproject.toml"
+    path.write_text(f'[project]\nname = "x"\nversion = "0"\nrequires-python = "{spec}"\n', encoding="utf-8")
+    return path
+
+
+def test_python_version_inside_the_range_is_accepted(tmp_path):
+    entrypoint.check_python_version((3, 14, 7), _pyproject(tmp_path, ">=3.14,<3.15"))
+
+
+@pytest.mark.parametrize("version", [(3, 13, 9), (3, 15, 0), (3, 12, 1)])
+def test_python_version_outside_the_range_stops_startup(tmp_path, capsys, version):
+    with pytest.raises(SystemExit) as exc:
+        entrypoint.check_python_version(version, _pyproject(tmp_path, ">=3.14,<3.15"))
+
+    assert exc.value.code == 1
+    err = capsys.readouterr().err
+    assert ">=3.14,<3.15" in err and f"{version[0]}.{version[1]}" in err
+
+
+def test_missing_pyproject_does_not_block_startup(tmp_path):
+    entrypoint.check_python_version((3, 9, 0), tmp_path / "нет-такого.toml")
+
+
+def test_main_checks_the_python_version_first(monkeypatch, recorded):
+    monkeypatch.setattr(entrypoint, "check_python_version", lambda: (_ for _ in ()).throw(SystemExit(1)))
+
+    with pytest.raises(SystemExit):
+        entrypoint.main({})
+
+    assert recorded["steps"] == [] and recorded["exec"] is None
+
+
+def test_host_defaults_to_all_interfaces_and_can_be_overridden(recorded):
+    entrypoint.main({})
+    assert recorded["exec"][1][recorded["exec"][1].index("--host") + 1] == "0.0.0.0"
+
+    recorded["exec"] = None
+    entrypoint.main({"HOST": "127.0.0.1"})
+    assert recorded["exec"][1][recorded["exec"][1].index("--host") + 1] == "127.0.0.1"
+
+
+def test_on_windows_uvicorn_runs_as_a_child_and_its_exit_code_is_returned(monkeypatch, recorded):
+    """os.execvp на Windows процесс не заменяет — служба решила бы, что запуск
+    завершился. Поэтому там uvicorn дочерний, а код выхода пробрасывается."""
+    monkeypatch.setattr(entrypoint, "IS_WINDOWS", True)
+    recorded["returncode"] = 7
+
+    with pytest.raises(SystemExit) as exc:
+        entrypoint.main({"PORT": "9100"})
+
+    assert exc.value.code == 7
+    assert recorded["exec"] is None
+    server_step = recorded["steps"][-1][0]
+    assert server_step[:3] == ["-m", "uvicorn", "app.main:app"] and server_step[-1] == "9100"
+
+
+def test_default_import_dir_prefers_persistent_storage_when_it_exists(monkeypatch, tmp_path):
+    monkeypatch.setattr(entrypoint, "PERSISTENT_IMPORT_DIR", tmp_path)
+    assert entrypoint.default_import_dir() == str(tmp_path)
+
+
+def test_default_import_dir_falls_back_to_the_folder_next_to_the_code(monkeypatch, tmp_path):
+    monkeypatch.setattr(entrypoint, "PERSISTENT_IMPORT_DIR", tmp_path / "нет-такой")
+    folder = entrypoint.default_import_dir()
+    assert folder.replace("\\", "/").endswith("scripts/import/data")
+
+
+def test_load_env_file_exports_values_but_real_environment_wins(tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "# комментарий\n"
+        "ADMIN_PASSWORD=из-файла\n"
+        'PASSWORD_WITH_SPACE="два слова"\n'
+        'CORS_ORIGINS=["http://localhost:5173"]\n'
+        "PORT=9999\n"
+        "ALREADY_SET=из-файла\n"
+        "EMPTY=\n",
+        encoding="utf-8",
+    )
+    environ = {"ALREADY_SET": "из-окружения"}
+
+    assert entrypoint.load_env_file(env_file, environ) is True
+
+    assert environ["ADMIN_PASSWORD"] == "из-файла"
+    assert environ["PASSWORD_WITH_SPACE"] == "два слова"
+    assert environ["CORS_ORIGINS"] == '["http://localhost:5173"]'
+    assert environ["PORT"] == "9999"
+    assert environ["ALREADY_SET"] == "из-окружения"
+    assert environ["EMPTY"] == ""
+
+
+def test_load_env_file_without_a_file_changes_nothing(tmp_path):
+    environ = {"A": "1"}
+    assert entrypoint.load_env_file(tmp_path / "нет-такого.env", environ) is False
+    assert environ == {"A": "1"}
+
+
+def test_empty_port_from_env_example_style_file_falls_back_to_default(recorded):
+    entrypoint.main({"PORT": ""})
+    assert recorded["exec"][1][-1] == "8000"

@@ -6,7 +6,7 @@ from app.core.config import Settings
 
 def init_sentry(settings: Settings) -> bool:
     """Без DSN — no-op (возвращает False): раньше единственным способом
-    узнать о 500-й ошибке было зайти в логи контейнера руками, теперь
+    узнать о 500-й ошибке было зайти в логи сервера руками, теперь
     достаточно задать SENTRY_DSN одной переменной окружения."""
     if not settings.sentry_dsn:
         return False

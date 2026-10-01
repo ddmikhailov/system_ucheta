@@ -1,32 +1,82 @@
-"""Запуск в контейнере: дождаться базу, накатить миграции, засеять справочники,
+"""Запуск платформы: дождаться базу, накатить миграции, засеять справочники,
 при явном включении — импортировать «Диджитал», и только потом поднять
-приложение. Так деплой на PaaS не требует доступа к shell — достаточно
-задать переменные окружения.
-
-Заменяет прежний docker-entrypoint.sh: тот же порядок шагов, но на Python,
-чтобы в проекте не осталось ничего, кроме Python и React.
+приложение. Достаточно задать переменные окружения (или файл .env рядом) —
+больше ничего вручную выполнять не нужно.
 
 Миграции и справочники идут отдельными процессами, а не вызовом изнутри:
 alembic/env.py вызывает logging.config.fileConfig(), который в общем
-процессе отключил бы логи приложения. В конце процесс заменяется на uvicorn
-(os.execvp) — он становится PID 1 и сам получает сигналы остановки от Docker.
+процессе отключил бы логи приложения. В конце на Linux процесс заменяется на
+uvicorn (os.execvp) — он сам получает сигналы остановки; на Windows exec
+процесс не заменяет, поэтому там uvicorn запускается дочерним, а скрипт ждёт
+его и возвращает его код выхода.
 
-Запуск: python -m scripts.entrypoint
+Переменные: PORT (по умолчанию 8000), HOST (по умолчанию 0.0.0.0; если перед
+приложением стоит обратный прокси на том же сервере — задайте 127.0.0.1),
+IMPORT_ON_START и IMPORT_DATA_DIR (разовый импорт).
+
+Запуск (из папки backend): python -m scripts.entrypoint
 """
 import os
+import re
 import subprocess
 import sys
 import time
-from collections.abc import Callable, Mapping
+import tomllib
+from collections.abc import Callable, Mapping, MutableMapping, Sequence
+from pathlib import Path
 
 DB_WAIT_SECONDS = 180
 DB_RETRY_INTERVAL_SECONDS = 3
-DEFAULT_IMPORT_DIR = "/data/import"
+IS_WINDOWS = os.name == "nt"
+PERSISTENT_IMPORT_DIR = Path("/data/import")
 IMPORT_FILES = ("students.csv", "curators.csv", "groups.csv")
+PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
+
+
+def load_env_file(path: Path | None = None, environ: MutableMapping[str, str] = os.environ) -> bool:
+    """Значения из файла .env (рядом с запуском, как его читает и само приложение)
+    попадают в окружение процесса — иначе их не увидели бы ни создание
+    администратора (ADMIN_PASSWORD), ни разовый импорт, ни этот скрипт
+    (PORT, HOST). Уже заданные переменные окружения важнее файла. Возвращает
+    False, если файла нет."""
+    from dotenv import dotenv_values
+
+    env_file = path or Path.cwd() / ".env"
+    if not env_file.is_file():
+        return False
+    for key, value in dotenv_values(env_file, encoding="utf-8").items():
+        if value is not None and key not in environ:
+            environ[key] = value
+    return True
 
 
 def log(message: str) -> None:
     print(f"[entrypoint] {message}", flush=True)
+
+
+def check_python_version(
+    version_info: Sequence[int] = sys.version_info, pyproject: Path = PYPROJECT
+) -> None:
+    """Версия Python берётся из requires-python в pyproject.toml (">=3.14,<3.15").
+    На другой версии зависимости из lock-файла могут не встать или повести себя
+    иначе, поэтому на сервере лучше остановиться сразу и понятно."""
+    if not pyproject.is_file():
+        return
+    spec = tomllib.loads(pyproject.read_text(encoding="utf-8")).get("project", {}).get("requires-python")
+    if not spec:
+        return
+    low = re.search(r">=\s*(\d+)\.(\d+)", spec)
+    high = re.search(r"<\s*(\d+)\.(\d+)", spec)
+    current = (version_info[0], version_info[1])
+    too_old = low is not None and current < (int(low[1]), int(low[2]))
+    too_new = high is not None and current >= (int(high[1]), int(high[2]))
+    if too_old or too_new:
+        print(
+            f"[entrypoint] Требуется Python {spec}, а запущен {current[0]}.{current[1]}. "
+            "Установите Python 3.14.",
+            file=sys.stderr, flush=True,
+        )
+        raise SystemExit(1)
 
 
 def wait_for_database(
@@ -75,9 +125,17 @@ def run_step(*python_args: str, env: Mapping[str, str] | None = None) -> None:
         raise SystemExit(exc.returncode) from exc
 
 
+def default_import_dir() -> str:
+    """Постоянное хранилище /data/import, если оно есть на сервере, иначе папка
+    scripts/import/data рядом с кодом (туда же кладёт выгрузки README)."""
+    if PERSISTENT_IMPORT_DIR.is_dir():
+        return str(PERSISTENT_IMPORT_DIR)
+    return str(Path(__file__).resolve().parent / "import" / "data")
+
+
 def import_data_dir_if_enabled(environ: Mapping[str, str]) -> str | None:
     """Импорт «Диджитал» — разовая ручная операция, а не то, что должно
-    повторяться при каждом рестарте контейнера (при каждом старте заново
+    повторяться при каждом запуске (каждый раз заново
     создавались бы уже удалённые/переименованные студенты, а кураторы
     получали бы второе назначение на группу). Включается явно
     IMPORT_ON_START=true только на тот один деплой, где он нужен, и сразу
@@ -86,7 +144,7 @@ def import_data_dir_if_enabled(environ: Mapping[str, str]) -> str | None:
     if environ.get("IMPORT_ON_START", "false") != "true":
         log("IMPORT_ON_START не включён — импорт пропущен (это нормально после первого раза).")
         return None
-    import_dir = environ.get("IMPORT_DATA_DIR", DEFAULT_IMPORT_DIR)
+    import_dir = environ.get("IMPORT_DATA_DIR") or default_import_dir()
     if not all(os.path.isfile(os.path.join(import_dir, name)) for name in IMPORT_FILES):
         log(f"IMPORT_ON_START=true, но выгрузки в {import_dir} не найдены — импорт пропущен.")
         return None
@@ -95,6 +153,8 @@ def import_data_dir_if_enabled(environ: Mapping[str, str]) -> str | None:
 
 
 def main(environ: Mapping[str, str] = os.environ) -> None:
+    check_python_version()
+
     # Настройки читаем сразу: неверный/слабый JWT_SECRET и прочее
     # останавливают запуск с понятным сообщением до всех остальных шагов.
     from app.core.config import get_settings
@@ -115,12 +175,14 @@ def main(environ: Mapping[str, str] = os.environ) -> None:
         run_step("-m", "scripts.import_source_data", env={**environ, "IMPORT_DATA_DIR": import_dir})
 
     log("Запуск приложения...")
-    port = str(int(environ.get("PORT", "8000")))
-    os.execvp(
-        sys.executable,
-        [sys.executable, "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", port],
-    )
+    port = str(int(environ.get("PORT") or "8000"))
+    host = environ.get("HOST") or "0.0.0.0"
+    command = [sys.executable, "-m", "uvicorn", "app.main:app", "--host", host, "--port", port]
+    if IS_WINDOWS:
+        raise SystemExit(subprocess.run(command).returncode)
+    os.execvp(command[0], command)
 
 
 if __name__ == "__main__":
+    load_env_file()
     main()

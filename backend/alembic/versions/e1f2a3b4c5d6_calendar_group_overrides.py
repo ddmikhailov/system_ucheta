@@ -21,8 +21,8 @@ _OLD_DAY_TYPE = sa.Enum('STUDY_DAY', 'WEEKEND', 'HOLIDAY', 'VACATION', name='day
 
 def upgrade() -> None:
     # Обе операции сделаны переносимыми на повторный запуск: если процесс
-    # оборвался между ALTER и CREATE TABLE (например, контейнер убили
-    # посреди деплоя) и alembic_version не успел обновиться, следующий
+    # оборвался между ALTER и CREATE TABLE (например, процесс убили
+    # посреди обновления) и alembic_version не успел обновиться, следующий
     # upgrade не должен падать на "уже существует" / "уже применено".
     bind = op.get_bind()
     inspector = sa.inspect(bind)

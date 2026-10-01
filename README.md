@@ -88,6 +88,18 @@ Swagger (`/docs`, `/openapi.json`) в этом режиме выключен п�
 `POST /admin/users/{user_id}/set-password`). При первом входе система
 обязывает задать собственный пароль.
 
+## Версия для передачи системному администратору
+
+```bash
+python tools/build_release.py                          # пересобирает фронтенд (нужен npm)
+python tools/build_release.py --skip-frontend-build    # берёт готовый frontend/dist
+```
+
+Результат — `release/kait20-<версия>.zip` (+ `.sha256` и `-INSTALL.md` из `docs/install-guide.md`):
+только `backend/` и `frontend/`, без Docker, Amvera, CI и тестов; собранный интерфейс внутри
+`backend/static`. Папка `release/` в git не попадает. Если в сборке найдётся лишнее, инструмент
+остановится и назовёт файл.
+
 ## Локальная разработка без Docker
 
 Backend:
@@ -255,6 +267,35 @@ docker exec -i kait20_db mysql -u root -p"$DB_ROOT_PASSWORD" kait20 < backup_202
 задачей на хостинге — Amvera предоставляет управляемый MySQL с собственными
 бэкапами; если используется self-hosted MySQL, `cron` + команда выше решают
 задачу без дополнительных сервисов.
+
+## Зависимости и версии
+
+**Версии.** Python **3.14** (`backend/pyproject.toml` → `requires-python`, `backend/.python-version`, образ `python:3.14-slim`, CI), Node **22+** (`frontend/package.json` → `engines`, `frontend/.nvmrc`; `frontend/.npmrc` включает `engine-strict`, так что на неподходящей версии `npm ci` откажется ставить), MySQL **8.4**. `scripts/entrypoint.py` не стартует на другой версии Python, а `tests/test_versions.py` следит, чтобы объявленные версии, Dockerfile и lock-файлы не разошлись.
+
+**Backend: два файла на каждый список.**
+
+| Файл | Что это | Правим руками |
+| --- | --- | --- |
+| `backend/requirements.in` | прямые зависимости с точными версиями | да |
+| `backend/requirements.txt` | **lock**: все пакеты, включая зависимости зависимостей, с версиями и хэшами | нет, только пересборкой |
+| `backend/requirements-dev.in` / `requirements-dev.txt` | то же плюс инструменты тестов | так же |
+
+Lock универсальный: один файл подходит и для Linux-сервера, и для Windows-рабочей станции (пакеты, нужные только на одной платформе, помечены условиями, например `uvloop` — не для Windows, `colorama` — только для Windows). Установка — обычным `pip install -r requirements.txt`: у каждой записи есть хэш, поэтому pip проверяет подлинность пакетов сам; Dockerfile дополнительно ставит с `--require-hashes`.
+
+**Обновить зависимость:** изменить версию в `requirements.in`, пересобрать lock, прогнать тесты и закоммитить `.in` и lock вместе:
+
+```bash
+pip install uv==0.12.21   # только для пересборки, на сервере не нужен
+cd backend
+uv pip compile requirements.in --universal --generate-hashes --python-version 3.14 -o requirements.txt
+uv pip compile requirements-dev.in --universal --generate-hashes --python-version 3.14 -c requirements.txt -o requirements-dev.txt
+```
+
+CI пересобирает lock теми же командами и падает, если файл изменился (значит, `.in` поправили, а lock забыли), а `pip-audit` проверяет весь lock на известные уязвимости.
+
+**Frontend:** версии зафиксированы в `frontend/package-lock.json` (CI и Docker ставят `npm ci`).
+
+**Версия приложения** записана в трёх местах — `backend/app/main.py`, `backend/pyproject.toml`, `frontend/package.json`; при повышении меняйте все три, тест проверит.
 
 ## Мониторинг ошибок
 

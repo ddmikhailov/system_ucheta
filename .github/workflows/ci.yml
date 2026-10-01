@@ -13,11 +13,19 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.14"
+          python-version-file: backend/.python-version
 
       - name: Install dependencies
         working-directory: backend
         run: pip install -r requirements-dev.txt
+
+      - name: Lock-файлы соответствуют requirements*.in
+        working-directory: backend
+        run: |
+          pip install uv==0.12.21
+          uv pip compile requirements.in --universal --generate-hashes --python-version 3.14 -o requirements.txt -q
+          uv pip compile requirements-dev.in --universal --generate-hashes --python-version 3.14 -c requirements.txt -o requirements-dev.txt -q
+          git diff --exit-code -- requirements.txt requirements-dev.txt
 
       - name: pytest
         working-directory: backend
@@ -54,7 +62,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.14"
+          python-version-file: backend/.python-version
 
       - name: Install dependencies
         working-directory: backend
@@ -74,7 +82,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version-file: frontend/.nvmrc
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
