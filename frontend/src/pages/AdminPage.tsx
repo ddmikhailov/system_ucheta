@@ -15,7 +15,8 @@ const VALID_TABS: Tab[] = ["departments", "groups", "students", "mark-codes", "u
 
 export default function AdminPage() {
   const { user } = useAuth();
-  const isDeptHead = user?.role === "dept_head";
+  // Зав. отделением и тьютор работают в границах своего отделения.
+  const isDeptHead = user?.role === "dept_head" || user?.role === "tutor";
   const [searchParams, setSearchParams] = useSearchParams();
   // Вкладка теперь живёт в URL (?tab=...) — раньше сбрасывалась при
   // обновлении страницы, и на неё нельзя было дать прямую ссылку (см.
@@ -38,7 +39,8 @@ export default function AdminPage() {
 
   // Тьютор — второй полноценный администратор по всему колледжу (обновление
   // 1.2): везде, где раньше был только admin, теперь и он.
-  const isAdmin = user?.role === "admin" || user?.role === "tutor";
+  const isAdmin = user?.role === "admin";
+  const canCreate = isAdmin || isDeptHead;
   const isReferenceEditor = isAdmin || user?.role === "edu_department";
   // Группы/студенты/пользователи — администратор по колледжу и зав.
   // отделением в своём отделении (бэкенд сам ограничивает область видимости).
@@ -50,6 +52,7 @@ export default function AdminPage() {
         { key: "groups", label: "Группы" },
         { key: "students", label: "Студенты" },
         { key: "users", label: "Пользователи" },
+        { key: "calendar", label: "Календарь" },
       ]
     : [
         { key: "departments", label: "Отделения" },
@@ -72,11 +75,11 @@ export default function AdminPage() {
       </div>
 
       {tab === "departments" && <DepartmentsTab canEdit={isAdmin} />}
-      {tab === "groups" && <GroupsTab canEdit={canManageStructure} canCreate={isAdmin} />}
-      {tab === "students" && <StudentsTab canCreate={isAdmin} />}
+      {tab === "groups" && <GroupsTab canEdit={canManageStructure} canCreate={canCreate} />}
+      {tab === "students" && <StudentsTab canCreate={canCreate} />}
       {tab === "mark-codes" && <MarkCodesTab canEdit={isReferenceEditor} />}
-      {tab === "users" && <UsersTab canEdit={canManageStructure} canCreate={isAdmin} />}
-      {tab === "calendar" && <CalendarTab canEdit={isReferenceEditor} />}
+      {tab === "users" && <UsersTab canEdit={canManageStructure} canCreate={canCreate} />}
+      {tab === "calendar" && <CalendarTab canEdit={isReferenceEditor} canEditGroups={isReferenceEditor || isDeptHead} />}
       {tab === "journal" && <GroupJournalTab />}
     </div>
   );

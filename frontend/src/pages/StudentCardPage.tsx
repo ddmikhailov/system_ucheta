@@ -3,7 +3,9 @@ import type { FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/useAuth";
+import { DOSSIER_STAFF_ROLES } from "../constants/roles";
 import { STUDENT_STATUS_LABELS } from "../constants/studentStatus";
+import StudentDossier from "../components/StudentDossier";
 import StudentMonthAttendanceView from "../components/StudentMonthAttendance";
 import { useScrollToTopOnChange } from "../hooks/useScrollToTopOnChange";
 import type { DeleteResult, StudentCard, StudyGroupAdmin } from "../api/types";
@@ -47,10 +49,11 @@ export default function StudentCardPage() {
 
   // Администрация возвращается в список студентов, куратор — в свой кабинет.
   const isTeacher = user?.role === "curator" || user?.role === "deputy_curator";
+  const isStaff = !!user && DOSSIER_STAFF_ROLES.includes(user.role);
   const back = (
     <p>
-      <Link to={isTeacher ? "/cabinet" : "/admin?tab=students"} className="link-btn">
-        {isTeacher ? "← К моим группам" : "← К списку студентов"}
+      <Link to={isTeacher ? "/cabinet" : isStaff ? "/students" : "/admin?tab=students"} className="link-btn">
+        {isTeacher ? "← К моим группам" : isStaff ? "← К поиску студентов" : "← К списку студентов"}
       </Link>
     </p>
   );
@@ -94,6 +97,9 @@ export default function StudentCardPage() {
         <Item label="Дата зачисления" value={card.enrolled_at} />
         <Item label="Дата выбытия" value={card.left_at ?? "—"} />
       </dl>
+
+      <h3 className="student-card__section">Досье</h3>
+      <StudentDossier studentId={card.id} isAdmin={user?.role === "admin" || user?.role === "tutor"} />
 
       <h3 className="student-card__section">
         Посещаемость за 30 дней ({stats.date_from} — {stats.date_to})

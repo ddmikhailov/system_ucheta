@@ -1,13 +1,18 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { api, ApiError } from "../../api/client";
+import { useAuth } from "../../auth/useAuth";
 import AssignCuratorModal from "../../components/AssignCuratorModal";
 import DeleteGroupForeverModal from "../../components/DeleteGroupForeverModal";
+import { CURATOR_CAPABLE_ROLES } from "../../constants/roles";
 import { useEscapeKey } from "../../hooks/useEscapeKey";
 import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { DeleteResult, DepartmentAdmin, StudyGroupAdmin, UserAdmin } from "../../api/types";
 
 export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; canCreate: boolean }) {
+  const { user: me } = useAuth();
+  const myRole = me?.role;
+  const myDepartmentName = me?.department_name;
   const [rows, setRows] = useState<StudyGroupAdmin[]>([]);
   const [departments, setDepartments] = useState<DepartmentAdmin[]>([]);
   const [curators, setCurators] = useState<UserAdmin[]>([]);
@@ -31,13 +36,15 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
 
   function load() {
     api.get<StudyGroupAdmin[]>("/admin/groups").then(setRows).catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка"));
-    api.get<DepartmentAdmin[]>("/admin/departments").then((ds) => {
+    api.get<DepartmentAdmin[]>("/admin/departments").then((all) => {
+      // Зав. отделением и тьютор создают только в своём отделении.
+      const ds = myRole === "dept_head" || myRole === "tutor" ? all.filter((d) => d.name === myDepartmentName) : all;
       setDepartments(ds);
       if (ds.length > 0 && departmentId === null) setDepartmentId(ds[0].id);
     });
     api
       .get<UserAdmin[]>("/admin/users")
-      .then((us) => setCurators(us.filter((u) => u.is_active && (u.role === "curator" || u.role === "deputy_curator"))));
+      .then((us) => setCurators(us.filter((u) => u.is_active && (CURATOR_CAPABLE_ROLES.includes(u.role)))));
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps

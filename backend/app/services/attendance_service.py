@@ -3,6 +3,7 @@ import datetime
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core import policies
 from app.core.time import today_local, utcnow
 from app.models import (
     AbsencePeriod,
@@ -11,7 +12,6 @@ from app.models import (
     DaySubmission,
     MarkCode,
     MarkSource,
-    RoleCode,
     Student,
     StudentStatus,
     StudyGroup,
@@ -79,7 +79,7 @@ def can_edit_date(user: User, target_date: datetime.date, today: datetime.date) 
 def notify_if_late_edit(
     db: Session, group: StudyGroup, user: User, date: datetime.date, today: datetime.date | None = None,
 ) -> None:
-    if user.role.code not in (RoleCode.CURATOR, RoleCode.DEPUTY_CURATOR):
+    if user.role.code not in policies.CURATOR_CAPABLE_ROLES:
         return
     today = today or today_local()
     # Дневная гранулярность, как и everywhere в этом модуле (can_edit_date,

@@ -90,10 +90,12 @@ def test_dept_head_cannot_manage_tutor_admin_or_edu_department(client, dept_head
 def test_tutor_cannot_manage_other_tutor_or_admin(client, imported, db):
     from app.models import User
 
-    tutor = _make_user(db, "tutor", "tutor_actor_sec_test")
+    from app.models import Department
+
+    tutor = _make_user(db, "tutor", "tutor_actor_sec_test", department_id=db.query(Department).one().id)
     tutor_headers = _login(client, "tutor_actor_sec_test")
 
-    other_tutor = _make_user(db, "tutor", "tutor_target_sec_test")
+    other_tutor = _make_user(db, "tutor", "tutor_target_sec_test", department_id=tutor.department_id)
     admin = db.query(User).filter(User.username == "admin").one()
 
     r = client.post(f"/admin/users/{other_tutor.id}/set-password", headers=tutor_headers, json={})
@@ -154,7 +156,9 @@ def test_create_admin_forces_no_department(client, admin_headers, imported, db):
 
 
 def test_tutor_cannot_create_admin_or_tutor_user(client, imported, db):
-    tutor = _make_user(db, "tutor", "tutor_creator_sec_test")
+    from app.models import Department
+
+    tutor = _make_user(db, "tutor", "tutor_creator_sec_test", department_id=db.query(Department).one().id)
     headers = _login(client, "tutor_creator_sec_test")
 
     r = client.post(

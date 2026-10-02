@@ -1,6 +1,7 @@
 from app.models.audit import AuditLog
 from app.models.auth import Role, User
 from app.models.calendar import AcademicCalendarDay, GroupCalendarOverride
+from app.models.dossier import DossierAccessLog, StudentGuardian, StudentNote, StudentProfile
 from app.models.enums import (
     AssignmentRole,
     BasisStatus,
@@ -25,6 +26,7 @@ __all__ = [
     "DaySubmission",
     "DayType",
     "Department",
+    "DossierAccessLog",
     "GroupCalendarOverride",
     "InAppNotification",
     "MarkCode",
@@ -32,6 +34,9 @@ __all__ = [
     "Role",
     "RoleCode",
     "Student",
+    "StudentGuardian",
+    "StudentNote",
+    "StudentProfile",
     "StudentGroupMembership",
     "StudentStatus",
     "StudyGroup",

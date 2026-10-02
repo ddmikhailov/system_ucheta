@@ -13,6 +13,8 @@ const ROLE_LABELS: Record<string, string> = {
   edu_department: "Воспитательный отдел",
   admin: "Администратор",
   tutor: "Тьютор",
+  social_pedagogue: "Социальный педагог",
+  psychologist: "Педагог-психолог",
 };
 
 function roleDisplay(u: UserAdmin): string {
@@ -24,7 +26,8 @@ function roleDisplay(u: UserAdmin): string {
 // admin.py). Зав. отделением не может назначить роль выше своей.
 function assignableRoles(myRole: string | undefined): string[] {
   if (myRole === "admin") return Object.keys(ROLE_LABELS);
-  if (myRole === "dept_head") return ["curator", "deputy_curator", "dept_head"];
+  if (myRole === "dept_head") return ["curator", "deputy_curator", "social_pedagogue", "psychologist", "dept_head"];
+  if (myRole === "tutor") return ["curator", "deputy_curator", "social_pedagogue", "psychologist"];
   return [];
 }
 
@@ -39,7 +42,7 @@ function statusLabel(u: UserAdmin): string {
 // Отделение обязательно только для ролей, привязанных к конкретному отделению
 // (зеркалит _resolve_department_for_role в admin.py) — остальным полю в форме
 // создания делать нечего (см. TODO.md 4).
-const ROLES_NEEDING_DEPARTMENT = new Set(["dept_head", "curator", "deputy_curator"]);
+const ROLES_NEEDING_DEPARTMENT = new Set(["dept_head", "tutor", "curator", "deputy_curator", "social_pedagogue", "psychologist"]);
 
 const PAGE_SIZE = 15;
 
@@ -72,7 +75,9 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
 
   function load() {
     api.get<UserAdmin[]>("/admin/users").then(setRows).catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка"));
-    api.get<DepartmentAdmin[]>("/admin/departments").then((ds) => {
+    api.get<DepartmentAdmin[]>("/admin/departments").then((all) => {
+      // Зав. отделением и тьютор создают только в своём отделении.
+      const ds = me?.role === "dept_head" || me?.role === "tutor" ? all.filter((d) => d.name === me?.department_name) : all;
       setDepartments(ds);
       if (ds.length > 0 && departmentId === null) setDepartmentId(ds[0].id);
     });
@@ -147,11 +152,13 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
             <input placeholder="ФИО" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
             <input placeholder="Логин" value={username} onChange={(e) => setUsername(e.target.value)} required />
             <select value={role} onChange={(e) => setRole(e.target.value)}>
-              {Object.entries(ROLE_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
+              {Object.entries(ROLE_LABELS)
+                .filter(([value]) => assignableRoles(me?.role).includes(value))
+                .map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
             </select>
             {roleNeedsDepartment && (
               <select value={departmentId ?? ""} onChange={(e) => setDepartmentId(Number(e.target.value))}>

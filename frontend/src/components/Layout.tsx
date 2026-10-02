@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
-import { MANAGEMENT_ROLES } from "../constants/roles";
+import { MANAGEMENT_ROLES, VIEWER_ROLES } from "../constants/roles";
 import NotificationBell from "./NotificationBell";
 
 export default function Layout({ children }: { children: ReactNode }) {
@@ -15,14 +15,19 @@ export default function Layout({ children }: { children: ReactNode }) {
           <img src="/kait20-logo.webp" alt="КАИТ №20" />
         </div>
         <nav className="app-header__nav">
-          {user?.role === "curator" || user?.role === "deputy_curator" ? (
+          {user && (user.role === "curator" || user.role === "deputy_curator" || user.groups.length > 0) ? (
             <NavLink to="/cabinet" className={({ isActive }) => (isActive ? "active" : "")}>
               Мои группы
             </NavLink>
           ) : null}
-          {user && MANAGEMENT_ROLES.includes(user.role) && (
+          {user && VIEWER_ROLES.includes(user.role) && (
             <NavLink to="/dashboards" className={({ isActive }) => (isActive ? "active" : "")}>
               Витрины
+            </NavLink>
+          )}
+          {user && VIEWER_ROLES.includes(user.role) && (
+            <NavLink to="/students" className={({ isActive }) => (isActive ? "active" : "")}>
+              Студенты
             </NavLink>
           )}
           {user && MANAGEMENT_ROLES.includes(user.role) && (

@@ -2,15 +2,17 @@ import calendar
 import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.api.deps import assert_can_access_group, get_current_user
+from app.api.deps import DOSSIER_STAFF_ROLES, is_department_scoped, assert_can_access_group, get_current_user, scope_department_id
 from app.core.time import today_local
 from app.db.session import get_db
 from app.models import (
     AttendanceMark,
     DaySubmission,
     DayType,
+    RoleCode,
     Student,
     StudentGroupMembership,
     StudyGroup,
@@ -40,8 +42,45 @@ def _get_accessible_student(db: Session, user: User, student_id: int) -> Student
     student = db.get(Student, student_id)
     if student is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Студент не найден")
+    if RoleCode(user.role.code) in DOSSIER_STAFF_ROLES:
+        return student
     assert_can_access_group(db, user, student.study_group_id, today_local())
     return student
+
+
+class StudentSearchRow(BaseModel):
+    id: int
+    full_name: str
+    group_code: str
+    status: str
+
+
+@router.get("", response_model=list[StudentSearchRow])
+def search_students(
+    q: str = "", group_id: int | None = None, limit: int = 50,
+    user: User = Depends(get_current_user), db: Session = Depends(get_db),
+):
+    """Поиск студента по ФИО/группе — вход в карточку и досье для соц. педагога,
+    психолога и администрации. Куратор работает через «Мои группы»."""
+    role = RoleCode(user.role.code)
+    if role in (RoleCode.CURATOR, RoleCode.DEPUTY_CURATOR):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Недостаточно прав")
+    query = db.query(Student).join(StudyGroup, StudyGroup.id == Student.study_group_id)
+    if is_department_scoped(user):
+        query = query.filter(StudyGroup.department_id == scope_department_id(user, None))
+    if group_id is not None:
+        query = query.filter(Student.study_group_id == group_id)
+    for word in q.split():
+        like = f"%{word}%"
+        query = query.filter(
+            Student.last_name.ilike(like) | Student.first_name.ilike(like)
+            | Student.middle_name.ilike(like) | StudyGroup.code.ilike(like)
+        )
+    students = query.order_by(Student.last_name, Student.first_name).limit(min(max(limit, 1), 200)).all()
+    return [
+        StudentSearchRow(id=s.id, full_name=s.full_name, group_code=s.study_group.code, status=s.status.value)
+        for s in students
+    ]
 
 
 @router.get("/{student_id}", response_model=StudentCard)

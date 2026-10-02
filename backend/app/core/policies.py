@@ -22,14 +22,31 @@ from sqlalchemy.orm import Session
 from app.models import RoleCode, Student, StudyGroup, User
 
 ELEVATED_ROLES = {RoleCode.ADMIN.value, RoleCode.TUTOR.value}
-DEPT_HEAD_MANAGEABLE_ROLES = {RoleCode.CURATOR.value, RoleCode.DEPUTY_CURATOR.value}
-DEPT_HEAD_ASSIGNABLE_ROLES = {RoleCode.CURATOR.value, RoleCode.DEPUTY_CURATOR.value, RoleCode.DEPT_HEAD.value}
+# Кто может вести группу (быть назначен куратором/заместителем). Куратором человек
+# становится назначением на группу, а не ролью: соц. педагог и психолог тоже ведут
+# свои группы, оставаясь соц. педагогом/психологом.
+CURATOR_CAPABLE_ROLES = {
+    RoleCode.CURATOR.value, RoleCode.DEPUTY_CURATOR.value,
+    RoleCode.SOCIAL_PEDAGOGUE.value, RoleCode.PSYCHOLOGIST.value,
+}
+# Зав. отделением и тьютор (ограничены своим отделением) управляют кураторами,
+# заместителями, соц. педагогами и психологами своего отделения.
+DEPT_HEAD_MANAGEABLE_ROLES = {
+    RoleCode.CURATOR.value, RoleCode.DEPUTY_CURATOR.value,
+    RoleCode.SOCIAL_PEDAGOGUE.value, RoleCode.PSYCHOLOGIST.value,
+}
+DEPT_HEAD_ASSIGNABLE_ROLES = DEPT_HEAD_MANAGEABLE_ROLES | {RoleCode.DEPT_HEAD.value}
+TUTOR_ASSIGNABLE_ROLES = DEPT_HEAD_MANAGEABLE_ROLES
+DEPARTMENT_SCOPED = (RoleCode.DEPT_HEAD, RoleCode.TUTOR)
 # Роли, которым обязательно нужно отделение, и роли, которым оно не нужно
 # (см. TODO.md 1.4: без этого зав. отделением/куратор без отделения получает
 # фактически доступ ко всему колледжу, т.к. фильтры по department_id=None
 # просто не применяются).
-DEPARTMENT_REQUIRED_ROLES = {RoleCode.DEPT_HEAD.value, RoleCode.CURATOR.value, RoleCode.DEPUTY_CURATOR.value}
-DEPARTMENT_FORBIDDEN_ROLES = {RoleCode.ADMIN.value, RoleCode.TUTOR.value, RoleCode.EDU_DEPARTMENT.value}
+DEPARTMENT_REQUIRED_ROLES = {
+    RoleCode.DEPT_HEAD.value, RoleCode.TUTOR.value, RoleCode.CURATOR.value, RoleCode.DEPUTY_CURATOR.value,
+    RoleCode.SOCIAL_PEDAGOGUE.value, RoleCode.PSYCHOLOGIST.value,
+}
+DEPARTMENT_FORBIDDEN_ROLES = {RoleCode.ADMIN.value, RoleCode.EDU_DEPARTMENT.value}
 
 
 def assert_can_manage_user(admin: User, target: User) -> None:
@@ -38,20 +55,14 @@ def assert_can_manage_user(admin: User, target: User) -> None:
     admin_role = RoleCode(admin.role.code)
     if admin_role == RoleCode.ADMIN:
         return
-    if admin_role == RoleCode.TUTOR:
-        if target.role.code in ELEVATED_ROLES:
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN, "Только администратор может управлять учётками администратора/тьютора"
-            )
-        return
-    if admin_role == RoleCode.DEPT_HEAD:
+    if admin_role in DEPARTMENT_SCOPED:
         if admin.department_id is None:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "У вас не задано отделение — обратитесь к администратору")
         if target.department_id != admin.department_id:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Пользователь не относится к вашему отделению")
         if target.role.code not in DEPT_HEAD_MANAGEABLE_ROLES:
             raise HTTPException(
-                status.HTTP_403_FORBIDDEN, "Зав. отделением может управлять только кураторами и заместителями"
+                status.HTTP_403_FORBIDDEN, "Можно управлять только кураторами, заместителями, соц. педагогами и психологами своего отделения"
             )
         return
     raise HTTPException(status.HTTP_403_FORBIDDEN, "Недостаточно прав для управления пользователями")
@@ -62,6 +73,8 @@ def assert_can_assign_role(admin: User, new_role_code: str) -> None:
     if admin_role == RoleCode.ADMIN:
         return
     if admin_role == RoleCode.DEPT_HEAD and new_role_code in DEPT_HEAD_ASSIGNABLE_ROLES:
+        return
+    if admin_role == RoleCode.TUTOR and new_role_code in TUTOR_ASSIGNABLE_ROLES:
         return
     raise HTTPException(status.HTTP_403_FORBIDDEN, "Недостаточно прав для назначения этой роли")
 
@@ -78,12 +91,12 @@ def resolve_department_for_role(role_code: str, requested_department_id: int | N
 
 
 def assert_can_manage_group(user: User, group: StudyGroup) -> None:
-    if RoleCode(user.role.code) == RoleCode.DEPT_HEAD and group.department_id != user.department_id:
+    if RoleCode(user.role.code) in DEPARTMENT_SCOPED and group.department_id != user.department_id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Группа не относится к вашему отделению")
 
 
 def assert_can_manage_student(db: Session, user: User, student: Student) -> None:
-    if RoleCode(user.role.code) != RoleCode.DEPT_HEAD:
+    if RoleCode(user.role.code) not in DEPARTMENT_SCOPED:
         return
     group = db.get(StudyGroup, student.study_group_id)
     if group is None or group.department_id != user.department_id:

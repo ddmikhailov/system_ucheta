@@ -5,7 +5,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
-    require_full_access, require_management, require_reference_editor, require_structure_editor, scope_department_id,
+    is_department_scoped, require_dept_editor, require_full_access, require_group_calendar_editor, require_management,
+    require_reference_editor, require_structure_editor, require_viewer, scope_department_id,
 )
 from app.core import policies
 from app.core.time import today_local
@@ -64,7 +65,7 @@ from app.services.password_service import generate_temporary_password
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
-@router.get("/departments", response_model=list[DepartmentRead], dependencies=[Depends(require_management)])
+@router.get("/departments", response_model=list[DepartmentRead], dependencies=[Depends(require_viewer)])
 def list_departments(db: Session = Depends(get_db)):
     return db.query(Department).all()
 
@@ -159,7 +160,7 @@ _assert_can_manage_group = policies.assert_can_manage_group
 @router.get("/groups", response_model=list[StudyGroupRead])
 def list_groups(
     department_id: int | None = None,
-    user: User = Depends(require_management),
+    user: User = Depends(require_viewer),
     db: Session = Depends(get_db),
 ):
     today = today_local()
@@ -173,8 +174,10 @@ def list_groups(
 
 @router.post("/groups", response_model=StudyGroupRead, status_code=status.HTTP_201_CREATED)
 def create_group(
-    payload: StudyGroupCreate, user: User = Depends(require_full_access), db: Session = Depends(get_db),
+    payload: StudyGroupCreate, user: User = Depends(require_dept_editor), db: Session = Depends(get_db),
 ):
+    if is_department_scoped(user) and payload.department_id != user.department_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Группу можно создать только в своём отделении")
     group = StudyGroup(**payload.model_dump())
     db.add(group)
     try:
@@ -200,7 +203,7 @@ def update_group(
 
     data = payload.model_dump(exclude_unset=True)
     # Перенос группы в другое отделение — только администратор по колледжу.
-    if "department_id" in data and RoleCode(user.role.code) == RoleCode.DEPT_HEAD:
+    if "department_id" in data and is_department_scoped(user):
         data.pop("department_id")
 
     old_active = group.is_active
@@ -355,9 +358,9 @@ def list_students(
     q = db.query(Student)
     if study_group_id is not None:
         q = q.filter(Student.study_group_id == study_group_id)
-    if RoleCode(user.role.code) == RoleCode.DEPT_HEAD:
+    if is_department_scoped(user):
         q = q.join(StudyGroup, StudyGroup.id == Student.study_group_id).filter(
-            StudyGroup.department_id == user.department_id
+            StudyGroup.department_id == scope_department_id(user, None)
         )
     students = q.order_by(Student.last_name, Student.first_name).all()
     return [_student_read(s) for s in students]
@@ -392,8 +395,12 @@ _assert_can_manage_student = policies.assert_can_manage_student
 
 @router.post("/students", response_model=StudentRead, status_code=status.HTTP_201_CREATED)
 def create_student(
-    payload: StudentCreate, user: User = Depends(require_full_access), db: Session = Depends(get_db),
+    payload: StudentCreate, user: User = Depends(require_dept_editor), db: Session = Depends(get_db),
 ):
+    group = db.get(StudyGroup, payload.study_group_id)
+    if group is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Группа не найдена")
+    _assert_can_manage_group(user, group)
     student = Student(**payload.model_dump())
     db.add(student)
     db.commit()
@@ -561,12 +568,15 @@ def create_curator_assignment(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Пользователь не найден")
     if not curator.is_active:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Пользователь в архиве — сначала восстановите его")
-    if curator.role.code not in (RoleCode.CURATOR.value, RoleCode.DEPUTY_CURATOR.value):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Назначать на группу можно только куратора или заместителя")
+    if curator.role.code not in policies.CURATOR_CAPABLE_ROLES:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Назначать на группу можно куратора, заместителя, соц. педагога или психолога",
+        )
     if payload.end_date is not None and payload.end_date < payload.start_date:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Дата окончания раньше даты начала")
 
-    if RoleCode(user.role.code) == RoleCode.DEPT_HEAD:
+    if is_department_scoped(user):
         if group.department_id != user.department_id:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Группа не относится к вашему отделению")
         if curator.department_id != user.department_id:
@@ -646,7 +656,7 @@ _ELEVATED_ROLES = policies.ELEVATED_ROLES
 @router.get("/users", response_model=list[UserRead])
 def list_users(user: User = Depends(require_management), db: Session = Depends(get_db)):
     q = db.query(User)
-    if RoleCode(user.role.code) == RoleCode.DEPT_HEAD:
+    if is_department_scoped(user):
         scope = scope_department_id(user, None)
         q = q.filter(User.department_id == scope)
     users = q.all()
@@ -654,7 +664,7 @@ def list_users(user: User = Depends(require_management), db: Session = Depends(g
 
 
 @router.post("/users", response_model=UserRead, status_code=status.HTTP_201_CREATED)
-def create_user(payload: UserCreate, admin: User = Depends(require_full_access), db: Session = Depends(get_db)):
+def create_user(payload: UserCreate, admin: User = Depends(require_dept_editor), db: Session = Depends(get_db)):
     role = db.query(Role).filter(Role.code == payload.role).one_or_none()
     if role is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Неизвестная роль")
@@ -664,6 +674,10 @@ def create_user(payload: UserCreate, admin: User = Depends(require_full_access),
         )
     if db.query(User).filter(User.username == payload.username).first():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Логин уже занят")
+    if is_department_scoped(admin):
+        # Зав. отделением и тьютор заводят людей только в своё отделение и только допустимые роли.
+        _assert_can_assign_role(admin, payload.role)
+        payload.department_id = scope_department_id(admin, None)
     department_id = _resolve_department_for_role(payload.role, payload.department_id)
 
     user = User(
@@ -706,7 +720,7 @@ def update_user(
         # смену роли — отделение остаётся тем, что уже у цели (= его собственное).
         requested_department_id = (
             target.department_id
-            if RoleCode(admin.role.code) == RoleCode.DEPT_HEAD or payload.department_id is None
+            if is_department_scoped(admin) or payload.department_id is None
             else payload.department_id
         )
         target.department_id = _resolve_department_for_role(payload.role, requested_department_id)
@@ -728,7 +742,7 @@ def update_user(
     if (
         payload.department_id is not None
         and (payload.role is None or payload.role == target.role.code)
-        and RoleCode(admin.role.code) != RoleCode.DEPT_HEAD
+        and not is_department_scoped(admin)
     ):
         target.department_id = _resolve_department_for_role(target.role.code, payload.department_id)
 
@@ -881,8 +895,13 @@ def upsert_calendar_day(payload: CalendarDayUpsert, user: User = Depends(require
     dependencies=[Depends(require_management)],
 )
 def list_group_calendar_overrides(
-    study_group_id: int, date_from: datetime.date, date_to: datetime.date, db: Session = Depends(get_db),
+    study_group_id: int, date_from: datetime.date, date_to: datetime.date,
+    user: User = Depends(require_management), db: Session = Depends(get_db),
 ):
+    group = db.get(StudyGroup, study_group_id)
+    if group is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Группа не найдена")
+    _assert_can_manage_group(user, group)
     rows = (
         db.query(GroupCalendarOverride)
         .filter(
@@ -897,14 +916,15 @@ def list_group_calendar_overrides(
 
 @router.put(
     "/calendar/group-overrides", response_model=GroupCalendarOverrideRead,
-    dependencies=[Depends(require_reference_editor)],
 )
 def upsert_group_calendar_override(
-    payload: GroupCalendarOverrideUpsert, user: User = Depends(require_reference_editor), db: Session = Depends(get_db),
+    payload: GroupCalendarOverrideUpsert, user: User = Depends(require_group_calendar_editor),
+    db: Session = Depends(get_db),
 ):
     group = db.get(StudyGroup, payload.study_group_id)
     if group is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Группа не найдена")
+    _assert_can_manage_group(user, group)
     key = (payload.study_group_id, payload.date)
     row = db.get(GroupCalendarOverride, key)
     old_value = row.day_type if row else None
@@ -925,12 +945,14 @@ def upsert_group_calendar_override(
 
 @router.delete(
     "/calendar/group-overrides", response_model=DeleteResult,
-    dependencies=[Depends(require_reference_editor)],
 )
 def delete_group_calendar_override(
     study_group_id: int, date: datetime.date,
-    user: User = Depends(require_reference_editor), db: Session = Depends(get_db),
+    user: User = Depends(require_group_calendar_editor), db: Session = Depends(get_db),
 ):
+    group = db.get(StudyGroup, study_group_id)
+    if group is not None:
+        _assert_can_manage_group(user, group)
     row = db.get(GroupCalendarOverride, (study_group_id, date))
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Переопределение не найдено")

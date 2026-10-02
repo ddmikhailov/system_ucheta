@@ -12,6 +12,11 @@ class RoleCode(str, enum.Enum):
     # dept_head: тьютору нужны реально те же права, что у администратора,
     # а не только другая подпись.
     TUTOR = "tutor"
+    # Соц. педагог и психолог: по всему колледжу видят и ведут досье студентов
+    # (в том числе особые данные), но не отмечают посещаемость и не управляют
+    # структурой, пользователями и справочниками.
+    SOCIAL_PEDAGOGUE = "social_pedagogue"
+    PSYCHOLOGIST = "psychologist"
 
 
 class StudentStatus(str, enum.Enum):

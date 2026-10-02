@@ -9,7 +9,8 @@ import CuratorCabinetPage from "./pages/CuratorCabinetPage";
 import DashboardsPage from "./pages/DashboardsPage";
 import AdminPage from "./pages/AdminPage";
 import StudentCardPage from "./pages/StudentCardPage";
-import { MANAGEMENT_ROLES } from "./constants/roles";
+import { DOSSIER_STAFF_ROLES, MANAGEMENT_ROLES } from "./constants/roles";
+import StudentsSearchPage from "./pages/StudentsSearchPage";
 
 function RequireAuth({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
@@ -41,6 +42,7 @@ function RequireAdminAccess({ children }: { children: ReactElement }) {
 function HomeRedirect() {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
+  if (DOSSIER_STAFF_ROLES.includes(user.role)) return <Navigate to="/students" replace />;
   if (MANAGEMENT_ROLES.includes(user.role)) return <Navigate to="/dashboards" replace />;
   return <Navigate to="/cabinet" replace />;
 }
@@ -98,6 +100,16 @@ export default function App() {
                     <AdminPage />
                   </Layout>
                 </RequireAdminAccess>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/students"
+            element={
+              <RequireAuth>
+                <Layout>
+                  <StudentsSearchPage />
+                </Layout>
               </RequireAuth>
             }
           />

@@ -4,6 +4,64 @@ export interface MeGroupInfo {
   course: number;
 }
 
+export interface DossierProfile {
+  birth_date: string | null;
+  funding: "budget" | "contract" | null;
+  phone: string | null;
+  email: string | null;
+  messenger: string | null;
+  registration_address: string | null;
+  residence_address: string | null;
+}
+
+export interface DossierSpecial {
+  is_orphan: boolean;
+  under_guardianship: boolean;
+  disability_group: string | null;
+  has_ovz: boolean;
+  large_family: boolean;
+  low_income: boolean;
+  pdn_kdn: boolean;
+  internal_record: boolean;
+  scholarship: string | null;
+  health_note: string | null;
+}
+
+export interface DossierGuardian {
+  id: number;
+  full_name: string;
+  relation: string;
+  phone: string | null;
+  is_primary: boolean;
+}
+
+export interface DossierNote {
+  id: number;
+  kind: string;
+  text: string;
+  author_id: number | null;
+  author_name: string | null;
+  created_at: string;
+  can_delete: boolean;
+}
+
+export interface Dossier {
+  student_id: number;
+  profile: DossierProfile;
+  special: DossierSpecial | null;
+  special_available: boolean;
+  guardians: DossierGuardian[];
+  notes: DossierNote[];
+  can_edit: boolean;
+}
+
+export interface DossierAccessEntry {
+  user_id: number;
+  user_name: string;
+  included_special: boolean;
+  created_at: string;
+}
+
 export interface MeResponse {
   id: number;
   full_name: string;

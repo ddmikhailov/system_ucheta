@@ -5,6 +5,8 @@ import os
 # (через lru_cache) закэширует значение до того, как мы его зададим (см.
 # TODO.md 1.6: без этого get_settings() падает на слабом секрете по умолчанию).
 os.environ.setdefault("JWT_SECRET", "pytest-only-secret-do-not-use-in-production-32chars")
+# Тестовый ключ Fernet для шифрования особых полей досье (не используется нигде, кроме тестов).
+os.environ.setdefault("DOSSIER_ENCRYPTION_KEY", "Zm9yLXRlc3RzLW9ubHktMzItYnl0ZXMta2V5LTAwMDA=")
 
 import pytest
 from fastapi.testclient import TestClient

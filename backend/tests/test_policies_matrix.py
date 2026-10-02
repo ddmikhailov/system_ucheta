@@ -31,9 +31,12 @@ MANAGE_USER_CASES = [
     (ADMIN, None, ADMIN, None, True),
     (ADMIN, None, TUTOR, None, True),
     (ADMIN, None, CURATOR, DEPT_A, True),
-    (TUTOR, None, CURATOR, DEPT_A, True),
-    (TUTOR, None, ADMIN, None, False),
-    (TUTOR, None, TUTOR, None, False),
+    (TUTOR, DEPT_A, CURATOR, DEPT_A, True),  # тьютор — полный доступ, но к своему отделению
+    (TUTOR, DEPT_A, CURATOR, DEPT_B, False),
+    (TUTOR, DEPT_A, ADMIN, None, False),
+    (TUTOR, DEPT_A, TUTOR, DEPT_A, False),
+    (TUTOR, DEPT_A, DEPT_HEAD, DEPT_A, False),
+    (TUTOR, None, CURATOR, DEPT_A, False),  # у самого нет отделения
     (DEPT_HEAD, DEPT_A, CURATOR, DEPT_A, True),
     (DEPT_HEAD, DEPT_A, DEPUTY_CURATOR, DEPT_A, True),
     (DEPT_HEAD, DEPT_A, CURATOR, DEPT_B, False),  # чужое отделение
@@ -72,7 +75,9 @@ ASSIGN_ROLE_CASES = [
     (DEPT_HEAD, ADMIN, False),
     (DEPT_HEAD, TUTOR, False),
     (DEPT_HEAD, EDU_DEPARTMENT, False),
-    (TUTOR, CURATOR, False),  # tutor вообще не меняет роли
+    (TUTOR, CURATOR, True),
+    (TUTOR, DEPT_HEAD, False),
+    (TUTOR, ADMIN, False),
     (EDU_DEPARTMENT, CURATOR, False),
 ]
 
@@ -92,7 +97,7 @@ def test_assert_can_assign_role_matrix(actor_role, new_role, allowed):
 RESOLVE_DEPARTMENT_CASES = [
     (ADMIN, None, None),
     (ADMIN, DEPT_A, None),  # роль запрещает отделение — молча обнуляется
-    (TUTOR, DEPT_A, None),
+    (TUTOR, DEPT_A, DEPT_A),
     (EDU_DEPARTMENT, DEPT_A, None),
     (DEPT_HEAD, DEPT_A, DEPT_A),
     (CURATOR, DEPT_A, DEPT_A),
@@ -105,7 +110,7 @@ def test_resolve_department_for_role_matrix(role, requested, expected):
     assert policies.resolve_department_for_role(role, requested) == expected
 
 
-@pytest.mark.parametrize("role", [DEPT_HEAD, CURATOR, DEPUTY_CURATOR])
+@pytest.mark.parametrize("role", [DEPT_HEAD, TUTOR, CURATOR, DEPUTY_CURATOR])
 def test_resolve_department_for_role_requires_department_when_missing(role):
     with pytest.raises(Exception):
         policies.resolve_department_for_role(role, None)
@@ -115,7 +120,8 @@ def test_resolve_department_for_role_requires_department_when_missing(role):
 
 MANAGE_GROUP_CASES = [
     (ADMIN, None, DEPT_A, True),
-    (TUTOR, None, DEPT_A, True),
+    (TUTOR, DEPT_A, DEPT_A, True),
+    (TUTOR, DEPT_A, DEPT_B, False),
     (EDU_DEPARTMENT, None, DEPT_A, True),
     (DEPT_HEAD, DEPT_A, DEPT_A, True),
     (DEPT_HEAD, DEPT_A, DEPT_B, False),
@@ -146,7 +152,8 @@ class _FakeDb:
 
 MANAGE_STUDENT_CASES = [
     (ADMIN, None, DEPT_A, True),
-    (TUTOR, None, DEPT_A, True),
+    (TUTOR, DEPT_A, DEPT_A, True),
+    (TUTOR, DEPT_A, DEPT_B, False),
     (EDU_DEPARTMENT, None, DEPT_A, True),
     (DEPT_HEAD, DEPT_A, DEPT_A, True),
     (DEPT_HEAD, DEPT_A, DEPT_B, False),

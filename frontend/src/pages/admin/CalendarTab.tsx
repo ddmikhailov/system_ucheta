@@ -23,7 +23,9 @@ const DAY_TYPE_LABELS: Record<string, string> = {
   remote: "ЭФО (дистанционно)",
 };
 
-export default function CalendarTab({ canEdit }: { canEdit: boolean }) {
+// canEdit — общий календарь колледжа; canEditGroups — исключения для конкретных групп
+// (зав. отделением и тьютор правят только группы своего отделения).
+export default function CalendarTab({ canEdit, canEditGroups }: { canEdit: boolean; canEditGroups: boolean }) {
   const [dateFrom, setDateFrom] = useState(todayIso());
   const [dateTo, setDateTo] = useState(monthsAheadIso(3));
   const [rows, setRows] = useState<CalendarDay[]>([]);
@@ -230,7 +232,7 @@ export default function CalendarTab({ canEdit }: { canEdit: boolean }) {
         </select>
       </div>
 
-      {canEdit && (
+      {canEditGroups && (
         <div className="add-block">
           <p className="add-block__title">Добавить исключение для выбранной группы</p>
           <div className="inline-form">
@@ -252,7 +254,7 @@ export default function CalendarTab({ canEdit }: { canEdit: boolean }) {
           <tr>
             <th>Дата</th>
             <th>Тип</th>
-            {canEdit && <th></th>}
+            {canEditGroups && <th></th>}
           </tr>
         </thead>
         <tbody>
@@ -260,7 +262,7 @@ export default function CalendarTab({ canEdit }: { canEdit: boolean }) {
             <tr key={r.date}>
               <td>{formatDateRu(r.date)}</td>
               <td>{DAY_TYPE_LABELS[r.day_type] ?? r.day_type}</td>
-              {canEdit && (
+              {canEditGroups && (
                 <td>
                   <button className="link-btn" onClick={() => removeGroupOverride(r.date)}>
                     Убрать (вернуть по умолчанию)
@@ -271,7 +273,7 @@ export default function CalendarTab({ canEdit }: { canEdit: boolean }) {
           ))}
           {overrides.length === 0 && (
             <tr>
-              <td colSpan={canEdit ? 3 : 2}>У этой группы нет отдельных исключений в этом диапазоне.</td>
+              <td colSpan={canEditGroups ? 3 : 2}>У этой группы нет отдельных исключений в этом диапазоне.</td>
             </tr>
           )}
         </tbody>

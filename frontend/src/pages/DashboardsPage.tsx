@@ -23,6 +23,7 @@ import type {
   StudyGroupAdmin,
   UserAdmin,
 } from "../api/types";
+import { CURATOR_CAPABLE_ROLES, DOSSIER_STAFF_ROLES } from "../constants/roles";
 import { toIso, todayIso } from "../utils/date";
 
 function daysAgoIso(n: number): string {
@@ -44,10 +45,12 @@ const TABS: Tab[] = ["day", "summary", "dynamics", "risk", "discipline", "vacant
 export default function DashboardsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const isDeptHead = user?.role === "dept_head";
+  // Зав. отделением и тьютор видят только своё отделение.
+  const isDeptHead = user?.role === "dept_head" || user?.role === "tutor";
   // Админ/тьютор/учебный отдел видят весь колледж и могут сузить экспорт до
   // одного отделения; зав. отделением и так видит только своё (см. TODO.md 4).
-  const canFilterDepartment = user?.role === "admin" || user?.role === "tutor" || user?.role === "edu_department";
+  const isStaff = !!user && DOSSIER_STAFF_ROLES.includes(user.role);
+  const canFilterDepartment = user?.role === "admin" || user?.role === "edu_department" || isStaff;
 
   // Вкладка и фильтры «Свода» живут в адресной строке — ссылкой можно поделиться,
   // а при обычном заходе подставляется последний сохранённый выбор.
@@ -170,7 +173,7 @@ export default function DashboardsPage() {
       .catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка загрузки"));
     api
       .get<UserAdmin[]>("/admin/users")
-      .then((us) => setCurators(us.filter((u) => u.is_active && (u.role === "curator" || u.role === "deputy_curator"))))
+      .then((us) => setCurators(us.filter((u) => u.is_active && (CURATOR_CAPABLE_ROLES.includes(u.role)))))
       .catch(() => setCurators([]));
   }
 
@@ -216,12 +219,16 @@ export default function DashboardsPage() {
         <button className={tab === "risk" ? "active" : ""} onClick={() => setTab("risk")}>
           Группа риска
         </button>
-        <button className={tab === "discipline" ? "active" : ""} onClick={() => setTab("discipline")}>
-          Дисциплина кураторов
-        </button>
-        <button className={tab === "vacant" ? "active" : ""} onClick={() => setTab("vacant")}>
-          Вакантные группы{vacantGroups.length > 0 ? ` (${vacantGroups.length})` : ""}
-        </button>
+        {!isStaff && (
+          <button className={tab === "discipline" ? "active" : ""} onClick={() => setTab("discipline")}>
+            Дисциплина кураторов
+          </button>
+        )}
+        {!isStaff && (
+          <button className={tab === "vacant" ? "active" : ""} onClick={() => setTab("vacant")}>
+            Вакантные группы{vacantGroups.length > 0 ? ` (${vacantGroups.length})` : ""}
+          </button>
+        )}
         {canFilterDepartment && tab !== "summary" && (
           <select
             value={exportDepartmentId}
@@ -290,8 +297,10 @@ export default function DashboardsPage() {
               <tr
                 key={r.study_group_id}
                 className={!r.is_submitted ? "not-submitted-row clickable-row" : "clickable-row"}
-                onClick={() => navigate(`/admin?tab=journal&group=${r.study_group_id}&date=${date}`)}
-                title="Открыть журнал группы на эту дату"
+                onClick={() =>
+                  navigate(isStaff ? `/students?group=${r.study_group_id}` : `/admin?tab=journal&group=${r.study_group_id}&date=${date}`)
+                }
+                title={isStaff ? "Показать студентов группы" : "Открыть журнал группы на эту дату"}
               >
                 <td>{r.code}</td>
                 <td>{r.course}</td>

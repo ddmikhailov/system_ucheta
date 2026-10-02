@@ -3,7 +3,7 @@ import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_management, require_roles, scope_department_id, validate_date_range
+from app.api.deps import is_department_scoped, require_management, require_roles, require_viewer, scope_department_id, validate_date_range
 from app.core import policies
 from app.core.config import get_settings
 from app.db.session import get_db
@@ -31,7 +31,7 @@ settings = get_settings()
 def day_overview(
     date: datetime.date,
     department_id: int | None = None,
-    user: User = Depends(require_management),
+    user: User = Depends(require_viewer),
     db: Session = Depends(get_db),
 ):
     scope = scope_department_id(user, department_id)
@@ -47,7 +47,7 @@ def dynamics(
     course: int | None = None,
     study_group_id: int | None = None,
     student_id: int | None = None,
-    user: User = Depends(require_management),
+    user: User = Depends(require_viewer),
     db: Session = Depends(get_db),
 ):
     validate_date_range(date_from, date_to)
@@ -74,7 +74,7 @@ def summary(
     study_group_id: int | None = None,
     pair: int = Query(default=1, ge=1, le=10),
     include_group_days: bool = False,
-    user: User = Depends(require_management),
+    user: User = Depends(require_viewer),
     db: Session = Depends(get_db),
 ):
     """Свод «всего / к 1 паре» — те же числа, что в листах свода в Excel.
@@ -108,7 +108,7 @@ def risk_students(
     as_of_date: datetime.date,
     threshold: int | None = None,
     department_id: int | None = None,
-    user: User = Depends(require_management),
+    user: User = Depends(require_viewer),
     db: Session = Depends(get_db),
 ):
     scope = scope_department_id(user, department_id)
@@ -137,7 +137,7 @@ def curator_discipline_days(
     study_group_id: int,
     date_from: datetime.date,
     date_to: datetime.date,
-    user: User = Depends(require_roles(RoleCode.DEPT_HEAD)),
+    user: User = Depends(require_roles(RoleCode.DEPT_HEAD, RoleCode.TUTOR)),
     db: Session = Depends(get_db),
 ):
     """Во сколько куратор группы сдавал каждый день — только зав. отделением
@@ -155,7 +155,7 @@ def student_card(
     student_id: int,
     date_from: datetime.date,
     date_to: datetime.date,
-    user: User = Depends(require_management),
+    user: User = Depends(require_viewer),
     db: Session = Depends(get_db),
 ):
     validate_date_range(date_from, date_to)
@@ -163,7 +163,7 @@ def student_card(
     if student is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Студент не найден")
 
-    if RoleCode(user.role.code) == RoleCode.DEPT_HEAD and student.study_group.department_id != user.department_id:
+    if is_department_scoped(user) and student.study_group.department_id != user.department_id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Студент не из вашего отделения")
 
     marks = (

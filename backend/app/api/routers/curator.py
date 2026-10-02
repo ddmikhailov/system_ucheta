@@ -3,7 +3,7 @@ import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import assert_can_access_group, get_current_user, get_curator_group_ids
+from app.api.deps import assert_can_access_group, assert_can_view_group, get_current_user, get_curator_group_ids
 from app.core.config import get_settings
 from app.core.time import today_local
 from app.db.session import get_db
@@ -65,7 +65,7 @@ def get_day(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    assert_can_access_group(db, user, study_group_id, date)
+    assert_can_view_group(db, user, study_group_id, date)
     return attendance_service.get_roster(db, study_group_id, date)
 
 
@@ -131,7 +131,7 @@ def month_status(
         # datetime.date(year, 13, 1) роняет ValueError -> необработанный 500
         # (см. TODO.md 3).
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Некорректные год/месяц")
-    assert_can_access_group(db, user, study_group_id, datetime.date(year, month, 1))
+    assert_can_view_group(db, user, study_group_id, datetime.date(year, month, 1))
     group = db.get(StudyGroup, study_group_id)
 
     date_from = datetime.date(year, month, 1)
