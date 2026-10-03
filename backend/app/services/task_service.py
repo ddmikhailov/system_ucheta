@@ -10,6 +10,7 @@ import datetime
 import io
 import json
 import re
+import time
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -20,7 +21,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import DEPARTMENT_SCOPED_ROLES, get_curator_group_ids
 from app.core.time import today_local, utcnow
 from app.models import (
-    CuratorAssignment, RoleCode, Student, StudyGroup, Task, TaskAssignment, TaskComment, TaskRow, User,
+    CuratorAssignment, InAppNotification, RoleCode, Student, StudyGroup, Task, TaskAssignment, TaskComment, TaskRow, User,
 )
 from app.schemas.tasks import FieldDef, Progress, ScopeDef, TaskCreate
 from app.services import attendance_service, in_app_notification_service
@@ -439,3 +440,80 @@ def export_workbook(db: Session, user: User, task: Task) -> bytes:
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+# ---------- напоминания о сроках ----------
+# Отдельного планировщика нет: сроки проверяются при открытии платформы (колокольчик
+# опрашивает /notifications/unread-count при входе и раз в минуту). Каждое напоминание
+# создаётся один раз на (пользователь, назначение, вид); проверка не чаще раза в 10 минут.
+
+REMIND_DAYS_BEFORE = 3
+REVIEW_WAIT_DAYS = 2
+REMINDER_THROTTLE_SECONDS = 600
+REMINDER_KINDS = ("task_due_soon", "task_due_today", "task_overdue", "task_review_waiting")
+_last_reminder_run: dict[int, float] = {}
+
+
+def reset_reminder_throttle() -> None:
+    _last_reminder_run.clear()
+
+
+def _fmt(d: datetime.date) -> str:
+    return d.strftime("%d.%m.%Y")
+
+
+def generate_reminders(db: Session, user: User, today: datetime.date | None = None, force: bool = False) -> int:
+    """Создаёт недостающие напоминания пользователю; возвращает их число (без commit)."""
+    now = time.monotonic()
+    if not force and now - _last_reminder_run.get(user.id, -1e9) < REMINDER_THROTTLE_SECONDS:
+        return 0
+    _last_reminder_run[user.id] = now
+    today = today or today_local()
+
+    sent = {
+        (n.kind, n.entity_id)
+        for n in db.query(InAppNotification.kind, InAppNotification.entity_id).filter(
+            InAppNotification.user_id == user.id,
+            InAppNotification.entity_type == "task_assignment",
+            InAppNotification.kind.in_(REMINDER_KINDS),
+        )
+    }
+    created = 0
+
+    def remind(kind: str, assignment: TaskAssignment, message: str) -> None:
+        nonlocal created
+        key = (kind, str(assignment.id))
+        if key in sent:
+            return
+        sent.add(key)
+        in_app_notification_service.notify(db, user, kind, message, entity_type="task_assignment",
+                                           entity_id=str(assignment.id))
+        created += 1
+
+    group_ids = get_curator_group_ids(db, user, today)
+    if group_ids:
+        mine = (
+            db.query(TaskAssignment).join(Task, Task.id == TaskAssignment.task_id)
+            .filter(TaskAssignment.study_group_id.in_(group_ids), Task.is_closed.is_(False),
+                    TaskAssignment.status.in_(EDITABLE_STATUSES)).all()
+        )
+        for a in mine:
+            days_left = (a.task.due_date - today).days
+            title, code, due = a.task.title, a.study_group.code, _fmt(a.task.due_date)
+            if days_left < 0:
+                remind("task_overdue", a, f"Просрочена задача «{title}» (группа {code}): срок был {due}.")
+            elif days_left == 0:
+                remind("task_due_today", a, f"Сегодня последний день задачи «{title}» (группа {code}).")
+            elif days_left <= REMIND_DAYS_BEFORE:
+                remind("task_due_soon", a, f"Скоро срок задачи «{title}» (группа {code}): {due}, осталось {days_left} дн.")
+
+    if is_manager(user):
+        threshold = utcnow() - datetime.timedelta(days=REVIEW_WAIT_DAYS)
+        waiting = db.query(TaskAssignment).filter(
+            TaskAssignment.status == "submitted", TaskAssignment.submitted_at <= threshold
+        ).all()
+        for a in waiting:
+            if can_review(user, a):
+                remind("task_review_waiting", a,
+                       f"Ждёт проверки больше {REVIEW_WAIT_DAYS} дн.: «{a.task.title}», группа {a.study_group.code}.")
+    return created

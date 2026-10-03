@@ -2,8 +2,10 @@
 import datetime
 import io
 
+import pytest
 from openpyxl import load_workbook
 
+from app.core.time import utcnow
 from app.models import Department, Student, StudyGroup, Task, TaskAssignment
 
 FIELDS_STUDENT = [
@@ -361,3 +363,78 @@ def test_export_per_student_and_per_group(client, admin_headers, curator_headers
                          fields=[{"label": "Сдано", "type": "bool"}], title="Групповая")
     rows = list(load_workbook(io.BytesIO(client.get(f"/tasks/{group_task['id']}/export", headers=admin_headers).content)).worksheets[0].iter_rows(values_only=True))
     assert rows[0][3] == "Сдано" and len(rows) == 1 + group_task["progress"]["total"]
+
+
+# ---------- напоминания о сроках (проверка при открытии платформы) ----------
+
+def _reminders(client, headers):
+    return [n for n in client.get("/notifications", headers=headers).json()
+            if n["kind"] in ("task_due_soon", "task_due_today", "task_overdue", "task_review_waiting")]
+
+
+def _set_due(db, task_id, days):
+    db.query(Task).filter(Task.id == task_id).update({"due_date": datetime.date.today() + datetime.timedelta(days=days)})
+    db.commit()
+
+
+def _open_platform(client, headers):
+    """Как колокольчик при входе: опрос счётчика (и сброс 10-минутного ограничителя)."""
+    from app.services import task_service
+
+    task_service.reset_reminder_throttle()
+    return client.get("/notifications/unread-count", headers=headers)
+
+
+@pytest.mark.parametrize("days,kind", [(2, "task_due_soon"), (0, "task_due_today"), (-1, "task_overdue")])
+def test_deadline_reminders_by_stage_and_only_once(client, admin_headers, curator_headers, curator_group, imported, db, days, kind):
+    task = _create(client, admin_headers)
+    _set_due(db, task["id"], days)
+    assert _open_platform(client, curator_headers).status_code == 200
+    first = _reminders(client, curator_headers)
+    assert [n["kind"] for n in first] == [kind]
+    assert first[0]["entity_type"] == "task_assignment"
+    _open_platform(client, curator_headers)
+    _open_platform(client, curator_headers)
+    assert len(_reminders(client, curator_headers)) == 1  # повторно не создаётся
+
+
+def test_no_reminders_for_far_closed_submitted_or_accepted(client, admin_headers, curator_headers, curator_group, imported, db):
+    far = _create(client, admin_headers, title="Далёкая")
+    closed = _create(client, admin_headers, title="Закрытая")
+    done = _create(client, admin_headers, title="Сданная", collect_mode="group", fields=[{"label": "Сдано", "type": "bool", "required": True}])
+    _set_due(db, far["id"], 10)
+    _set_due(db, closed["id"], 1)
+    client.patch(f"/tasks/{closed['id']}", headers=admin_headers, json={"is_closed": True})
+    aid = _my_assignment_id(client, curator_headers, done["id"])
+    client.put(f"/tasks/assignments/{aid}/answers", headers=curator_headers,
+               json={"group_values": {done["fields"][0]["key"]: True}})
+    client.post(f"/tasks/assignments/{aid}/submit", headers=curator_headers)
+    _set_due(db, done["id"], 1)
+    _open_platform(client, curator_headers)
+    assert _reminders(client, curator_headers) == []
+
+
+def test_reminders_are_throttled_between_polls(client, admin_headers, curator_headers, curator_group, imported, db):
+    task = _create(client, admin_headers)
+    _open_platform(client, curator_headers)  # первый запуск: срок далеко
+    _set_due(db, task["id"], 1)
+    client.get("/notifications/unread-count", headers=curator_headers)  # сразу же — в пределах 10 минут
+    assert _reminders(client, curator_headers) == []
+    _open_platform(client, curator_headers)  # «новое открытие» после паузы
+    assert [n["kind"] for n in _reminders(client, curator_headers)] == ["task_due_soon"]
+
+
+def test_reviewer_is_reminded_about_stale_submissions(client, admin_headers, dept_head_headers, curator_headers, curator_group, imported, db):
+    task, aid, r = _submit_group_task(client, admin_headers, curator_headers)
+    assert r.status_code == 200
+    _open_platform(client, dept_head_headers)
+    assert _reminders(client, dept_head_headers) == []  # только что сдано
+    db.query(TaskAssignment).filter(TaskAssignment.id == aid).update(
+        {"submitted_at": utcnow() - datetime.timedelta(days=3)})
+    db.commit()
+    _open_platform(client, dept_head_headers)
+    _open_platform(client, dept_head_headers)
+    assert [n["kind"] for n in _reminders(client, dept_head_headers)] == ["task_review_waiting"]
+    # Кто не проверяет эту задачу, напоминания не получает.
+    _open_platform(client, curator_headers)
+    assert all(n["kind"] != "task_review_waiting" for n in _reminders(client, curator_headers))

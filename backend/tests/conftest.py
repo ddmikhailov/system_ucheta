@@ -98,9 +98,13 @@ def _reset_rate_limit():
     тест ожидает 401/200."""
     from app.core.rate_limit import _attempts
 
+    from app.services import task_service
+
     _attempts.clear()
+    task_service.reset_reminder_throttle()
     yield
     _attempts.clear()
+    task_service.reset_reminder_throttle()
 
 
 @pytest.fixture()
