@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
+import DossierImport from "../components/DossierImport";
 import { STUDENT_STATUS_LABELS } from "../constants/studentStatus";
 import type { StudyGroupAdmin } from "../api/types";
 
@@ -55,6 +56,7 @@ export default function StudentsSearchPage() {
 
   return (
     <div>
+      <DossierImport />
       <div className="toolbar">
         <input
           type="search"

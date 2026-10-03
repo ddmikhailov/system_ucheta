@@ -92,3 +92,23 @@ export async function downloadFile(path: string, filename: string) {
   // отработать первыми.
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+// Загрузка файла сырым телом запроса (не multipart): так бэкенду не нужна лишняя зависимость.
+export async function uploadFile<T>(path: string, file: File): Promise<T> {
+  const token = getToken();
+  const headers: Record<string, string> = {
+    "Content-Type": file.type || "application/octet-stream",
+  };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(`${API_BASE}${path}`, { method: "POST", headers, body: file });
+  if (!res.ok) {
+    let message = res.statusText;
+    try {
+      message = (await res.json()).detail ?? message;
+    } catch {
+      // тело не JSON — оставляем statusText
+    }
+    throw new ApiError(res.status, message);
+  }
+  return res.json();
+}
