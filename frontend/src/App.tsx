@@ -11,6 +11,7 @@ import AdminPage from "./pages/AdminPage";
 import StudentCardPage from "./pages/StudentCardPage";
 import { DOSSIER_STAFF_ROLES, MANAGEMENT_ROLES } from "./constants/roles";
 import StudentsSearchPage from "./pages/StudentsSearchPage";
+import PassportPage from "./pages/PassportPage";
 
 function RequireAuth({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
@@ -100,6 +101,16 @@ export default function App() {
                     <AdminPage />
                   </Layout>
                 </RequireAdminAccess>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/passport"
+            element={
+              <RequireAuth>
+                <Layout>
+                  <PassportPage />
+                </Layout>
               </RequireAuth>
             }
           />

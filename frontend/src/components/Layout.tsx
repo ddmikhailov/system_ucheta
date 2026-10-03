@@ -30,6 +30,11 @@ export default function Layout({ children }: { children: ReactNode }) {
               Студенты
             </NavLink>
           )}
+          {user && (VIEWER_ROLES.includes(user.role) || user.groups.length > 0 || user.role === "curator" || user.role === "deputy_curator") && (
+            <NavLink to="/passport" className={({ isActive }) => (isActive ? "active" : "")}>
+              Соц. паспорт
+            </NavLink>
+          )}
           {user && MANAGEMENT_ROLES.includes(user.role) && (
             <NavLink to="/admin" className={({ isActive }) => (isActive ? "active" : "")}>
               Админка
