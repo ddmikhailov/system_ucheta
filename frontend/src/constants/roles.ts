@@ -10,5 +10,8 @@ export const DOSSIER_STAFF_ROLES = ["social_pedagogue", "psychologist"];
 // Кого можно назначать куратором/заместителем группы (зеркалит CURATOR_CAPABLE_ROLES).
 export const CURATOR_CAPABLE_ROLES = ["curator", "deputy_curator", ...DOSSIER_STAFF_ROLES];
 
+// Кто ставит и проверяет задачи (зеркалит TASK_MANAGER_ROLES на бэкенде).
+export const TASK_MANAGER_ROLES = ["admin", "edu_department", "tutor", "dept_head"];
+
 // Кто видит витрины и поиск студентов.
 export const VIEWER_ROLES = [...MANAGEMENT_ROLES, ...DOSSIER_STAFF_ROLES];

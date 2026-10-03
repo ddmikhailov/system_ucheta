@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routers import admin, auth, curator, dashboards, dossier, dossier_import, export, notifications, passport, students
+from app.api.routers import admin, auth, curator, dashboards, dossier, dossier_import, export, notifications, passport, students, tasks
 from app.core.config import get_settings
 from app.core.observability import init_sentry
 from app.core.rate_limit import client_ip
@@ -90,6 +90,7 @@ app.include_router(students.router)
 app.include_router(dossier.router)
 app.include_router(dossier_import.router)
 app.include_router(passport.router)
+app.include_router(tasks.router)
 
 
 @app.get("/health")

@@ -1,0 +1,249 @@
+import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
+import { api, ApiError } from "../api/client";
+import { useAuth } from "../auth/useAuth";
+import { COLLECT_MODE_LABELS, FIELD_TYPE_LABELS, REVIEWER_LABELS } from "../constants/tasks";
+import { todayIso } from "../utils/date";
+import type { DepartmentAdmin, StudyGroupAdmin, TaskDetail, TaskField, TaskFieldType } from "../api/types";
+
+type ScopeKind = "all" | "departments" | "courses" | "groups";
+
+interface FieldDraft {
+  label: string;
+  type: TaskFieldType;
+  required: boolean;
+  optionsText: string;
+}
+
+const EMPTY_FIELD: FieldDraft = { label: "", type: "text", required: false, optionsText: "" };
+
+// Создание задачи: описание → охват → режим сбора → форма ответа → срок и проверка.
+export default function TaskCreateForm({ onCreated }: { onCreated: (task: TaskDetail) => void }) {
+  const { user } = useAuth();
+  const scopedToDepartment = user?.role === "dept_head" || user?.role === "tutor";
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [mode, setMode] = useState("student");
+  const [reviewer, setReviewer] = useState("dept_head");
+  const [dueDate, setDueDate] = useState(todayIso());
+  const [fields, setFields] = useState<FieldDraft[]>([{ ...EMPTY_FIELD }]);
+  const [scopeKind, setScopeKind] = useState<ScopeKind>("all");
+  const [departmentIds, setDepartmentIds] = useState<number[]>([]);
+  const [courses, setCourses] = useState<number[]>([]);
+  const [groupIds, setGroupIds] = useState<number[]>([]);
+  const [excludeIds, setExcludeIds] = useState<number[]>([]);
+  const [departments, setDepartments] = useState<DepartmentAdmin[]>([]);
+  const [groups, setGroups] = useState<StudyGroupAdmin[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api.get<DepartmentAdmin[]>("/admin/departments").then(setDepartments).catch(() => setDepartments([]));
+    api
+      .get<StudyGroupAdmin[]>("/admin/groups")
+      .then((all) => setGroups(all.filter((g) => g.is_active)))
+      .catch(() => setGroups([]));
+  }, []);
+
+  const toggle = (list: number[], set: (v: number[]) => void, id: number) =>
+    set(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
+
+  const updateField = (i: number, patch: Partial<FieldDraft>) =>
+    setFields((prev) => prev.map((f, idx) => (idx === i ? { ...f, ...patch } : f)));
+
+  const move = (i: number, delta: number) =>
+    setFields((prev) => {
+      const j = i + delta;
+      if (j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    const payloadFields: TaskField[] = fields.map((f) => ({
+      label: f.label,
+      type: f.type,
+      required: f.required,
+      options: f.type === "select" || f.type === "multiselect" ? f.optionsText.split(",").map((o) => o.trim()).filter(Boolean) : [],
+    }));
+    try {
+      const task = await api.post<TaskDetail>("/tasks", {
+        title,
+        description: description || null,
+        collect_mode: mode,
+        reviewer_rule: reviewer,
+        due_date: dueDate,
+        fields: payloadFields,
+        scope: {
+          all_groups: scopeKind === "all",
+          department_ids: scopeKind === "departments" ? departmentIds : [],
+          courses: scopeKind === "courses" ? courses : [],
+          group_ids: scopeKind === "groups" ? groupIds : [],
+          exclude_group_ids: excludeIds,
+        },
+      });
+      onCreated(task);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не удалось создать задачу");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="add-block" onSubmit={submit}>
+      <p className="add-block__title">Новая задача</p>
+      {error && <div className="error-text">{error}</div>}
+
+      <div className="inline-form">
+        <input placeholder="Название" value={title} onChange={(e) => setTitle(e.target.value)} required style={{ flex: 1, minWidth: 220 }} />
+        <label>
+          Срок{" "}
+          <input type="date" value={dueDate} min={todayIso()} onChange={(e) => setDueDate(e.target.value)} required />
+        </label>
+      </div>
+      <textarea
+        placeholder="Описание: что нужно сделать и как"
+        rows={3}
+        style={{ width: "100%" }}
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+      />
+
+      <p className="add-block__title">Кому</p>
+      <div className="inline-form">
+        <select value={scopeKind} onChange={(e) => setScopeKind(e.target.value as ScopeKind)}>
+          <option value="all">{scopedToDepartment ? "Всё моё отделение" : "Весь колледж"}</option>
+          {!scopedToDepartment && <option value="departments">Выбранные отделения</option>}
+          <option value="courses">Выбранные курсы</option>
+          <option value="groups">Выбранные группы</option>
+        </select>
+      </div>
+      {scopeKind === "departments" && (
+        <div className="inline-form">
+          {departments.map((d) => (
+            <label key={d.id}>
+              <input type="checkbox" checked={departmentIds.includes(d.id)} onChange={() => toggle(departmentIds, setDepartmentIds, d.id)} />{" "}
+              {d.name}
+            </label>
+          ))}
+        </div>
+      )}
+      {scopeKind === "courses" && (
+        <div className="inline-form">
+          {[1, 2, 3, 4].map((c) => (
+            <label key={c}>
+              <input type="checkbox" checked={courses.includes(c)} onChange={() => toggle(courses, setCourses, c)} /> {c} курс
+            </label>
+          ))}
+        </div>
+      )}
+      {scopeKind === "groups" && (
+        <select
+          multiple
+          size={8}
+          style={{ width: "100%" }}
+          value={groupIds.map(String)}
+          onChange={(e) => setGroupIds(Array.from(e.target.selectedOptions, (o) => Number(o.value)))}
+        >
+          {groups.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.code} (курс {g.course})
+            </option>
+          ))}
+        </select>
+      )}
+      <details>
+        <summary>Исключить группы</summary>
+        <select
+          multiple
+          size={6}
+          style={{ width: "100%" }}
+          value={excludeIds.map(String)}
+          onChange={(e) => setExcludeIds(Array.from(e.target.selectedOptions, (o) => Number(o.value)))}
+        >
+          {groups.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.code}
+            </option>
+          ))}
+        </select>
+      </details>
+
+      <p className="add-block__title">Как собирать ответ</p>
+      <div className="inline-form">
+        <select value={mode} onChange={(e) => setMode(e.target.value)}>
+          {Object.entries(COLLECT_MODE_LABELS).map(([v, l]) => (
+            <option key={v} value={v}>
+              {l}
+            </option>
+          ))}
+        </select>
+        <label>
+          Проверяет{" "}
+          <select value={reviewer} onChange={(e) => setReviewer(e.target.value)}>
+            {Object.entries(REVIEWER_LABELS).map(([v, l]) => (
+              <option key={v} value={v}>
+                {l}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <p className="hint">
+        {mode === "group" && "Один ответ от группы (видеовизитка, план работы)."}
+        {mode === "student" && "Строка на каждого студента группы (кружки, согласия, справки)."}
+        {mode === "selected" && "Куратор сам отмечает, кого задача касается, и заполняет только их."}
+      </p>
+
+      <p className="add-block__title">Форма ответа</p>
+      {fields.map((f, i) => (
+        <div className="inline-form" key={i}>
+          <input placeholder="Название поля" value={f.label} onChange={(e) => updateField(i, { label: e.target.value })} required />
+          <select value={f.type} onChange={(e) => updateField(i, { type: e.target.value as TaskFieldType })}>
+            {Object.entries(FIELD_TYPE_LABELS).map(([v, l]) => (
+              <option key={v} value={v}>
+                {l}
+              </option>
+            ))}
+          </select>
+          {(f.type === "select" || f.type === "multiselect") && (
+            <input
+              placeholder="Варианты через запятую"
+              value={f.optionsText}
+              onChange={(e) => updateField(i, { optionsText: e.target.value })}
+              required
+            />
+          )}
+          <label>
+            <input type="checkbox" checked={f.required} onChange={(e) => updateField(i, { required: e.target.checked })} /> Обязательное
+          </label>
+          <button type="button" className="link-btn" onClick={() => move(i, -1)} disabled={i === 0} title="Выше">
+            ↑
+          </button>
+          <button type="button" className="link-btn" onClick={() => move(i, 1)} disabled={i === fields.length - 1} title="Ниже">
+            ↓
+          </button>
+          <button type="button" className="link-btn" onClick={() => setFields((p) => p.filter((_, idx) => idx !== i))} disabled={fields.length === 1}>
+            Убрать
+          </button>
+        </div>
+      ))}
+      <p>
+        <button type="button" className="link-btn" onClick={() => setFields((p) => [...p, { ...EMPTY_FIELD }])} disabled={fields.length >= 30}>
+          + Добавить поле
+        </button>
+      </p>
+
+      <p>
+        <button type="submit" disabled={busy}>
+          Создать и разослать
+        </button>
+      </p>
+    </form>
+  );
+}

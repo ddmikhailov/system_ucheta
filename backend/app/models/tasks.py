@@ -1,0 +1,84 @@
+import datetime
+
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.core.time import utcnow
+from app.db.base import Base
+
+
+class Task(Base):
+    """Задача от администрации (futures.md, этап 3). Форма ответа и охват хранятся
+    JSON-ом в самой задаче: разные задачи = разные формы без миграций БД."""
+
+    __tablename__ = "tasks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    collect_mode: Mapped[str] = mapped_column(String(16), nullable=False)  # group / student / selected
+    reviewer_rule: Mapped[str] = mapped_column(String(24), nullable=False)  # dept_head / edu_department / author / none
+    due_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    is_closed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    fields_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    scope_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+
+    author: Mapped["User"] = relationship()
+    assignments: Mapped[list["TaskAssignment"]] = relationship(back_populates="task", cascade="all, delete-orphan")
+
+
+class TaskAssignment(Base):
+    """Экземпляр задачи для одной группы: свой статус, свои ответы, своя проверка."""
+
+    __tablename__ = "task_assignments"
+    __table_args__ = (UniqueConstraint("task_id", "study_group_id", name="uq_task_assignment_group"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id"), nullable=False, index=True)
+    study_group_id: Mapped[int] = mapped_column(ForeignKey("study_groups.id"), nullable=False, index=True)
+    # new / in_progress / submitted / returned / accepted
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="new")
+    group_values_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    submitted_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
+    reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    reviewed_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
+    review_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+
+    task: Mapped["Task"] = relationship(back_populates="assignments")
+    study_group: Mapped["StudyGroup"] = relationship()
+    rows: Mapped[list["TaskRow"]] = relationship(back_populates="assignment", cascade="all, delete-orphan")
+    comments: Mapped[list["TaskComment"]] = relationship(back_populates="assignment", cascade="all, delete-orphan")
+
+
+class TaskRow(Base):
+    """Ответ по студенту (режимы «по каждому» и «по выбранным»)."""
+
+    __tablename__ = "task_rows"
+    __table_args__ = (UniqueConstraint("assignment_id", "student_id", name="uq_task_row_student"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    assignment_id: Mapped[int] = mapped_column(ForeignKey("task_assignments.id"), nullable=False, index=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), nullable=False)
+    is_included: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    values_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+    assignment: Mapped["TaskAssignment"] = relationship(back_populates="rows")
+
+
+class TaskComment(Base):
+    """Комментарий к назначению целиком (student_id пусто) или к строке студента."""
+
+    __tablename__ = "task_comments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    assignment_id: Mapped[int] = mapped_column(ForeignKey("task_assignments.id"), nullable=False, index=True)
+    student_id: Mapped[int | None] = mapped_column(ForeignKey("students.id"), nullable=True)
+    author_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+
+    assignment: Mapped["TaskAssignment"] = relationship(back_populates="comments")
+    author: Mapped["User"] = relationship()

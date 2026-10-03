@@ -12,6 +12,7 @@ from app.models.enums import (
 )
 from app.models.marks import AbsencePeriod, AttendanceMark, DaySubmission, MarkCode
 from app.models.notifications import InAppNotification
+from app.models.tasks import Task, TaskAssignment, TaskComment, TaskRow
 from app.models.org import Department, StudyGroup
 from app.models.people import CuratorAssignment, Student, StudentGroupMembership
 
@@ -40,5 +41,9 @@ __all__ = [
     "StudentGroupMembership",
     "StudentStatus",
     "StudyGroup",
+    "Task",
+    "TaskAssignment",
+    "TaskComment",
+    "TaskRow",
     "User",
 ]

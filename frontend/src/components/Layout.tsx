@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
-import { MANAGEMENT_ROLES, VIEWER_ROLES } from "../constants/roles";
+import { MANAGEMENT_ROLES, TASK_MANAGER_ROLES, VIEWER_ROLES } from "../constants/roles";
 import NotificationBell from "./NotificationBell";
 
 export default function Layout({ children }: { children: ReactNode }) {
@@ -20,6 +20,16 @@ export default function Layout({ children }: { children: ReactNode }) {
               Мои группы
             </NavLink>
           ) : null}
+          {user && (user.role === "curator" || user.role === "deputy_curator" || user.groups.length > 0) ? (
+            <NavLink to="/my-tasks" className={({ isActive }) => (isActive ? "active" : "")}>
+              Мои задачи
+            </NavLink>
+          ) : null}
+          {user && TASK_MANAGER_ROLES.includes(user.role) && (
+            <NavLink to="/tasks" end className={({ isActive }) => (isActive ? "active" : "")}>
+              Задачи
+            </NavLink>
+          )}
           {user && VIEWER_ROLES.includes(user.role) && (
             <NavLink to="/dashboards" className={({ isActive }) => (isActive ? "active" : "")}>
               Витрины

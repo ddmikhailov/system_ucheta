@@ -415,3 +415,132 @@ export interface CuratorDaysRead {
   average_on_time_submission: string | null;
   days: CuratorDayRow[];
 }
+
+export type TaskFieldType = "text" | "number" | "date" | "bool" | "select" | "multiselect" | "link";
+
+export interface TaskField {
+  key?: string | null;
+  label: string;
+  type: TaskFieldType;
+  required: boolean;
+  options: string[];
+}
+
+export interface TaskScope {
+  all_groups: boolean;
+  department_ids: number[];
+  courses: number[];
+  group_ids: number[];
+  exclude_group_ids: number[];
+}
+
+export interface TaskProgress {
+  total: number;
+  new: number;
+  in_progress: number;
+  submitted: number;
+  returned: number;
+  accepted: number;
+  overdue: number;
+}
+
+export interface TaskListRow {
+  id: number;
+  title: string;
+  collect_mode: string;
+  reviewer_rule: string;
+  due_date: string;
+  is_closed: boolean;
+  author_name: string | null;
+  progress: TaskProgress;
+}
+
+export interface TaskAssignmentSummary {
+  id: number;
+  study_group_id: number;
+  group_code: string;
+  course: number;
+  department_name: string;
+  status: string;
+  is_overdue: boolean;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+}
+
+export interface TaskDetail {
+  id: number;
+  title: string;
+  description: string | null;
+  collect_mode: string;
+  reviewer_rule: string;
+  due_date: string;
+  is_closed: boolean;
+  author_id: number | null;
+  author_name: string | null;
+  fields: TaskField[];
+  scope: TaskScope;
+  can_manage: boolean;
+  progress: TaskProgress;
+  assignments: TaskAssignmentSummary[];
+}
+
+export interface MyAssignmentRow {
+  id: number;
+  task_id: number;
+  title: string;
+  collect_mode: string;
+  group_code: string;
+  due_date: string;
+  status: string;
+  is_overdue: boolean;
+  is_closed: boolean;
+}
+
+export interface TaskRowRead {
+  student_id: number;
+  student_name: string;
+  is_included: boolean;
+  values: Record<string, unknown>;
+}
+
+export interface TaskCommentRead {
+  id: number;
+  student_id: number | null;
+  author_name: string | null;
+  text: string;
+  created_at: string;
+}
+
+export interface AssignmentDetail {
+  id: number;
+  task_id: number;
+  title: string;
+  description: string | null;
+  collect_mode: string;
+  reviewer_rule: string;
+  due_date: string;
+  is_closed: boolean;
+  fields: (TaskField & { key: string })[];
+  study_group_id: number;
+  group_code: string;
+  status: string;
+  is_overdue: boolean;
+  group_values: Record<string, unknown>;
+  rows: TaskRowRead[];
+  comments: TaskCommentRead[];
+  review_comment: string | null;
+  can_edit: boolean;
+  can_submit: boolean;
+  can_review: boolean;
+}
+
+export interface ReviewQueueRow {
+  id: number;
+  task_id: number;
+  title: string;
+  group_code: string;
+  department_name: string;
+  due_date: string;
+  submitted_at: string | null;
+  is_overdue: boolean;
+}

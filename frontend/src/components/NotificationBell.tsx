@@ -60,6 +60,11 @@ export default function NotificationBell() {
   // журнал группы (у управленцев — в админке, у куратора — в его кабинете).
   function openNotification(n: NotificationItem) {
     if (!n.read_at) markRead(n.id);
+    if (n.entity_type === "task_assignment" && n.entity_id) {
+      navigate(`/tasks/assignment/${n.entity_id}`);
+      setOpen(false);
+      return;
+    }
     if (n.entity_type === "study_group_day" && n.entity_id) {
       const [groupId, date] = n.entity_id.split(":");
       if (user && MANAGEMENT_ROLES.includes(user.role)) {

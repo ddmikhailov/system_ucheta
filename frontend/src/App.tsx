@@ -12,6 +12,9 @@ import StudentCardPage from "./pages/StudentCardPage";
 import { DOSSIER_STAFF_ROLES, MANAGEMENT_ROLES } from "./constants/roles";
 import StudentsSearchPage from "./pages/StudentsSearchPage";
 import PassportPage from "./pages/PassportPage";
+import TasksPage from "./pages/TasksPage";
+import MyTasksPage from "./pages/MyTasksPage";
+import TaskAssignmentPage from "./pages/TaskAssignmentPage";
 
 function RequireAuth({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
@@ -101,6 +104,36 @@ export default function App() {
                     <AdminPage />
                   </Layout>
                 </RequireAdminAccess>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/tasks"
+            element={
+              <RequireAuth>
+                <Layout>
+                  <TasksPage />
+                </Layout>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/my-tasks"
+            element={
+              <RequireAuth>
+                <Layout>
+                  <MyTasksPage />
+                </Layout>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/tasks/assignment/:assignmentId"
+            element={
+              <RequireAuth>
+                <Layout>
+                  <TaskAssignmentPage />
+                </Layout>
               </RequireAuth>
             }
           />
