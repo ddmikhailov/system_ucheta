@@ -3,7 +3,7 @@ import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import (
     require_dept_editor,
@@ -84,7 +84,10 @@ def list_groups(
 ):
     today = today_local()
     scope = scope_department_id(user, department_id)
-    q = db.query(StudyGroup)
+    # Назначения и их пользователи — сразу, иначе на каждую группу уходит отдельный запрос.
+    q = db.query(StudyGroup).options(
+        selectinload(StudyGroup.curator_assignments).selectinload(CuratorAssignment.user)
+    )
     if scope is not None:
         q = q.filter(StudyGroup.department_id == scope)
     groups = q.order_by(StudyGroup.course, StudyGroup.code).all()

@@ -1,7 +1,7 @@
 import datetime
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core import policies
 from app.core.time import today_local, utcnow
@@ -153,30 +153,33 @@ def consecutive_unexcused_counts_bulk(
     by_group: dict[int | None, list[Student]] = {}
     for student in students:
         by_group.setdefault(student.study_group_id, []).append(student)
+    if not by_group:
+        return {}
+
+    # Учебные дни всех групп — за два запроса, отметки всех студентов окна — за один
+    # (раньше на каждую группу уходило по три запроса).
+    groups = [group_students[0].study_group for group_students in by_group.values()]
+    study_days_by_group = calendar_service.study_days_by_group(db, window_start, window_end, groups)
+
+    student_ids = [s.id for s in students]
+    marks_by_student: dict[int, dict[datetime.date, str]] = {}
+    if student_ids:
+        for row in db.execute(
+            select(AttendanceMark.student_id, AttendanceMark.date, MarkCode.code)
+            .join(MarkCode, MarkCode.id == AttendanceMark.mark_code_id)
+            .where(
+                AttendanceMark.student_id.in_(student_ids),
+                AttendanceMark.date >= window_start,
+                AttendanceMark.date <= window_end,
+            )
+        ).all():
+            marks_by_student.setdefault(row.student_id, {})[row.date] = row.code
 
     result: dict[int, int] = {}
     for study_group_id, group_students in by_group.items():
-        study_days = calendar_service.study_days_between(
-            db, window_start, window_end, study_group_id=study_group_id
-        )
-        if not study_days:
-            for student in group_students:
-                result[student.id] = 0
-            continue
-        study_days.sort(reverse=True)
-
-        student_ids = [s.id for s in group_students]
-        marks = db.execute(
-            select(AttendanceMark.student_id, AttendanceMark.date, MarkCode.code)
-            .join(MarkCode, MarkCode.id == AttendanceMark.mark_code_id)
-            .where(AttendanceMark.student_id.in_(student_ids), AttendanceMark.date.in_(study_days))
-        ).all()
-        marks_by_student: dict[int, dict[datetime.date, str]] = {}
-        for row in marks:
-            marks_by_student.setdefault(row.student_id, {})[row.date] = row.code
-
+        study_days = sorted(study_days_by_group[study_group_id], reverse=True)
         for student in group_students:
-            result[student.id] = _streak_from_marks(study_days, marks_by_student.get(student.id, {}))
+            result[student.id] = _streak_from_marks(study_days, marks_by_student.get(student.id, {})) if study_days else 0
 
     return result
 
@@ -213,9 +216,9 @@ def get_roster(db: Session, study_group_id: int, date: datetime.date) -> dict:
     existing_marks: dict[int, AttendanceMark] = {}
     if student_ids:
         rows = db.execute(
-            select(AttendanceMark).where(
-                AttendanceMark.student_id.in_(student_ids), AttendanceMark.date == date
-            )
+            select(AttendanceMark)
+            .options(joinedload(AttendanceMark.mark_code))
+            .where(AttendanceMark.student_id.in_(student_ids), AttendanceMark.date == date)
         ).scalars().all()
         existing_marks = {row.student_id: row for row in rows}
 
@@ -225,9 +228,9 @@ def get_roster(db: Session, study_group_id: int, date: datetime.date) -> dict:
         prev_day = calendar_service.previous_study_day(db, date, study_group_id=study_group_id)
         if prev_day is not None:
             rows = db.execute(
-                select(AttendanceMark).where(
-                    AttendanceMark.student_id.in_(student_ids), AttendanceMark.date == prev_day
-                )
+                select(AttendanceMark)
+                .options(joinedload(AttendanceMark.mark_code))
+                .where(AttendanceMark.student_id.in_(student_ids), AttendanceMark.date == prev_day)
             ).scalars().all()
             draft_marks = {row.student_id: row for row in rows}
 
@@ -244,6 +247,9 @@ def get_roster(db: Session, study_group_id: int, date: datetime.date) -> dict:
             for u in db.execute(select(User).where(User.id.in_(actor_ids))).scalars()
         }
 
+    # Серии неуважительных пропусков всех студентов группы — разом, а не по четыре запроса на студента.
+    risk_streaks = consecutive_unexcused_counts_bulk(db, active_students, date)
+
     entries = []
     for student in active_students:
         mark = existing_marks.get(student.id)
@@ -254,7 +260,7 @@ def get_roster(db: Session, study_group_id: int, date: datetime.date) -> dict:
                 mark = draft
                 source_is_draft = True
 
-        risk_streak = consecutive_unexcused_count(db, student.id, date, study_group_id=student.study_group_id)
+        risk_streak = risk_streaks.get(student.id, 0)
 
         last_edited_by = None
         last_edited_at = None

@@ -155,12 +155,11 @@ def collect_group_day_rows(
         ).scalars().all()
     }
 
+    study_days_by_group = calendar_service.study_days_by_group(db, date_from, date_to, [g for g, _ in group_rows])
+
     result: list[GroupDayRow] = []
     for group, department_name in group_rows:
-        study_days = calendar_service.study_days_between(
-            db, date_from, date_to, study_group_id=group.id, course=group.course
-        )
-        for day in study_days:
+        for day in study_days_by_group[group.id]:
             roster = [
                 students[m.student_id]
                 for m in memberships_by_group.get(group.id, [])

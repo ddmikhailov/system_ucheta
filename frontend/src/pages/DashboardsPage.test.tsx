@@ -330,6 +330,37 @@ describe("DashboardsPage — экспорт и отделение", () => {
     await waitFor(() => expect(apiCalls("/dashboards/day").length).toBe(before + 1));
   });
 
+  it("быстрая смена отделения: поздний ответ на старый запрос не затирает свежий", async () => {
+    const user = userEvent.setup();
+    const resolvers: Record<string, (rows: unknown) => void> = {};
+    const row = (code: string) => ({
+      study_group_id: 1, code, course: 1, responsible_name: "Иванова А.", in_list: 10, present: 10, late: 0,
+      absent_excused: 0, absent_unexcused: 0, percent: 100, is_submitted: true, is_on_time: true,
+    });
+    const base = get.getMockImplementation()!;
+    get.mockImplementation((path: string) =>
+      path.startsWith("/dashboards/day")
+        ? new Promise((resolve) => {
+            resolvers[path] = resolve;
+          })
+        : base(path),
+    );
+    open("admin");
+    const first = `/dashboards/day?date=${todayIso()}`;
+    await waitFor(() => expect(resolvers[first]).toBeDefined());
+    await user.selectOptions(await screen.findByTitle("Отделение: данные на вкладках и экспорт"), "2");
+    const second = `${first}&department_id=2`;
+    await waitFor(() => expect(resolvers[second]).toBeDefined());
+
+    resolvers[second]([row("НОВАЯ-ГРУППА")]); // свежий ответ приходит первым
+    expect(await screen.findByText("НОВАЯ-ГРУППА")).toBeInTheDocument();
+    resolvers[first]([row("СТАРАЯ-ГРУППА")]); // запоздавший ответ на прежний запрос
+
+    await waitFor(() => expect(screen.queryByText("Загрузка…")).not.toBeInTheDocument());
+    expect(screen.queryByText("СТАРАЯ-ГРУППА")).not.toBeInTheDocument();
+    expect(screen.getByText("НОВАЯ-ГРУППА")).toBeInTheDocument();
+  });
+
   it("отделение передаётся и на других вкладках: группа риска, динамика, дисциплина", async () => {
     const user = userEvent.setup();
     open("admin");

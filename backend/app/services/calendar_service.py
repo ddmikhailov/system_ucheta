@@ -105,3 +105,49 @@ def previous_study_day(
             return current
         current -= datetime.timedelta(days=1)
     return None
+
+
+def study_days_by_group(
+    db: Session,
+    date_from: datetime.date,
+    date_to: datetime.date,
+    groups: list[StudyGroup],
+) -> dict[int, list[datetime.date]]:
+    """То же, что `study_days_between` для каждой группы из списка, но за два запроса
+    вместо двух на группу: общий календарь за период и исключения всех этих групп."""
+    if date_from > date_to or not groups:
+        return {g.id: [] for g in groups}
+
+    known = {
+        row.date: row.day_type
+        for row in db.execute(
+            select(AcademicCalendarDay).where(
+                AcademicCalendarDay.date >= date_from, AcademicCalendarDay.date <= date_to
+            )
+        ).scalars().all()
+    }
+    overrides: dict[int, dict[datetime.date, DayType]] = {}
+    for row in db.execute(
+        select(GroupCalendarOverride).where(
+            GroupCalendarOverride.study_group_id.in_([g.id for g in groups]),
+            GroupCalendarOverride.date >= date_from,
+            GroupCalendarOverride.date <= date_to,
+        )
+    ).scalars().all():
+        overrides.setdefault(row.study_group_id, {})[row.date] = row.day_type
+
+    all_days = []
+    current = date_from
+    one_day = datetime.timedelta(days=1)
+    while current <= date_to:
+        all_days.append(current)
+        current += one_day
+
+    result: dict[int, list[datetime.date]] = {}
+    for group in groups:
+        own = overrides.get(group.id, {})
+        result[group.id] = [
+            day for day in all_days
+            if (own.get(day) or known.get(day) or _default_day_type(day, group.course)) in _ATTENDABLE_TYPES
+        ]
+    return result

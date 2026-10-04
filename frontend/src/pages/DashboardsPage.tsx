@@ -119,54 +119,94 @@ export default function DashboardsPage() {
 
   useEffect(() => {
     if (tab !== "day") return;
+    let cancelled = false;
     setLoading(true);
     api
       .get<DayOverviewRow[]>(`/dashboards/day?date=${date}${deptQuery}`)
       .then((rows) => {
+        if (cancelled) return;
         setDayRows(rows);
         setError(null);
       })
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка загрузки"))
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof ApiError ? err.message : "Ошибка загрузки");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+      setLoading(false);
+    };
   }, [tab, date, deptQuery, reloadKey]);
 
   useEffect(() => {
     if (tab !== "dynamics") return;
+    let cancelled = false;
     setLoading(true);
     api
       .get<DynamicsPoint[]>(`/dashboards/dynamics?date_from=${dateFrom}&date_to=${dateTo}${deptQuery}`)
       .then((points) => {
+        if (cancelled) return;
         setDynamicsPoints(points);
         setError(null);
       })
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка загрузки"))
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof ApiError ? err.message : "Ошибка загрузки");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+      setLoading(false);
+    };
   }, [tab, dateFrom, dateTo, deptQuery, reloadKey]);
 
   useEffect(() => {
     if (tab !== "risk") return;
+    let cancelled = false;
     setLoading(true);
     api
       .get<RiskStudentRow[]>(`/dashboards/risk-students?as_of_date=${date}${deptQuery}`)
       .then((rows) => {
+        if (cancelled) return;
         setRiskRows(rows);
         setError(null);
       })
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка загрузки"))
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof ApiError ? err.message : "Ошибка загрузки");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+      setLoading(false);
+    };
   }, [tab, date, deptQuery, reloadKey]);
 
   useEffect(() => {
     if (tab !== "discipline") return;
+    let cancelled = false;
     setLoading(true);
     api
       .get<CuratorDisciplineRow[]>(`/dashboards/curator-discipline?date_from=${dateFrom}&date_to=${dateTo}${deptQuery}`)
       .then((rows) => {
+        if (cancelled) return;
         setDisciplineRows(rows);
         setError(null);
       })
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка загрузки"))
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof ApiError ? err.message : "Ошибка загрузки");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+      setLoading(false);
+    };
   }, [tab, dateFrom, dateTo, deptQuery, reloadKey]);
 
   function loadVacantGroups() {

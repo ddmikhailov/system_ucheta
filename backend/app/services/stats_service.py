@@ -1,14 +1,17 @@
 import datetime
+from collections import defaultdict
 from dataclasses import dataclass, field
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.models import (
     AttendanceMark,
+    CuratorAssignment,
     DaySubmission,
     MarkCode,
     Student,
+    StudentGroupMembership,
     StudyGroup,
 )
 from app.core.time import utc_to_local
@@ -61,7 +64,13 @@ def _students_in_scope(
             stmt = stmt.where(Student.id == student_id)
         return list(db.execute(stmt).scalars().all())
 
-    stmt = select(Student).join(StudyGroup, StudyGroup.id == Student.study_group_id)
+    # study_group подгружаем сразу: потребители (группа риска и др.) читают код группы
+    # у каждого студента — иначе на каждого свой запрос.
+    stmt = (
+        select(Student)
+        .join(StudyGroup, StudyGroup.id == Student.study_group_id)
+        .options(joinedload(Student.study_group))
+    )
     if student_id is not None:
         stmt = stmt.where(Student.id == student_id)
     if study_group_id is not None:
@@ -194,11 +203,71 @@ def _current_responsible_name(group: StudyGroup, as_of: datetime.date) -> str | 
     )
 
 
-def day_overview(db: Session, date: datetime.date, department_id: int | None = None) -> list[dict]:
-    stmt = select(StudyGroup).where(StudyGroup.is_active.is_(True))
+def _active_groups(db: Session, department_id: int | None = None) -> list[StudyGroup]:
+    """Активные группы с куратором и замещающим — назначения и их пользователи
+    подгружаются сразу (иначе на каждую группу уходит запрос на назначения и ещё
+    по запросу на каждого пользователя)."""
+    stmt = (
+        select(StudyGroup)
+        .where(StudyGroup.is_active.is_(True))
+        .options(selectinload(StudyGroup.curator_assignments).selectinload(CuratorAssignment.user))
+    )
     if department_id is not None:
         stmt = stmt.where(StudyGroup.department_id == department_id)
-    groups = list(db.execute(stmt.order_by(StudyGroup.course, StudyGroup.code)).scalars().all())
+    return list(db.execute(stmt.order_by(StudyGroup.course, StudyGroup.code)).scalars().all())
+
+
+def compute_day_stats_bulk(db: Session, day: datetime.date, group_ids: list[int]) -> dict[int, PeriodStats]:
+    """Те же числа, что `compute_period_stats(day, day, study_group_id=...)` для каждой
+    группы, но тремя запросами на все группы сразу, а не пятью на каждую.
+
+    Группа студента на день — по членству (`student_group_memberships`), в списке
+    считаются зачисленные и ещё не выбывшие, отметки — всех студентов группы на этот день."""
+    stats = {gid: PeriodStats() for gid in group_ids}
+    if not group_ids:
+        return stats
+
+    members = db.execute(
+        select(StudentGroupMembership.study_group_id, Student.id, Student.enrolled_at, Student.left_at)
+        .join(Student, Student.id == StudentGroupMembership.student_id)
+        .where(
+            StudentGroupMembership.study_group_id.in_(group_ids),
+            StudentGroupMembership.start_date <= day,
+            (StudentGroupMembership.end_date.is_(None)) | (StudentGroupMembership.end_date >= day),
+        )
+    ).all()
+    group_of_student: dict[int, int] = {}
+    for group_id, student_id, enrolled_at, left_at in members:
+        # Если у студента вдруг два действующих членства — берём первое, как `resolve_group_id`.
+        if student_id in group_of_student:
+            continue
+        group_of_student[student_id] = group_id
+        if enrolled_at <= day and (left_at is None or left_at >= day):
+            stats[group_id].in_list += 1
+
+    if not group_of_student:
+        return stats
+    marks = db.execute(
+        select(AttendanceMark.student_id, MarkCode.code, MarkCode.counts_as_present, MarkCode.is_excused)
+        .join(MarkCode, MarkCode.id == AttendanceMark.mark_code_id)
+        .where(AttendanceMark.student_id.in_(list(group_of_student)), AttendanceMark.date == day)
+    ).all()
+    for student_id, code, counts_as_present, is_excused in marks:
+        group_stats = stats[group_of_student[student_id]]
+        group_stats.by_code[code] = group_stats.by_code.get(code, 0) + 1
+        if code == "о":
+            group_stats.late += 1
+        if not counts_as_present:
+            group_stats.absent_total += 1
+            if is_excused:
+                group_stats.absent_excused += 1
+            else:
+                group_stats.absent_unexcused += 1
+    return stats
+
+
+def day_overview(db: Session, date: datetime.date, department_id: int | None = None) -> list[dict]:
+    groups = _active_groups(db, department_id)
 
     submissions = {
         row.study_group_id: row
@@ -209,13 +278,15 @@ def day_overview(db: Session, date: datetime.date, department_id: int | None = N
             )
         ).scalars().all()
     }
+    # Не учебный день у этой конкретной группы (например, суббота у курса не 1, или у
+    # группы отдельное исключение календаря) — не показываем как «не сдано», сдавать
+    # нечего (см. TODO.md 3). Календарь всех групп — за два запроса.
+    study_days = calendar_service.study_days_by_group(db, date, date, groups)
+    stats_by_group = compute_day_stats_bulk(db, date, [g.id for g in groups if g.id in submissions])
 
     rows = []
     for group in groups:
-        if not calendar_service.is_study_day(db, date, study_group_id=group.id, course=group.course):
-            # Не учебный день у этой конкретной группы (например, суббота у
-            # курса не 1, или у группы отдельное исключение календаря) — не
-            # показываем как "не сдано", сдавать нечего (см. TODO.md 3).
+        if not study_days[group.id]:
             continue
         responsible_name = _current_responsible_name(group, date)
         submission = submissions.get(group.id)
@@ -232,7 +303,7 @@ def day_overview(db: Session, date: datetime.date, department_id: int | None = N
                 }
             )
             continue
-        stats = compute_period_stats(db, date, date, study_group_id=group.id)
+        stats = stats_by_group[group.id]
         rows.append(
             {
                 "study_group_id": group.id,
@@ -252,15 +323,16 @@ def day_overview(db: Session, date: datetime.date, department_id: int | None = N
     return rows
 
 
-def dynamics(
+def _dynamics_per_day(
     db: Session,
     date_from: datetime.date,
     date_to: datetime.date,
-    department_id: int | None = None,
-    course: int | None = None,
-    study_group_id: int | None = None,
-    student_id: int | None = None,
+    department_id: int | None,
+    course: int | None,
+    study_group_id: int | None,
+    student_id: int | None,
 ) -> list[dict]:
+    """Общий случай: на каждый день — своя выборка (`compute_period_stats`)."""
     study_days = calendar_service.study_days_between(
         db, date_from, date_to, study_group_id=study_group_id, course=course
     )
@@ -277,29 +349,127 @@ def dynamics(
     return result
 
 
+def _dynamics_whole_scope(
+    db: Session,
+    date_from: datetime.date,
+    date_to: datetime.date,
+    department_id: int | None,
+    course: int | None,
+) -> list[dict]:
+    """Динамика по колледжу/отделению/курсу (без конкретной группы и студента) — те же
+    числа, что даёт `_dynamics_per_day`, но студенты, членство, сдачи и отметки грузятся
+    один раз на весь период, а не заново на каждый день (при 4000+ студентов это было
+    самым медленным экраном)."""
+    study_days = calendar_service.study_days_between(db, date_from, date_to, study_group_id=None, course=course)
+    if not study_days:
+        return []
+
+    def scoped(stmt):
+        stmt = stmt.join(StudyGroup, StudyGroup.id == Student.study_group_id)
+        if course is not None:
+            stmt = stmt.where(StudyGroup.course == course)
+        if department_id is not None:
+            stmt = stmt.where(StudyGroup.department_id == department_id)
+        return stmt
+
+    students = db.execute(
+        scoped(select(Student.id, Student.enrolled_at, Student.left_at, Student.study_group_id))
+    ).all()
+    if not students:
+        return [{"date": d, "percent": None, "in_list": None, "present": None} for d in study_days]
+
+    memberships: dict[int, list[tuple[datetime.date, datetime.date | None, int]]] = defaultdict(list)
+    for row in db.execute(
+        scoped(
+            select(
+                StudentGroupMembership.student_id, StudentGroupMembership.start_date,
+                StudentGroupMembership.end_date, StudentGroupMembership.study_group_id,
+            ).join(Student, Student.id == StudentGroupMembership.student_id)
+        )
+    ).all():
+        memberships[row.student_id].append((row.start_date, row.end_date, row.study_group_id))
+
+    submitted = {
+        (r.study_group_id, r.date)
+        for r in db.execute(
+            select(DaySubmission.study_group_id, DaySubmission.date).where(DaySubmission.date.in_(study_days))
+        ).all()
+    }
+
+    marks_by_day: dict[datetime.date, list[tuple[int, bool]]] = defaultdict(list)  # (student_id, считается ли присутствием)
+    for row in db.execute(
+        scoped(
+            select(AttendanceMark.student_id, AttendanceMark.date, MarkCode.counts_as_present)
+            .join(Student, Student.id == AttendanceMark.student_id)
+            .join(MarkCode, MarkCode.id == AttendanceMark.mark_code_id)
+        ).where(AttendanceMark.date.in_(study_days))
+    ).all():
+        marks_by_day[row.date].append((row.student_id, row.counts_as_present))
+
+    fk_group = {s.id: s.study_group_id for s in students}
+
+    def group_on(student_id: int, day: datetime.date) -> int:
+        for start, end, group_id in memberships.get(student_id, ()):
+            if start <= day and (end is None or end >= day):
+                return group_id
+        return fk_group[student_id]
+
+    result = []
+    for day in study_days:
+        in_list = 0
+        for student_id, enrolled_at, left_at, _ in students:
+            if enrolled_at <= day and (left_at is None or left_at >= day) and (group_on(student_id, day), day) in submitted:
+                in_list += 1
+        if in_list == 0:
+            result.append({"date": day, "percent": None, "in_list": None, "present": None})
+            continue
+        absent = sum(
+            1 for student_id, counts_as_present in marks_by_day.get(day, ())
+            if not counts_as_present and (group_on(student_id, day), day) in submitted
+        )
+        present = in_list - absent
+        result.append({"date": day, "percent": round(present / in_list * 100, 2), "in_list": in_list, "present": present})
+    return result
+
+
+def dynamics(
+    db: Session,
+    date_from: datetime.date,
+    date_to: datetime.date,
+    department_id: int | None = None,
+    course: int | None = None,
+    study_group_id: int | None = None,
+    student_id: int | None = None,
+) -> list[dict]:
+    if study_group_id is None and student_id is None:
+        return _dynamics_whole_scope(db, date_from, date_to, department_id, course)
+    return _dynamics_per_day(db, date_from, date_to, department_id, course, study_group_id, student_id)
+
+
 def curator_discipline(
     db: Session,
     date_from: datetime.date,
     date_to: datetime.date,
     department_id: int | None = None,
 ) -> list[dict]:
-    stmt = select(StudyGroup).where(StudyGroup.is_active.is_(True))
-    if department_id is not None:
-        stmt = stmt.where(StudyGroup.department_id == department_id)
-    groups = list(db.execute(stmt.order_by(StudyGroup.course, StudyGroup.code)).scalars().all())
+    groups = _active_groups(db, department_id)
+    study_days_by_group = calendar_service.study_days_by_group(db, date_from, date_to, groups)
+
+    by_group_date: dict[int, dict[datetime.date, DaySubmission]] = defaultdict(dict)
+    if groups:
+        for submission in db.execute(
+            select(DaySubmission).where(
+                DaySubmission.study_group_id.in_([g.id for g in groups]),
+                DaySubmission.date >= date_from,
+                DaySubmission.date <= date_to,
+            )
+        ).scalars().all():
+            by_group_date[submission.study_group_id][submission.date] = submission
 
     rows = []
     for group in groups:
-        study_days = calendar_service.study_days_between(
-            db, date_from, date_to, study_group_id=group.id, course=group.course
-        )
-        submissions = db.execute(
-            select(DaySubmission).where(
-                DaySubmission.study_group_id == group.id,
-                DaySubmission.date.in_(study_days),
-            )
-        ).scalars().all()
-        by_date = {s.date: s for s in submissions}
+        study_days = study_days_by_group[group.id]
+        by_date = by_group_date.get(group.id, {})
         on_time = sum(1 for d in study_days if by_date.get(d) and by_date[d].is_on_time)
         late = sum(1 for d in study_days if by_date.get(d) and not by_date[d].is_on_time)
         missed = len(study_days) - on_time - late
