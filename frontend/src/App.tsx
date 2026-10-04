@@ -14,6 +14,7 @@ import StudentsSearchPage from "./pages/StudentsSearchPage";
 import IndividualWorkPage from "./pages/IndividualWorkPage";
 import PassportPage from "./pages/PassportPage";
 import TasksPage from "./pages/TasksPage";
+import MyDayPage from "./pages/MyDayPage";
 import MyTasksPage from "./pages/MyTasksPage";
 import TaskAssignmentPage from "./pages/TaskAssignmentPage";
 
@@ -52,7 +53,7 @@ function HomeRedirect() {
   if (!user) return <Navigate to="/login" replace />;
   if (inRoles(user.role, DOSSIER_STAFF_ROLES)) return <Navigate to="/students" replace />;
   if (inRoles(user.role, MANAGEMENT_ROLES)) return <Navigate to="/dashboards" replace />;
-  return <Navigate to="/cabinet" replace />;
+  return <Navigate to="/my-day" replace />;
 }
 
 function NotFoundPage() {
@@ -77,6 +78,16 @@ export default function App() {
               <RequireAuthOnly>
                 <ChangePasswordPage />
               </RequireAuthOnly>
+            }
+          />
+          <Route
+            path="/my-day"
+            element={
+              <RequireAuth>
+                <Layout>
+                  <MyDayPage />
+                </Layout>
+              </RequireAuth>
             }
           />
           <Route

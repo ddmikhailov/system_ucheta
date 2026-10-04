@@ -1,19 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { api, ApiError } from "../api/client";
+import { NOTE_KINDS } from "../constants/noteKinds";
 import { formatDateRu, formatServerDateTimeFull, todayIso } from "../utils/date";
+import { telHref } from "../utils/phone";
 import type { Dossier, DossierAccessEntry, DossierProfile, DossierSpecial } from "../api/types";
-
-const NOTE_KINDS: Record<string, string> = {
-  conversation: "Беседа",
-  call: "Звонок",
-  parent_invited: "Вызов родителей",
-  prevention_council: "Совет профилактики",
-  home_visit: "Визит домой",
-  incident: "Инцидент",
-  agreement: "Договорённость",
-  other: "Другое",
-};
 
 const EMPTY_SPECIAL: DossierSpecial = {
   is_orphan: false,
@@ -137,6 +128,13 @@ function ProfileForm({
       <div className="inline-form form-fields">
         <Field label="Дата рождения">
           <input type="date" value={profile.birth_date ?? ""} onChange={(e) => set("birth_date", e.target.value)} />
+        </Field>
+        <Field label="Пол">
+          <select value={profile.gender ?? ""} onChange={(e) => set("gender", e.target.value)}>
+            <option value="">не указан</option>
+            <option value="male">Мужской</option>
+            <option value="female">Женский</option>
+          </select>
         </Field>
         <Field label="Финансирование">
           <select value={profile.funding ?? ""} onChange={(e) => set("funding", e.target.value)}>
@@ -290,7 +288,15 @@ function Guardians({
                   {g.full_name} {g.is_primary && <span className="locked-badge">основной</span>}
                 </td>
                 <td data-label="Кем приходится">{g.relation}</td>
-                <td data-label="Телефон">{g.phone ?? "—"}</td>
+                <td data-label="Телефон">
+                  {telHref(g.phone) ? (
+                    <a className="link-btn" href={telHref(g.phone)!} aria-label={`Позвонить: ${g.full_name}`}>
+                      {g.phone}
+                    </a>
+                  ) : (
+                    (g.phone ?? "—")
+                  )}
+                </td>
                 <td>
                   <button
                     className="link-btn"

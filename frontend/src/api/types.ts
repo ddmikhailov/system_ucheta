@@ -6,6 +6,7 @@ export interface MeGroupInfo {
 
 export interface DossierProfile {
   birth_date: string | null;
+  gender: "male" | "female" | null;
   funding: "budget" | "contract" | null;
   phone: string | null;
   email: string | null;
@@ -66,6 +67,65 @@ export interface IndividualWorkGroup {
   group_code: string;
   no_work_days: number;
   rows: IndividualWorkRow[];
+}
+
+export interface MyDayGroup {
+  id: number;
+  code: string;
+  course: number;
+  today_status: "submitted" | "pending" | "no_study_day";
+  is_on_time: boolean | null;
+  missed_dates: string[];
+  missed_total: number;
+}
+
+export interface MyDayTask {
+  assignment_id: number;
+  title: string;
+  group_code: string;
+  due_date: string;
+  kind: "overdue" | "returned" | "due_soon";
+  status: string;
+  days_left: number;
+}
+
+export interface MyDayAttention {
+  student_id: number;
+  full_name: string;
+  group_code: string;
+  risk_streak: number;
+  needs_work: boolean;
+  last_work_on: string | null;
+  follow_up_on: string | null;
+  follow_up_overdue: boolean;
+  follow_up_today: boolean;
+}
+
+export interface MyDayBirthday {
+  student_id: number;
+  full_name: string;
+  group_code: string;
+  date: string;
+  days_until: number;
+  turns: number;
+}
+
+export interface MyDay {
+  today: string;
+  leads_groups: boolean;
+  groups: MyDayGroup[];
+  tasks: MyDayTask[];
+  attention: MyDayAttention[];
+  attention_total: number;
+  no_work_days: number;
+  birthdays: MyDayBirthday[];
+  review_waiting: { count: number; oldest_submitted_at: string | null } | null;
+}
+
+export interface AbsenceMessage {
+  days: number;
+  absences: { date: string; code: string; name: string }[];
+  text: string;
 }
 
 export interface Dossier {

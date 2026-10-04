@@ -1,11 +1,13 @@
 import calendar
 import datetime
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import assert_can_access_group, get_current_user, scope_department_id
+from app.api.deps import assert_can_access_group, get_current_user, scope_department_id, validate_date_range
 from app.core.roles import DOSSIER_STAFF_ROLES, is_department_scoped
 from app.core.time import today_local
 from app.db.session import get_db
@@ -16,9 +18,11 @@ from app.models import (
     RoleCode,
     Student,
     StudentGroupMembership,
+    StudentProfile,
     StudyGroup,
     User,
 )
+from app.schemas.my_day import AbsenceMessage
 from app.schemas.students import (
     StudentCard,
     StudentCardGroup,
@@ -29,7 +33,8 @@ from app.schemas.students import (
     StudentMonthAttendance,
     StudentMonthSummary,
 )
-from app.services import calendar_service, group_membership_service, stats_service
+from app.services import absence_sheet_service, calendar_service, group_membership_service, my_day_service, stats_service
+from app.services.audit_service import log_action
 
 router = APIRouter(prefix="/students", tags=["students"])
 
@@ -154,6 +159,55 @@ def get_student_card(
             )
             for m in marks
         ],
+    )
+
+
+@router.get("/{student_id}/absence-message", response_model=AbsenceMessage)
+def get_absence_message(
+    student_id: int, days: int = 14,
+    user: User = Depends(get_current_user), db: Session = Depends(get_db),
+):
+    """Готовый текст родителям о пропусках за последние дни — куратор копирует его в мессенджер."""
+    student = _get_accessible_student(db, user, student_id)
+    return my_day_service.absence_message(db, student, user, days)
+
+
+DOCX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+@router.get("/{student_id}/absence-sheet")
+def get_absence_sheet(
+    student_id: int, date_from: datetime.date, date_to: datetime.date, include_excused: bool = False,
+    user: User = Depends(get_current_user), db: Session = Depends(get_db),
+):
+    """«Лист ознакомления и письменного объяснения по пропускам и опозданиям» (.docx) по образцу колледжа:
+    дни с пропусками без уважительной причины и опоздания за период (по желанию — и пропуски по уважительной)."""
+    student = _get_accessible_student(db, user, student_id)
+    validate_date_range(date_from, date_to, max_days=absence_sheet_service.MAX_RANGE_DAYS)
+    today = today_local()
+    if date_to > today:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Период не может уходить в будущее")
+    rows = absence_sheet_service.collect_rows(db, student, date_from, date_to, include_excused)
+    if not rows:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "За выбранный период у студента нет пропусков и опозданий")
+    group = student.study_group
+    curator = next(
+        (a.user.full_name for a in group.curator_assignments
+         if a.role_type.value == "curator" and a.is_active_on(today) and a.user.is_active),
+        None,
+    )
+    profile = db.get(StudentProfile, student.id)
+    content = absence_sheet_service.build_docx(
+        student_name=student.full_name, group_code=group.code, department_name=group.department.name,
+        curator_name=curator, date_from=date_from, date_to=date_to, rows=rows,
+        gender=profile.gender if profile else None,
+    )
+    log_action(db, user, "student.absence_sheet", "student", str(student.id), new_value=f"{date_from}..{date_to}")
+    db.commit()
+    filename = f"Лист_ознакомления_{student.last_name}_{group.code}_{date_from:%d.%m.%Y}-{date_to:%d.%m.%Y}.docx"
+    return Response(
+        content=content, media_type=DOCX_MEDIA_TYPE,
+        headers={"Content-Disposition": f"attachment; filename=\"absence_sheet.docx\"; filename*=UTF-8''{quote(filename)}"},
     )
 
 

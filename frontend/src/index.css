@@ -1473,3 +1473,85 @@ th.sortable-th:hover {
 .form-fields {
   align-items: flex-end;
 }
+
+/* --- «Мой день» и быстрые действия (plan-v2.md, этап 6) --- */
+
+.my-day {
+  max-width: 760px;
+}
+
+.my-day__section {
+  margin-top: 20px;
+}
+
+.my-day__section h3 {
+  margin-bottom: 8px;
+}
+
+.my-day__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.my-day__item {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.my-day__missed {
+  color: var(--warn-ink);
+  font-size: 13px;
+}
+
+.my-day__dates {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.modal textarea,
+.absence-message__text {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  width: 100%;
+  resize: vertical;
+}
+
+.absence-message {
+  margin: 12px 0;
+}
+
+.absence-message__text {
+  margin-top: 8px;
+  max-width: 640px;
+}
+
+@media (min-width: 641px) {
+  .my-day__item {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+  }
+
+  .my-day__item > :first-child {
+    flex: 1 1 220px;
+  }
+}

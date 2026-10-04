@@ -16,6 +16,7 @@ class StudentProfile(Base):
 
     student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), primary_key=True)
     birth_date: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
+    gender: Mapped[str | None] = mapped_column(String(8), nullable=True)  # male / female; по нему склоняются документы
     funding: Mapped[str | None] = mapped_column(String(16), nullable=True)  # budget / contract
     phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)

@@ -80,7 +80,16 @@ export async function downloadFile(path: string, filename: string) {
   const headers: Record<string, string> = {};
   if (token) headers["Authorization"] = `Bearer ${token}`;
   const res = await fetch(`${API_BASE}${path}`, { headers });
-  if (!res.ok) throw new ApiError(res.status, res.statusText);
+  if (!res.ok) {
+    // Сервер объясняет отказ в теле ({"detail": "..."}), например «за период нет пропусков».
+    let message = res.statusText;
+    try {
+      message = (await res.json()).detail ?? message;
+    } catch {
+      // тело не JSON — оставляем statusText
+    }
+    throw new ApiError(res.status, message);
+  }
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");

@@ -8,6 +8,7 @@ NoteKind = Literal["conversation", "call", "parent_invited", "prevention_council
 
 class ProfileFields(BaseModel):
     birth_date: datetime.date | None = None
+    gender: Literal["male", "female"] | None = None
     funding: Literal["budget", "contract"] | None = None
     phone: str | None = Field(default=None, max_length=32)
     email: str | None = Field(default=None, max_length=255)

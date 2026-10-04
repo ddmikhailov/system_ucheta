@@ -25,7 +25,7 @@ function dossier(over: Partial<Dossier> = {}): Dossier {
   return {
     student_id: 10,
     profile: {
-      birth_date: null, funding: null, phone: null, email: null, messenger: null,
+      birth_date: null, gender: null, funding: null, phone: null, email: null, messenger: null,
       registration_address: null, residence_address: null, additional_education: null,
     },
     special: { ...SPECIAL },
@@ -81,6 +81,23 @@ describe("StudentDossier — профиль", () => {
     expect(await screen.findByText("Досье сохранено")).toBeInTheDocument();
   });
 
+  it("пол: показывается сохранённый, выбирается из двух значений и уходит на сервер; «не указан» — null", async () => {
+    const user = userEvent.setup();
+    open(dossier({ profile: { ...dossier().profile, gender: "female" } }));
+    const select = await screen.findByLabelText("Пол");
+    expect(select).toHaveValue("female");
+    expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["не указан", "Мужской", "Женский"]);
+
+    put.mockResolvedValue(dossier());
+    await user.selectOptions(select, "male");
+    await user.click(screen.getByRole("button", { name: "Сохранить досье" }));
+    expect(put.mock.calls[0][1]).toMatchObject({ gender: "male" });
+
+    await user.selectOptions(select, "");
+    await user.click(screen.getByRole("button", { name: "Сохранить досье" }));
+    expect(put.mock.calls[1][1]).toMatchObject({ gender: null });
+  });
+
   it("очищенное поле уходит как null, а не пустая строка", async () => {
     const user = userEvent.setup();
     open(dossier({ profile: { ...dossier().profile, phone: "123" } }));
@@ -134,6 +151,22 @@ describe("StudentDossier — представители", () => {
       full_name: "Иванова А.", relation: "мать", phone: "+7 900 111", is_primary: true,
     });
     await waitFor(() => expect(screen.getByPlaceholderText("ФИО")).toHaveValue(""));
+  });
+
+  it("телефон представителя — ссылка «позвонить»; без номера или с мусором вместо номера ссылки нет", async () => {
+    open(dossier({
+      guardians: [
+        { id: 1, full_name: "Иванова А.", relation: "мать", phone: "+7 (900) 111-22-33", is_primary: true },
+        { id: 2, full_name: "Иванов Б.", relation: "отец", phone: "не знаю", is_primary: false },
+        { id: 3, full_name: "Петрова В.", relation: "бабушка", phone: null, is_primary: false },
+      ],
+    }));
+    const call = await screen.findByRole("link", { name: "Позвонить: Иванова А." });
+    expect(call).toHaveAttribute("href", "tel:+79001112233");
+    expect(call).toHaveTextContent("+7 (900) 111-22-33");
+    expect(screen.getAllByRole("link", { name: /Позвонить/ })).toHaveLength(1);
+    expect(screen.getByText("не знаю")).toBeInTheDocument();
+    expect((screen.getByText("Петрова В.").closest("tr") as HTMLElement)).toHaveTextContent("—");
   });
 
   it("при ошибке сервера введённое не теряется", async () => {

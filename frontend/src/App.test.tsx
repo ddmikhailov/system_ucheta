@@ -13,6 +13,7 @@ vi.mock("./api/client", async (importOriginal) => {
 vi.mock("./pages/LoginPage", async () => (await import("./test/stub")).stubPage("вход"));
 vi.mock("./pages/ChangePasswordPage", async () => (await import("./test/stub")).stubPage("смена пароля"));
 vi.mock("./pages/CuratorCabinetPage", async () => (await import("./test/stub")).stubPage("кабинет куратора"));
+vi.mock("./pages/MyDayPage", async () => (await import("./test/stub")).stubPage("мой день"));
 vi.mock("./pages/DashboardsPage", async () => (await import("./test/stub")).stubPage("витрины"));
 vi.mock("./pages/AdminPage", async () => (await import("./test/stub")).stubPage("админка"));
 vi.mock("./pages/StudentCardPage", async () => (await import("./test/stub")).stubPage("карточка студента"));
@@ -42,8 +43,8 @@ beforeEach(() => {
 
 describe("App — стартовая страница по роли", () => {
   it.each([
-    ["curator", "кабинет куратора"],
-    ["deputy_curator", "кабинет куратора"],
+    ["curator", "мой день"],
+    ["deputy_curator", "мой день"],
     ["admin", "витрины"],
     ["dept_head", "витрины"],
     ["tutor", "витрины"],
@@ -58,7 +59,7 @@ describe("App — стартовая страница по роли", () => {
 
 describe("App — защита маршрутов", () => {
   it("без входа любая страница ведёт на вход", async () => {
-    for (const path of ["/cabinet", "/admin", "/tasks", "/passport", "/students/5"]) {
+    for (const path of ["/my-day", "/cabinet", "/admin", "/tasks", "/passport", "/students/5"]) {
       window.history.pushState({}, "", path);
       const { unmount } = render(<App />);
       expect(await screen.findByText("страница: вход")).toBeInTheDocument();
@@ -69,7 +70,7 @@ describe("App — защита маршрутов", () => {
   it.each(["curator", "deputy_curator", "social_pedagogue", "psychologist"])("%s не попадает в админку", async (role) => {
     visit("/admin", role);
     await waitFor(() => expect(screen.queryByText("страница: админка")).not.toBeInTheDocument());
-    expect(await screen.findByText(/страница: (кабинет куратора|поиск студентов)/)).toBeInTheDocument();
+    expect(await screen.findByText(/страница: (мой день|поиск студентов)/)).toBeInTheDocument();
   });
 
   it.each(["admin", "tutor", "dept_head", "edu_department"])("%s открывает админку", async (role) => {

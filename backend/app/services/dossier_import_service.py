@@ -38,6 +38,7 @@ GUARDIAN_SLOTS = 2
 ID_COLUMNS = [("group", "Группа"), ("last_name", "Фамилия"), ("first_name", "Имя"), ("middle_name", "Отчество")]
 PROFILE_COLUMNS = [
     ("birth_date", "Дата рождения"),
+    ("gender", "Пол (м/ж)"),
     ("funding", "Финансирование (бюджет/договор)"),
     ("phone", "Телефон"),
     ("email", "E-mail"),
@@ -63,13 +64,22 @@ BOOL_SPECIAL = {"is_orphan", "under_guardianship", "has_ovz", "large_family", "l
 _TRUE = {"да", "д", "yes", "y", "true", "1", "+"}
 _FALSE = {"нет", "н", "no", "n", "false", "0", "-"}
 _FUNDING = {"бюджет": "budget", "budget": "budget", "договор": "contract", "контракт": "contract", "contract": "contract"}
+_GENDER = {
+    "м": "male", "муж": "male", "мужской": "male", "male": "male", "m": "male",
+    "ж": "female", "жен": "female", "женский": "female", "female": "female", "f": "female",
+}
+# Колонки, появившиеся после выдачи первых шаблонов: файл со старым набором заголовков принимается
+# (новых колонок в нём нет — они просто не загружаются), чтобы не ломать уже раздатые кураторам шаблоны.
+_ADDED_COLUMNS = {"Пол (м/ж)"}
 
 
-def _headers() -> list[str]:
+def _headers(legacy: bool = False) -> list[str]:
+    """Заголовки шаблона; legacy — набор первой версии шаблона (без колонок из _ADDED_COLUMNS)."""
     headers = [h for _, h in ID_COLUMNS] + [h for _, h in PROFILE_COLUMNS]
     for n in range(1, GUARDIAN_SLOTS + 1):
         headers += [f"Представитель {n}: {h}" for _, h in GUARDIAN_COLUMNS]
-    return headers + [h for _, h in SPECIAL_COLUMNS]
+    headers += [h for _, h in SPECIAL_COLUMNS]
+    return [h for h in headers if not (legacy and h in _ADDED_COLUMNS)]
 
 
 def _norm(value) -> str:
@@ -128,7 +138,7 @@ def build_template(db: Session, user: User) -> bytes:
     for line in [
         "Колонки «Группа», «Фамилия», «Имя», «Отчество» опознают студента — не меняйте их.",
         "Заполняйте только то, что нужно. Пустая ячейка = «не менять» (стереть значение через импорт нельзя).",
-        "Дата рождения: ДД.ММ.ГГГГ. Финансирование: бюджет или договор.",
+        "Дата рождения: ДД.ММ.ГГГГ. Пол: м или ж. Финансирование: бюджет или договор.",
         "Да/нет-поля: да, нет (или +, -, 1, 0).",
         "Представитель: ФИО и «кем приходится» нужны вместе; если такой представитель уже есть — обновится, иначе добавится.",
         "Соц. статус и здоровье — особые данные: хранятся зашифрованными, не отправляйте файл по почте и не оставляйте на общих дисках.",
@@ -157,6 +167,13 @@ def _parse_date(value) -> datetime.date:
         except ValueError:
             continue
     raise ValueError(f"не распознана дата «{text}» (нужно ДД.ММ.ГГГГ)")
+
+
+def _parse_gender(value) -> str:
+    gender = _GENDER.get(_norm(value))
+    if gender is None:
+        raise ValueError(f"«{value}» — ожидалось м или ж")
+    return gender
 
 
 def _parse_bool(value) -> bool:
@@ -192,9 +209,10 @@ def parse_workbook(db: Session, user: User, content: bytes) -> list[RowResult]:
         raise ImportFileError(f"Слишком много строк на листе (максимум {MAX_ROWS})")
     if not rows:
         raise ImportFileError("Файл пустой")
-    expected = _headers()
     header = [_text(c) or "" for c in rows[0]]
-    if header[: len(expected)] != expected:
+    # Текущий шаблон либо шаблон первой версии (раздан раньше) — по заголовкам.
+    expected = next((h for h in (_headers(), _headers(legacy=True)) if header[: len(h)] == h), None)
+    if expected is None:
         raise ImportFileError("Заголовки не совпадают с шаблоном — скачайте шаблон заново и заполните его")
     data_rows = [(i, r) for i, r in enumerate(rows[1:], start=2) if any(c not in (None, "") for c in r)]
     if len(data_rows) > MAX_ROWS:
@@ -247,8 +265,12 @@ def parse_workbook(db: Session, user: User, content: bytes) -> list[RowResult]:
                 result.errors.append(f"{header}: {exc}")
 
         for key, header in PROFILE_COLUMNS:
+            if header not in values:  # колонки нет в старом шаблоне
+                continue
             if key == "birth_date":
                 collect(key, header, result.profile, _parse_date)
+            elif key == "gender":
+                collect(key, header, result.profile, _parse_gender)
             elif key == "funding":
                 def to_funding(raw):
                     value = _FUNDING.get(_norm(raw))

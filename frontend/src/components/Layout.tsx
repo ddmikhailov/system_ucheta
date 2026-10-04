@@ -25,6 +25,11 @@ export default function Layout({ children }: { children: ReactNode }) {
         </div>
         <nav className="app-header__nav" ref={navRef} aria-label="Разделы">
           {leadsGroups(user) ? (
+            <NavLink to="/my-day" className={({ isActive }) => (isActive ? "active" : "")}>
+              Мой день
+            </NavLink>
+          ) : null}
+          {leadsGroups(user) ? (
             <NavLink to="/cabinet" className={({ isActive }) => (isActive ? "active" : "")}>
               Мои группы
             </NavLink>

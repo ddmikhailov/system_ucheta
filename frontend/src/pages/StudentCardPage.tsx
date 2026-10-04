@@ -5,6 +5,8 @@ import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/useAuth";
 import { DOSSIER_AUDIT_ROLES, DOSSIER_STAFF_ROLES, STRUCTURE_EDITOR_ROLES, TEACHER_ROLES, inRoles } from "../constants/roles";
 import { STUDENT_STATUS_LABELS } from "../constants/studentStatus";
+import AbsenceMessageButton from "../components/AbsenceMessageButton";
+import AbsenceSheetButton from "../components/AbsenceSheetButton";
 import StudentDossier from "../components/StudentDossier";
 import StudentMonthAttendanceView from "../components/StudentMonthAttendance";
 import { useScrollToTopOnChange } from "../hooks/useScrollToTopOnChange";
@@ -129,6 +131,9 @@ export default function StudentCardPage() {
           )}
         </>
       )}
+
+      <AbsenceMessageButton studentId={card.id} />
+      <AbsenceSheetButton studentId={card.id} lastName={card.last_name} groupCode={card.group.code} />
 
       <StudentMonthAttendanceView studentId={card.id} />
 

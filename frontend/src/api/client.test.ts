@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, api, getToken, setToken, uploadFile } from "./client";
+import { ApiError, api, downloadFile, getToken, setToken, uploadFile } from "./client";
 
 function respond(status: number, body?: unknown, contentType = "application/json"): Response {
   const text = body === undefined ? "" : typeof body === "string" ? body : JSON.stringify(body);
@@ -97,5 +97,42 @@ describe("uploadFile", () => {
       status: 413,
       message: "Файл больше 5 МБ",
     });
+  });
+});
+
+describe("downloadFile", () => {
+  it("скачивает файл с токеном и подставляет имя", async () => {
+    setToken("tok");
+    const fetchMock = mockFetch(new Response("файл", { status: 200, headers: { "Content-Type": "application/octet-stream" } }));
+    const click = vi.fn();
+    const created: HTMLAnchorElement[] = [];
+    const realCreate = document.createElement.bind(document);
+    vi.spyOn(document, "createElement").mockImplementation((tag: string) => {
+      const el = realCreate(tag);
+      if (tag === "a") {
+        (el as HTMLAnchorElement).click = click;
+        created.push(el as HTMLAnchorElement);
+      }
+      return el;
+    });
+    URL.createObjectURL = vi.fn(() => "blob:x");
+    URL.revokeObjectURL = vi.fn();
+    await downloadFile("/students/1/absence-sheet?date_from=a", "лист.docx");
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe("Bearer tok");
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(created[0].download).toBe("лист.docx");
+    vi.restoreAllMocks();
+  });
+
+  it("при ошибке показывает сообщение сервера, а не statusText", async () => {
+    mockFetch(respond(400, { detail: "За выбранный период у студента нет пропусков и опозданий" }));
+    await expect(downloadFile("/x", "f.docx")).rejects.toMatchObject({
+      status: 400, message: "За выбранный период у студента нет пропусков и опозданий",
+    });
+  });
+
+  it("не-JSON тело ошибки — statusText", async () => {
+    mockFetch(new Response("<html>", { status: 502, statusText: "Bad Gateway" }));
+    await expect(downloadFile("/x", "f.docx")).rejects.toMatchObject({ status: 502, message: "Bad Gateway" });
   });
 });
