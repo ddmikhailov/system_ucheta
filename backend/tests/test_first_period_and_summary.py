@@ -7,7 +7,7 @@ import openpyxl
 import pytest
 
 from app.models import Role, RoleCode, StudyGroup, User
-from app.services import attendance_service, calendar_service, summary_service
+from app.services import attendance_service, calendar_service, group_scope, summary_service
 
 
 def _recent_study_day(db, group, today):
@@ -89,7 +89,9 @@ def test_summary_splits_total_and_first_period(db, imported, today):
 
     rows = summary_service.collect_group_day_rows(db, day, day)
     by_code = {r.group_code: r for r in rows}
-    assert len(rows) == len([g for g in db.query(StudyGroup).filter(StudyGroup.is_active.is_(True))
+    # В «Своде» — только группы с куратором (вакантные показываются отдельно).
+    assert len(rows) == len([g for g in db.query(StudyGroup).filter(StudyGroup.is_active.is_(True),
+                                                                      group_scope.has_curator())
                               if calendar_service.is_study_day(db, day, study_group_id=g.id, course=g.course)])
 
     a, b, c = by_code[first.code], by_code[second.code], by_code[unsubmitted.code]

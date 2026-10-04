@@ -12,7 +12,7 @@ from app.models import (
     StudyGroup,
 )
 from app.core.time import utc_to_local
-from app.services import calendar_service, group_membership_service
+from app.services import calendar_service, group_membership_service, group_scope
 
 
 @dataclass
@@ -195,7 +195,7 @@ def _current_responsible_name(group: StudyGroup, as_of: datetime.date) -> str | 
 
 
 def day_overview(db: Session, date: datetime.date, department_id: int | None = None) -> list[dict]:
-    stmt = select(StudyGroup).where(StudyGroup.is_active.is_(True))
+    stmt = select(StudyGroup).where(StudyGroup.is_active.is_(True), group_scope.has_curator())
     if department_id is not None:
         stmt = stmt.where(StudyGroup.department_id == department_id)
     groups = list(db.execute(stmt.order_by(StudyGroup.course, StudyGroup.code)).scalars().all())
@@ -283,7 +283,7 @@ def curator_discipline(
     date_to: datetime.date,
     department_id: int | None = None,
 ) -> list[dict]:
-    stmt = select(StudyGroup).where(StudyGroup.is_active.is_(True))
+    stmt = select(StudyGroup).where(StudyGroup.is_active.is_(True), group_scope.has_curator())
     if department_id is not None:
         stmt = stmt.where(StudyGroup.department_id == department_id)
     groups = list(db.execute(stmt.order_by(StudyGroup.course, StudyGroup.code)).scalars().all())

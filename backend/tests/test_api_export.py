@@ -3,7 +3,7 @@ import io
 import openpyxl
 
 
-def test_excel_export_contains_all_groups(client, admin_headers, imported, today):
+def test_excel_export_contains_only_groups_with_a_curator(client, admin_headers, imported, today):
     r = client.get(f"/export/excel?date_from={today}&date_to={today}", headers=admin_headers)
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("application/vnd.openxmlformats")
@@ -11,9 +11,10 @@ def test_excel_export_contains_all_groups(client, admin_headers, imported, today
     wb = openpyxl.load_workbook(io.BytesIO(r.content))
     assert "ИТОГ" in wb.sheetnames
     itog = wb["ИТОГ"]
-    # 44 группы + строка заголовка.
-    assert itog.max_row == 45
+    # 44 группы, из них 3 вакантные (ИИ132, СА332, ИСП452д) в общий перечень не входят: 41 + строка заголовка.
+    assert itog.max_row == 42
     assert "ИИ112" in wb.sheetnames
+    assert "ИИ132" not in wb.sheetnames
 
 
 def test_excel_export_forbidden_for_curator(client, curator_headers, today):
