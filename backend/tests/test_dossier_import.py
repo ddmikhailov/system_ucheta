@@ -149,3 +149,78 @@ def test_bad_files_are_rejected(client, admin_headers):
     r = _post(client, "/dossier-import/preview", admin_headers, buf.getvalue())
     assert r.status_code == 400 and "шаблон" in r.json()["detail"]
     assert _post(client, "/dossier-import/preview", admin_headers, b"").status_code == 400
+
+
+def _zip(entries: dict[str, bytes]) -> bytes:
+    import zipfile
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as archive:
+        for name, data in entries.items():
+            archive.writestr(name, data)
+    return buf.getvalue()
+
+
+def test_zip_bomb_is_rejected_before_parsing(client, admin_headers):
+    """Файл ≤ 5 МБ, но после распаковки — 200 МБ нулей: не должен дойти до openpyxl."""
+    bomb = _zip({"xl/worksheets/sheet1.xml": b"\0" * (200 * 1024 * 1024)})
+    assert len(bomb) < 5 * 1024 * 1024
+    r = _post(client, "/dossier-import/preview", admin_headers, bomb)
+    assert r.status_code == 400 and "после распаковки" in r.json()["detail"]
+    assert _post(client, "/dossier-import/apply", admin_headers, bomb).status_code == 400
+
+
+def test_archive_with_too_many_entries_is_rejected(client, admin_headers):
+    many = _zip({f"f{i}.xml": b"x" for i in range(300)})
+    r = _post(client, "/dossier-import/preview", admin_headers, many)
+    assert r.status_code == 400 and "внутренних файлов" in r.json()["detail"]
+
+
+def test_real_size_is_counted_even_if_the_header_lies(monkeypatch):
+    """В заголовке zip размер можно занизить — поэтому считаются реально распакованные байты."""
+    import struct
+
+    from app.core import xlsx
+
+    bomb = bytearray(_zip({"a.xml": b"\0" * (3 * 1024 * 1024)}))
+    # file_size в центральном каталоге (смещение 24 от сигнатуры PK\x01\x02) подменяем на 10 байт
+    pos = bomb.rindex(b"PK\x01\x02")
+    bomb[pos + 24:pos + 28] = struct.pack("<I", 10)
+    monkeypatch.setattr(xlsx, "MAX_UNCOMPRESSED_BYTES", 1024 * 1024)
+    try:
+        xlsx.check_zip_safety(bytes(bomb))
+    except xlsx.UnsafeArchiveError as exc:
+        assert "после распаковки" in str(exc) or "повреждён" in str(exc)
+    else:
+        raise AssertionError("архив с подделанным размером прошёл проверку")
+
+
+def test_normal_template_passes_the_zip_check():
+    from app.core import xlsx
+
+    xlsx.check_zip_safety(_file([{"Группа": "X", "Фамилия": "Я", "Имя": "Я"}]))
+
+
+def test_too_many_rows_and_sparse_huge_sheet_are_rejected(client, admin_headers):
+    headers = svc._headers()
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Досье"
+    ws.append(headers)
+    for _ in range(svc.MAX_SCANNED_ROWS + 5):
+        ws.append(["x"])
+    buf = io.BytesIO()
+    wb.save(buf)
+    r = _post(client, "/dossier-import/preview", admin_headers, buf.getvalue())
+    assert r.status_code == 400 and "Слишком много строк" in r.json()["detail"]
+
+    # лист, объявивший огромную область одной далёкой ячейкой, не обходится целиком
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Досье"
+    ws.append(headers)
+    ws.cell(row=1_000_000, column=1, value="далеко")
+    buf = io.BytesIO()
+    wb.save(buf)
+    r = _post(client, "/dossier-import/preview", admin_headers, buf.getvalue())
+    assert r.status_code == 400 and "Слишком много строк" in r.json()["detail"]

@@ -14,6 +14,7 @@
 import datetime
 import io
 from dataclasses import dataclass, field
+from itertools import islice
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font
@@ -22,12 +23,15 @@ from sqlalchemy.orm import Session
 
 from app.core import field_crypto
 from app.core.roles import is_department_scoped
-from app.core.xlsx import append_row
+from app.core.xlsx import UnsafeArchiveError, append_row, check_zip_safety
 from app.models import Student, StudentGuardian, StudentProfile, StudyGroup, User
 from app.schemas.dossier import ProfileFields, SpecialData
 from app.services.audit_service import log_action
 
 MAX_ROWS = 5000
+# Пустые «хвосты» листа (форматирование, удалённые строки) читаем с запасом, но не бесконечно:
+# лист может объявить миллионы строк, а openpyxl честно пройдётся по каждой.
+MAX_SCANNED_ROWS = MAX_ROWS + 2000
 GUARDIAN_SLOTS = 2
 
 # (ключ, заголовок, раздел) — раздел: id (опознание студента), profile, guardian, special.
@@ -175,11 +179,17 @@ def _limit(key: str, text: str) -> str:
 
 def parse_workbook(db: Session, user: User, content: bytes) -> list[RowResult]:
     try:
+        check_zip_safety(content)
         wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    except UnsafeArchiveError as exc:
+        raise ImportFileError(f"Файл не принят: {exc}. Нужен .xlsx, скачанный из шаблона") from exc
     except Exception as exc:  # битый/не xlsx файл
         raise ImportFileError("Не удалось прочитать файл — нужен .xlsx, скачанный из шаблона") from exc
     ws = wb["Досье"] if "Досье" in wb.sheetnames else wb.worksheets[0]
-    rows = list(ws.iter_rows(values_only=True))
+    # Читаем только нужные столбцы и ограниченное число строк (+1, чтобы заметить переполнение).
+    rows = list(islice(ws.iter_rows(values_only=True, max_col=len(_headers())), MAX_SCANNED_ROWS + 1))
+    if len(rows) > MAX_SCANNED_ROWS:
+        raise ImportFileError(f"Слишком много строк на листе (максимум {MAX_ROWS})")
     if not rows:
         raise ImportFileError("Файл пустой")
     expected = _headers()
