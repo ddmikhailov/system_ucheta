@@ -28,6 +28,11 @@ class Task(Base):
     # Периодические задачи: из какого шаблона и за какой период («2026-10») создана; на пару стоит уникальность.
     template_id: Mapped[int | None] = mapped_column(ForeignKey("task_templates.id"), nullable=True)
     period_key: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # Многошаговая задача — цепочка задач с общим series_id (= id первого шага). Следующий шаг открывается
+    # для группы, когда её предыдущий шаг сдан (unlock_on="submitted") или принят ("accepted").
+    series_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    step_no: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    unlock_on: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     author: Mapped["User"] = relationship()
     assignments: Mapped[list["TaskAssignment"]] = relationship(back_populates="task", cascade="all, delete-orphan")
@@ -74,6 +79,8 @@ class TaskAssignment(Base):
     review_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Двухступенчатая проверка (reviewer_rule=two_step): 1 — зав. отделением, 2 — воспитательный отдел.
     review_step: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # Шаг ещё закрыт: предыдущий шаг цепочки у этой группы не сдан/не принят.
+    locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
 
     task: Mapped["Task"] = relationship(back_populates="assignments")

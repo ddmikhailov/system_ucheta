@@ -36,6 +36,9 @@ class TaskCreate(BaseModel):
     due_date: datetime.date
     fields: list[FieldDef] = Field(default_factory=list, max_length=30)
     scope: ScopeDef
+    # Следующий шаг многошаговой задачи: охват и группы берутся у предыдущего шага (scope игнорируется).
+    after_task_id: int | None = None
+    unlock_on: Literal["submitted", "accepted"] = "accepted"
 
 
 class TemplateCreate(BaseModel):
@@ -95,6 +98,8 @@ class TaskListRow(BaseModel):
     is_closed: bool
     author_name: str | None
     progress: Progress
+    step_no: int = 1
+    step_total: int | None = None  # None — одиночная задача
 
 
 class AssignmentSummary(BaseModel):
@@ -108,6 +113,13 @@ class AssignmentSummary(BaseModel):
     submitted_at: datetime.datetime | None
     reviewed_at: datetime.datetime | None
     reviewed_by_name: str | None
+
+
+class StepRef(BaseModel):
+    id: int
+    title: str
+    step_no: int
+    due_date: datetime.date
 
 
 class TaskDetail(BaseModel):
@@ -125,6 +137,9 @@ class TaskDetail(BaseModel):
     can_manage: bool
     progress: Progress
     assignments: list[AssignmentSummary]
+    step_no: int = 1
+    unlock_on: str | None = None
+    steps: list[StepRef] = Field(default_factory=list)  # пусто для одиночной задачи
 
 
 class MyAssignmentRow(BaseModel):
@@ -137,6 +152,9 @@ class MyAssignmentRow(BaseModel):
     status: str
     is_overdue: bool
     is_closed: bool
+    is_locked: bool = False
+    step_no: int = 1
+    step_total: int | None = None
 
 
 class RowRead(BaseModel):
@@ -190,6 +208,10 @@ class AssignmentDetail(BaseModel):
     can_edit: bool
     can_submit: bool
     can_review: bool
+    is_locked: bool = False
+    locked_reason: str | None = None
+    step_no: int = 1
+    step_total: int | None = None
 
 
 class RowIn(BaseModel):

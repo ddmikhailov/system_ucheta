@@ -157,27 +157,106 @@ def create_task(db: Session, creator: User, payload: TaskCreate) -> Task:
     link_error = task_dossier.validate_links(fields, payload.collect_mode)
     if link_error:
         raise _bad(link_error)
-    groups = resolve_scope_groups(db, payload.scope, creator)
+    prev = None
+    if payload.after_task_id is not None:
+        prev = _step_predecessor(db, creator, payload)
+        scope = ScopeDef(**json.loads(prev.scope_json))
+        groups = [a.study_group for a in prev.assignments if a.study_group.is_active]
+        if not groups:
+            raise _bad("В предыдущем шаге нет активных групп")
+    else:
+        scope = payload.scope
+        groups = resolve_scope_groups(db, scope, creator)
     task = Task(
         title=payload.title.strip(), description=(payload.description or "").strip() or None,
         created_by=creator.id, collect_mode=payload.collect_mode, reviewer_rule=payload.reviewer_rule,
         due_date=payload.due_date, fields_json=json.dumps(fields, ensure_ascii=False),
-        scope_json=payload.scope.model_dump_json(),
+        scope_json=scope.model_dump_json(),
     )
+    if prev is not None:
+        if prev.series_id is None:
+            prev.series_id = prev.id
+        task.series_id, task.step_no, task.unlock_on = prev.series_id, prev.step_no + 1, payload.unlock_on
     db.add(task)
     db.flush()
     today = today_local()
+    prev_by_group = {a.study_group_id: a for a in prev.assignments} if prev is not None else {}
     for g in groups:
-        assignment = TaskAssignment(task_id=task.id, study_group_id=g.id, status="new")
+        before = prev_by_group.get(g.id)
+        locked = before is not None and not step_is_open(before, payload.unlock_on)
+        assignment = TaskAssignment(task_id=task.id, study_group_id=g.id, status="new", locked=locked)
         db.add(assignment)
         db.flush()
-        for curator in assignees(db, g.id, today):
+        for curator in ([] if locked else assignees(db, g.id, today)):
             in_app_notification_service.notify(
                 db, curator, "task_assigned",
                 f"Новая задача «{task.title}» для группы {g.code}, срок — {task.due_date.strftime('%d.%m.%Y')}.",
                 entity_type="task_assignment", entity_id=str(assignment.id),
             )
     return task
+
+
+# ---------- многошаговые задачи ----------
+
+def step_is_open(previous: TaskAssignment, unlock_on: str | None) -> bool:
+    """Следующий шаг открыт, если предыдущий принят, а при правиле «после сдачи» — достаточно и сдачи."""
+    return previous.status == "accepted" or (unlock_on == "submitted" and previous.status == "submitted")
+
+
+def _step_predecessor(db: Session, creator: User, payload: TaskCreate) -> Task:
+    prev = db.get(Task, payload.after_task_id)
+    if prev is None:
+        raise _bad("Предыдущий шаг не найден", status.HTTP_404_NOT_FOUND)
+    if RoleCode(creator.role.code) != RoleCode.ADMIN and prev.created_by != creator.id:
+        raise _bad("Добавлять шаги может автор задачи или администратор", status.HTTP_403_FORBIDDEN)
+    if prev.series_id is not None and db.query(Task.id).filter(
+        Task.series_id == prev.series_id, Task.step_no == prev.step_no + 1
+    ).first():
+        raise _bad("После этого шага уже есть следующий — добавляйте шаг после последнего")
+    if payload.due_date < prev.due_date:
+        raise _bad("Срок шага не может быть раньше срока предыдущего шага")
+    return prev
+
+
+def next_step(db: Session, task: Task) -> Task | None:
+    if task.series_id is None:
+        return None
+    return db.query(Task).filter(Task.series_id == task.series_id, Task.step_no == task.step_no + 1).first()
+
+
+def series_steps(db: Session, task: Task) -> list[Task]:
+    if task.series_id is None:
+        return []
+    steps = db.query(Task).filter(Task.series_id == task.series_id).order_by(Task.step_no).all()
+    return steps if len(steps) > 1 else []
+
+
+def lock_reason(db: Session, assignment: TaskAssignment) -> str | None:
+    if not assignment.locked:
+        return None
+    task = assignment.task
+    prev = db.query(Task).filter(Task.series_id == task.series_id, Task.step_no == task.step_no - 1).first()
+    when = "сдан" if task.unlock_on == "submitted" else "принят"
+    return f"Этот шаг откроется, когда предыдущий шаг «{prev.title if prev else '…'}» будет {when}."
+
+
+def unlock_next_step(db: Session, assignment: TaskAssignment) -> None:
+    """Вызывается, когда назначение сдано или принято: открывает следующий шаг этой же группы."""
+    nxt = next_step(db, assignment.task)
+    if nxt is None:
+        return
+    target = db.query(TaskAssignment).filter(
+        TaskAssignment.task_id == nxt.id, TaskAssignment.study_group_id == assignment.study_group_id
+    ).first()
+    if target is None or not target.locked or not step_is_open(assignment, nxt.unlock_on):
+        return
+    target.locked = False
+    for curator in assignees(db, assignment.study_group_id, today_local()):
+        in_app_notification_service.notify(
+            db, curator, "task_assigned",
+            f"Открыт следующий шаг «{nxt.title}» для группы {assignment.study_group.code}, срок — {_fmt(nxt.due_date)}.",
+            entity_type="task_assignment", entity_id=str(target.id),
+        )
 
 
 def template_from_task(task: Task, user: User, name: str | None) -> TaskTemplate:
@@ -246,7 +325,7 @@ def get_assignment_for(db: Session, user: User, assignment_id: int) -> TaskAssig
 
 
 def is_overdue(assignment: TaskAssignment, today: datetime.date | None = None) -> bool:
-    return assignment.status != "accepted" and assignment.task.due_date < (today or today_local())
+    return assignment.status != "accepted" and not assignment.locked and assignment.task.due_date < (today or today_local())
 
 
 # ---------- заполнение ----------
@@ -261,6 +340,8 @@ def assert_editable(db: Session, user: User, assignment: TaskAssignment) -> None
         raise _bad("Заполнять задачу может только куратор группы", status.HTTP_403_FORBIDDEN)
     if assignment.task.is_closed:
         raise _bad("Задача закрыта")
+    if assignment.locked:
+        raise _bad(lock_reason(db, assignment) or "Шаг ещё закрыт")
     if assignment.status not in EDITABLE_STATUSES:
         raise _bad("Ответ уже отправлен на проверку или принят — править нельзя")
 
@@ -328,8 +409,10 @@ def submit(db: Session, user: User, assignment: TaskAssignment) -> None:
         assignment.reviewed_at = utcnow()
         assignment.reviewed_by = None
         task_dossier.apply_accepted(db, user, assignment, fields)
+        unlock_next_step(db, assignment)
         return
     assignment.status = "submitted"
+    unlock_next_step(db, assignment)  # шаги с правилом «после сдачи» открываются сразу
     for reviewer in reviewers_to_notify(db, assignment):
         in_app_notification_service.notify(
             db, reviewer, "task_submitted",
@@ -411,6 +494,7 @@ def review(db: Session, user: User, assignment: TaskAssignment, action: str, com
         db.add(TaskComment(assignment_id=assignment.id, author_id=user.id, text=comment))
     if action == "accept":
         task_dossier.apply_accepted(db, user, assignment, task_fields(assignment.task))
+        unlock_next_step(db, assignment)
     title = assignment.task.title
     verb = "принята" if action == "accept" else "возвращена на доработку"
     for curator in assignees(db, assignment.study_group_id, today_local()):
@@ -583,8 +667,8 @@ def generate_reminders(db: Session, user: User, today: datetime.date | None = No
     if group_ids:
         mine = (
             db.query(TaskAssignment).join(Task, Task.id == TaskAssignment.task_id)
-            .filter(TaskAssignment.study_group_id.in_(group_ids), Task.is_closed.is_(False),
-                    TaskAssignment.status.in_(EDITABLE_STATUSES)).all()
+            .filter(            TaskAssignment.study_group_id.in_(group_ids), Task.is_closed.is_(False),
+                    TaskAssignment.status.in_(EDITABLE_STATUSES), TaskAssignment.locked.is_(False)).all()
         )
         for a in mine:
             days_left = (a.task.due_date - today).days
@@ -616,19 +700,29 @@ def assign_new_group(db: Session, group: StudyGroup) -> int:
         return 0
     today = today_local()
     created = 0
-    open_tasks = db.query(Task).filter(Task.is_closed.is_(False), Task.due_date >= today).all()
+    open_tasks = sorted(
+        db.query(Task).filter(Task.is_closed.is_(False), Task.due_date >= today).all(),
+        key=lambda t: (t.series_id or t.id, t.step_no),
+    )
     existing = {a.task_id for a in db.query(TaskAssignment).filter(TaskAssignment.study_group_id == group.id)}
     for task in open_tasks:
         if task.id in existing or not scope_matches(ScopeDef(**json.loads(task.scope_json)), group):
             continue
+        if task.step_no > 1:
+            # Шаг цепочки нужен группе только вместе с предыдущим шагом (иначе он вечно закрыт).
+            before = db.query(Task.id).filter(Task.series_id == task.series_id, Task.step_no == task.step_no - 1).first()
+            if before is None or before[0] not in existing:
+                continue
         author = task.author
         if author is not None and RoleCode(author.role.code) in DEPARTMENT_SCOPED_ROLES \
                 and author.department_id != group.department_id:
             continue
-        assignment = TaskAssignment(task_id=task.id, study_group_id=group.id, status="new")
+        locked = task.step_no > 1  # у новой группы предыдущий шаг только что создан — значит, ещё не сдан
+        assignment = TaskAssignment(task_id=task.id, study_group_id=group.id, status="new", locked=locked)
         db.add(assignment)
         db.flush()
-        for curator in assignees(db, group.id, today):
+        existing.add(task.id)
+        for curator in ([] if locked else assignees(db, group.id, today)):
             in_app_notification_service.notify(
                 db, curator, "task_assigned",
                 f"Новая задача «{task.title}» для группы {group.code}, срок — {task.due_date.strftime('%d.%m.%Y')}.",

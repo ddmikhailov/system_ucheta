@@ -21,8 +21,8 @@ const download = vi.mocked(downloadFile);
 const progress = { total: 46, new: 40, in_progress: 2, submitted: 3, returned: 0, accepted: 1, overdue: 2 };
 
 const LIST: TaskListRow[] = [
-  { id: 1, title: "Кружки доп. образования", collect_mode: "student", reviewer_rule: "dept_head", due_date: "2026-10-06", is_closed: false, author_name: "Админ А.", progress },
-  { id: 2, title: "Видеовизитка", collect_mode: "group", reviewer_rule: "two_step", due_date: "2026-10-14", is_closed: true, author_name: "Админ А.", progress: { ...progress, overdue: 0 } },
+  { id: 1, title: "Кружки доп. образования", collect_mode: "student", reviewer_rule: "dept_head", due_date: "2026-10-06", is_closed: false, author_name: "Админ А.", progress, step_no: 1, step_total: null },
+  { id: 2, title: "Видеовизитка", collect_mode: "group", reviewer_rule: "two_step", due_date: "2026-10-14", is_closed: true, author_name: "Админ А.", progress: { ...progress, overdue: 0 }, step_no: 1, step_total: null },
 ];
 
 const DETAIL: TaskDetail = {
@@ -30,7 +30,7 @@ const DETAIL: TaskDetail = {
   due_date: "2026-10-06", is_closed: false, author_id: 1, author_name: "Админ А.",
   fields: [{ key: "f1", label: "Телефон", type: "text", required: true, options: [] }],
   scope: { all_groups: true, department_ids: [], courses: [], group_ids: [], exclude_group_ids: [] },
-  can_manage: true, progress,
+  can_manage: true, progress, step_no: 1, unlock_on: null, steps: [],
   assignments: [
     { id: 10, study_group_id: 1, group_code: "СА172", course: 1, department_name: "Диджитал", status: "submitted", is_overdue: false, submitted_at: "2026-10-01T09:00:00", reviewed_at: null, reviewed_by_name: null },
     { id: 11, study_group_id: 2, group_code: "ИИ112", course: 1, department_name: "Диджитал", status: "new", is_overdue: true, submitted_at: null, reviewed_at: null, reviewed_by_name: null },
@@ -171,6 +171,37 @@ describe("TasksPage — карточка задачи", () => {
     expect(screen.queryByRole("link", { name: "ИТ201" })).not.toBeInTheDocument();
     await user.selectOptions(screen.getByRole("combobox"), "returned");
     expect(screen.getByText("Нет групп с таким статусом.")).toBeInTheDocument();
+  });
+
+  it("цепочка шагов: ссылки на шаги, «Добавить следующий шаг» только у последнего", async () => {
+    const steps = [
+      { id: 1, title: "Сценарий", step_no: 1, due_date: "2026-10-06" },
+      { id: 2, title: "Видео", step_no: 2, due_date: "2026-10-20" },
+    ];
+    mockApi({ detail: { ...DETAIL, id: 1, steps, unlock_on: null } });
+    openTask();
+    await screen.findByRole("heading", { name: "Кружки доп. образования" });
+    expect(screen.getByRole("link", { name: "2. Видео" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "1. Сценарий" })).not.toBeInTheDocument(); // текущий шаг — не ссылка
+    expect(screen.queryByRole("button", { name: "Добавить следующий шаг" })).not.toBeInTheDocument();
+  });
+
+  it("последний шаг цепочки показывает, когда он открывается, и предлагает следующий", async () => {
+    const steps = [
+      { id: 1, title: "Сценарий", step_no: 1, due_date: "2026-10-06" },
+      { id: 2, title: "Видео", step_no: 2, due_date: "2026-10-20" },
+    ];
+    mockApi({ detail: { ...DETAIL, id: 2, step_no: 2, steps, unlock_on: "accepted" } });
+    openTask();
+    expect(await screen.findByText(/открывается после приёмки предыдущего/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Добавить следующий шаг" })).toBeInTheDocument();
+  });
+
+  it("список: у шагов цепочки видно «шаг N из M»", async () => {
+    mockApi({ list: [{ ...LIST[0], step_no: 2, step_total: 3 }, LIST[1]] });
+    renderPage(<TasksPage />, { role: "admin" });
+    expect(await screen.findByText("(шаг 2 из 3)")).toBeInTheDocument();
+    expect(screen.getAllByText(/\(шаг /)).toHaveLength(1);
   });
 
   it("управление доступно только автору/админу: закрыть, удалить; выгрузка — всем", async () => {
@@ -443,6 +474,23 @@ describe("TasksPage — создание задачи", () => {
     expect(await screen.findByText("Ежегодная сверка")).toBeInTheDocument();
     expect(screen.getByText(/Каждый месяц, 1-го числа/)).toBeInTheDocument();
     expect(screen.getByText("01.11.2026")).toBeInTheDocument();
+  });
+
+  it("следующий шаг: охват не спрашивается, выбирается момент открытия; в запрос уходит after_task_id", async () => {
+    const user = userEvent.setup();
+    mockApi({ detail: { ...DETAIL, steps: [], unlock_on: null } });
+    post.mockResolvedValue({ ...DETAIL, id: 2 });
+    renderPage(<TasksPage />, { role: "admin", route: "/tasks?task=1", path: "/tasks" });
+    await user.click(await screen.findByRole("button", { name: "Добавить следующий шаг" }));
+    expect(await screen.findByText("Следующий шаг после «Кружки доп. образования»")).toBeInTheDocument();
+    expect(screen.queryByText("Кому")).not.toBeInTheDocument();
+    expect(screen.getByText(/те же группы, что у предыдущего шага/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Шаблон")).not.toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText("Название"), "Видео");
+    await user.type(screen.getByPlaceholderText("Название поля"), "Ссылка");
+    await user.selectOptions(screen.getByDisplayValue("после того, как предыдущий шаг принят"), "submitted");
+    await user.click(screen.getByRole("button", { name: "Создать и разослать" }));
+    expect(post).toHaveBeenCalledWith("/tasks", expect.objectContaining({ title: "Видео", after_task_id: 1, unlock_on: "submitted" }));
   });
 
   it("после создания открывается карточка задачи", async () => {

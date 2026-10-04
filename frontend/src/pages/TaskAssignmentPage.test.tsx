@@ -48,6 +48,10 @@ function detail(overrides: Partial<AssignmentDetail> = {}): AssignmentDetail {
     can_edit: true,
     can_submit: true,
     can_review: false,
+    is_locked: false,
+    locked_reason: null,
+    step_no: 1,
+    step_total: null,
     ...overrides,
   };
 }
@@ -63,6 +67,24 @@ function open(d: AssignmentDetail, role = "curator") {
 
 beforeEach(() => {
   for (const fn of [get, put, post]) fn.mockReset();
+});
+
+describe("TaskAssignmentPage — шаги", () => {
+  it("закрытый шаг: пояснение, когда откроется; номер шага; правки нет", async () => {
+    open(detail({
+      is_locked: true, can_edit: false, can_submit: false, step_no: 2, step_total: 2,
+      locked_reason: "Этот шаг откроется, когда предыдущий шаг «Сценарий» будет принят.",
+    }));
+    expect(await screen.findByText(/Этот шаг откроется, когда предыдущий шаг «Сценарий» будет принят/)).toBeInTheDocument();
+    expect(screen.getByText("Шаг 2 из 2")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Отправить на проверку/ })).not.toBeInTheDocument();
+  });
+
+  it("обычное назначение без шагов — без пометки", async () => {
+    open(detail());
+    await screen.findByRole("heading", { name: "Кружки доп. образования" });
+    expect(screen.queryByText(/^Шаг \d из/)).not.toBeInTheDocument();
+  });
 });
 
 describe("TaskAssignmentPage — связь с досье", () => {

@@ -21,14 +21,22 @@ const EMPTY_FIELD: FieldDraft = { label: "", type: "text", required: false, opti
 const FUNDING_OPTIONS = "бюджет, договор";
 
 // Создание задачи: описание → охват → режим сбора → форма ответа → срок и проверка.
-export default function TaskCreateForm({ onCreated }: { onCreated: (task: TaskDetail) => void }) {
+export interface AfterTask {
+  id: number;
+  title: string;
+  due_date: string;
+}
+
+// Режим «следующий шаг»: охват берётся у предыдущего шага, срок не раньше его срока, выбирается момент открытия.
+export default function TaskCreateForm({ onCreated, afterTask }: { onCreated: (task: TaskDetail) => void; afterTask?: AfterTask | null }) {
   const { user } = useAuth();
   const scopedToDepartment = inRoles(user?.role, DEPARTMENT_SCOPED_ROLES);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [mode, setMode] = useState("student");
   const [reviewer, setReviewer] = useState("dept_head");
-  const [dueDate, setDueDate] = useState(todayIso());
+  const [dueDate, setDueDate] = useState(afterTask && afterTask.due_date > todayIso() ? afterTask.due_date : todayIso());
+  const [unlockOn, setUnlockOn] = useState("accepted");
   const [fields, setFields] = useState<FieldDraft[]>([{ ...EMPTY_FIELD }]);
   const [scopeKind, setScopeKind] = useState<ScopeKind>("all");
   const [departmentIds, setDepartmentIds] = useState<number[]>([]);
@@ -154,6 +162,7 @@ export default function TaskCreateForm({ onCreated }: { onCreated: (task: TaskDe
         reviewer_rule: reviewer,
         due_date: dueDate,
         fields: payloadFields,
+        ...(afterTask ? { after_task_id: afterTask.id, unlock_on: unlockOn } : {}),
         scope: {
           all_groups: scopeKind === "all",
           department_ids: scopeKind === "departments" ? departmentIds : [],
@@ -172,10 +181,21 @@ export default function TaskCreateForm({ onCreated }: { onCreated: (task: TaskDe
 
   return (
     <form className="add-block" onSubmit={submit}>
-      <p className="add-block__title">Новая задача</p>
+      <p className="add-block__title">{afterTask ? `Следующий шаг после «${afterTask.title}»` : "Новая задача"}</p>
+      {afterTask && (
+        <div className="inline-form">
+          <label>
+            Шаг откроется для группы{" "}
+            <select value={unlockOn} onChange={(e) => setUnlockOn(e.target.value)}>
+              <option value="accepted">после того, как предыдущий шаг принят</option>
+              <option value="submitted">сразу после того, как предыдущий шаг сдан</option>
+            </select>
+          </label>
+        </div>
+      )}
       {error && <div className="error-text">{error}</div>}
 
-      {templates.length > 0 && (
+      {templates.length > 0 && !afterTask && (
         <div className="inline-form">
           <select value={templateId} onChange={(e) => applyTemplate(e.target.value)} aria-label="Шаблон">
             <option value="">Начать с пустой формы</option>
@@ -197,7 +217,7 @@ export default function TaskCreateForm({ onCreated }: { onCreated: (task: TaskDe
         <input placeholder="Название" value={title} onChange={(e) => setTitle(e.target.value)} required style={{ flex: 1, minWidth: 220 }} />
         <label>
           Срок{" "}
-          <input type="date" value={dueDate} min={todayIso()} onChange={(e) => setDueDate(e.target.value)} required />
+          <input type="date" value={dueDate} min={afterTask && afterTask.due_date > todayIso() ? afterTask.due_date : todayIso()} onChange={(e) => setDueDate(e.target.value)} required />
         </label>
       </div>
       <textarea
@@ -208,6 +228,10 @@ export default function TaskCreateForm({ onCreated }: { onCreated: (task: TaskDe
         onChange={(e) => setDescription(e.target.value)}
       />
 
+      {afterTask ? (
+        <p className="hint">Охват — те же группы, что у предыдущего шага.</p>
+      ) : (
+        <>
       <p className="add-block__title">Кому</p>
       <div className="inline-form">
         <select value={scopeKind} onChange={(e) => setScopeKind(e.target.value as ScopeKind)}>
@@ -267,6 +291,8 @@ export default function TaskCreateForm({ onCreated }: { onCreated: (task: TaskDe
           ))}
         </select>
       </details>
+        </>
+      )}
 
       <p className="add-block__title">Как собирать ответ</p>
       <div className="inline-form">

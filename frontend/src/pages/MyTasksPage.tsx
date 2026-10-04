@@ -25,8 +25,12 @@ export default function MyTasksPage() {
 
   const open = rows.filter((r) => r.status !== "accepted");
   const done = rows.filter((r) => r.status === "accepted");
+  // Закрытые (ждут предыдущий шаг) — в конце: действий по ним пока нет.
   const sorted = [...open].sort(
-    (a, b) => ORDER.indexOf(a.status) - ORDER.indexOf(b.status) || a.due_date.localeCompare(b.due_date)
+    (a, b) =>
+      Number(a.is_locked) - Number(b.is_locked) ||
+      ORDER.indexOf(a.status) - ORDER.indexOf(b.status) ||
+      a.due_date.localeCompare(b.due_date)
   );
 
   const table = (list: MyAssignmentRow[]) => (
@@ -47,13 +51,16 @@ export default function MyTasksPage() {
                 {r.title}
               </Link>
               <br />
-              <span className="hint">{COLLECT_MODE_LABELS[r.collect_mode]}</span>
+              <span className="hint">
+                {r.step_total ? `Шаг ${r.step_no} из ${r.step_total} · ` : ""}
+                {COLLECT_MODE_LABELS[r.collect_mode]}
+              </span>
             </td>
             <td data-label="Группа">{r.group_code}</td>
             <td data-label="Срок">
               {formatDateRu(r.due_date)} {r.is_overdue && <b>просрочено</b>}
             </td>
-            <td data-label="Статус">{TASK_STATUS_LABELS[r.status] ?? r.status}</td>
+            <td data-label="Статус">{r.is_locked ? "Ждёт предыдущий шаг" : (TASK_STATUS_LABELS[r.status] ?? r.status)}</td>
           </tr>
         ))}
       </tbody>

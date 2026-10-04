@@ -481,6 +481,8 @@ export interface TaskListRow {
   is_closed: boolean;
   author_name: string | null;
   progress: TaskProgress;
+  step_no: number;
+  step_total: number | null;
 }
 
 export interface TaskAssignmentSummary {
@@ -511,6 +513,9 @@ export interface TaskDetail {
   can_manage: boolean;
   progress: TaskProgress;
   assignments: TaskAssignmentSummary[];
+  step_no: number;
+  unlock_on: "submitted" | "accepted" | null;
+  steps: { id: number; title: string; step_no: number; due_date: string }[];
 }
 
 export interface MyAssignmentRow {
@@ -523,6 +528,9 @@ export interface MyAssignmentRow {
   status: string;
   is_overdue: boolean;
   is_closed: boolean;
+  is_locked: boolean;
+  step_no: number;
+  step_total: number | null;
 }
 
 export interface TaskRowRead {
@@ -574,6 +582,10 @@ export interface AssignmentDetail {
   can_edit: boolean;
   can_submit: boolean;
   can_review: boolean;
+  is_locked: boolean;
+  locked_reason: string | null;
+  step_no: number;
+  step_total: number | null;
 }
 
 export interface ReviewQueueRow {

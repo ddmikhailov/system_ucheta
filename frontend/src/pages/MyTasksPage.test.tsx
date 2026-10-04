@@ -14,13 +14,28 @@ vi.mock("../api/client", async (importOriginal) => {
 const get = vi.mocked(api.get);
 
 function task(id: number, title: string, status: string, due: string, over: Partial<MyAssignmentRow> = {}): MyAssignmentRow {
-  return { id, task_id: id, title, collect_mode: "student", group_code: "СА172", due_date: due, status, is_overdue: false, is_closed: false, ...over };
+  return { id, task_id: id, title, collect_mode: "student", group_code: "СА172", due_date: due, status, is_overdue: false, is_closed: false, is_locked: false, step_no: 1, step_total: null, ...over };
 }
 
 beforeEach(() => get.mockReset());
 
 const titlesInOrder = () =>
   screen.getAllByRole("link").map((a) => a.textContent);
+
+describe("MyTasksPage — шаги", () => {
+  it("закрытый шаг: «Ждёт предыдущий шаг», номер шага, в конце списка даже при раннем сроке", async () => {
+    get.mockResolvedValue([
+      task(1, "Видеовизитка", "new", "2026-10-02", { is_locked: true, step_no: 2, step_total: 2 }),
+      task(2, "Сценарий", "new", "2026-10-20", { step_no: 1, step_total: 2 }),
+    ]);
+    renderPage(<MyTasksPage />, { role: "curator" });
+    await screen.findByText("Сценарий");
+    expect(titlesInOrder()).toEqual(["Сценарий", "Видеовизитка"]);
+    expect(screen.getByText("Ждёт предыдущий шаг")).toBeInTheDocument();
+    expect(screen.getByText(/Шаг 2 из 2/)).toBeInTheDocument();
+    expect(screen.getByText(/Шаг 1 из 2/)).toBeInTheDocument();
+  });
+});
 
 describe("MyTasksPage", () => {
   it("сначала то, что требует действий: возвращённые, потом в работе, не начатые, на проверке; внутри — по сроку", async () => {

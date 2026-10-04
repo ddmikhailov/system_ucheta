@@ -216,6 +216,12 @@ export default function TaskAssignmentPage() {
           {detail.reviewed_by_name ? `, проверил(а): ${detail.reviewed_by_name}` : " без проверки"}
         </p>
       )}
+      {detail.step_total && (
+        <p className="hint">
+          Шаг {detail.step_no} из {detail.step_total}
+        </p>
+      )}
+      {detail.is_locked && detail.locked_reason && <div className="day-status not-submitted">{detail.locked_reason}</div>}
       {detail.description && <p style={{ whiteSpace: "pre-wrap" }}>{detail.description}</p>}
       {detail.status === "returned" && detail.review_comment && (
         <div className="error-text">Возвращено на доработку: {detail.review_comment}</div>

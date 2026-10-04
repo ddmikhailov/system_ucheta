@@ -4,6 +4,7 @@
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_user, require_roles
@@ -12,7 +13,7 @@ from app.db.session import get_db
 from app.models import RoleCode, StudyGroup, Task, TaskAssignment, TaskComment, TaskTemplate, User
 from app.schemas.tasks import (
     AnswersIn, AssignmentDetail, AssignmentSummary, CommentIn, CommentRead, FieldDef, MyAssignmentRow,
-    HistoryEvent, ReviewIn, ReviewQueueRow, RowRead, ScheduleIn, ScopeDef, TaskCreate, TaskDetail, TaskListRow, TaskUpdate, TemplateCreate, TemplateRead,
+    HistoryEvent, ReviewIn, ReviewQueueRow, RowRead, ScheduleIn, ScopeDef, StepRef, TaskCreate, TaskDetail, TaskListRow, TaskUpdate, TemplateCreate, TemplateRead,
 )
 from app.services import attendance_service
 from app.services.access_service import get_curator_group_ids
@@ -57,6 +58,12 @@ def create_task(payload: TaskCreate, user: User = Depends(require_task_manager),
 def dossier_fields(user: User = Depends(require_task_manager)):
     """Поля досье, к которым можно привязать поле формы (для конструктора)."""
     return task_dossier.targets_list()
+
+
+def _step_totals(db: Session) -> dict[int, int]:
+    """{series_id: число шагов} только для настоящих цепочек (больше одного шага)."""
+    rows = db.query(Task.series_id, func.count(Task.id)).filter(Task.series_id.isnot(None)).group_by(Task.series_id).all()
+    return {sid: n for sid, n in rows if n > 1}
 
 
 def _template_read(t: TaskTemplate, user: User) -> TemplateRead:
@@ -126,11 +133,12 @@ def delete_template(template_id: int, user: User = Depends(require_task_manager)
 @router.get("", response_model=list[TaskListRow])
 def list_tasks(user: User = Depends(require_task_manager), db: Session = Depends(get_db)):
     today = today_local()
+    totals = _step_totals(db)
     return [
         TaskListRow(
             id=t.id, title=t.title, collect_mode=t.collect_mode, reviewer_rule=t.reviewer_rule, due_date=t.due_date,
             is_closed=t.is_closed, author_name=t.author.full_name if t.author else None,
-            progress=svc.progress(visible, today),
+            progress=svc.progress(visible, today), step_no=t.step_no, step_total=totals.get(t.series_id),
         )
         for t, visible in svc.manager_tasks(db, user)
     ]
@@ -147,11 +155,13 @@ def my_assignments(user: User = Depends(get_current_user), db: Session = Depends
         .options(joinedload(TaskAssignment.task), joinedload(TaskAssignment.study_group))
         .filter(TaskAssignment.study_group_id.in_(group_ids)).order_by(Task.due_date, Task.id).all()
     )
+    totals = _step_totals(db)
     return [
         MyAssignmentRow(
             id=a.id, task_id=a.task_id, title=a.task.title, collect_mode=a.task.collect_mode,
             group_code=a.study_group.code, due_date=a.task.due_date, status=a.status,
-            is_overdue=svc.is_overdue(a, today), is_closed=a.task.is_closed,
+            is_overdue=svc.is_overdue(a, today), is_closed=a.task.is_closed, is_locked=a.locked,
+            step_no=a.task.step_no, step_total=totals.get(a.task.series_id),
         )
         for a in rows
     ]
@@ -178,7 +188,7 @@ def review_queue(user: User = Depends(require_task_manager), db: Session = Depen
 def _detail_assignment(db: Session, user: User, a: TaskAssignment) -> AssignmentDetail:
     task = a.task
     today = today_local()
-    editable = svc.is_assignee(db, user, a) and not task.is_closed and a.status in svc.EDITABLE_STATUSES
+    editable = svc.is_assignee(db, user, a) and not task.is_closed and not a.locked and a.status in svc.EDITABLE_STATUSES
     rows_by_student = {r.student_id: r for r in a.rows}
     rows: list[RowRead] = []
     if task.collect_mode != "group":
@@ -207,6 +217,8 @@ def _detail_assignment(db: Session, user: User, a: TaskAssignment) -> Assignment
         history=[HistoryEvent(**e) for e in svc.assignment_history(db, a)], review_step=a.review_step,
         review_steps=2 if task.reviewer_rule == "two_step" else 1, can_edit=editable, can_submit=editable,
         can_review=svc.can_review(user, a) and a.status == "submitted",
+        is_locked=a.locked, locked_reason=svc.lock_reason(db, a), step_no=task.step_no,
+        step_total=_step_totals(db).get(task.series_id),
     )
 
 
@@ -267,7 +279,8 @@ def _detail(db: Session, user: User, task: Task) -> TaskDetail:
         author_id=task.created_by, author_name=task.author.full_name if task.author else None,
         fields=[FieldDef(**f) for f in svc.task_fields(task)], scope=ScopeDef(**json.loads(task.scope_json)),
         can_manage=_can_manage(user, task), progress=svc.progress(visible, today),
-        assignments=[_summary(a, today) for a in visible],
+        assignments=[_summary(a, today) for a in visible], step_no=task.step_no, unlock_on=task.unlock_on,
+        steps=[StepRef(id=s.id, title=s.title, step_no=s.step_no, due_date=s.due_date) for s in svc.series_steps(db, task)],
     )
 
 
@@ -302,6 +315,8 @@ def delete_task(task_id: int, user: User = Depends(require_task_manager), db: Se
     task = _task_or_404(db, task_id)
     if not _can_manage(user, task):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Удалить задачу может её автор или администратор")
+    if svc.next_step(db, task) is not None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "У задачи есть следующий шаг — удаляйте шаги с последнего")
     if any(a.status != "new" for a in task.assignments):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "По задаче уже есть ответы — закройте её вместо удаления")
     log_action(db, user, "task.delete", "task", str(task.id), old_value=task.title)

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, ApiError, downloadFile } from "../api/client";
 import TaskCreateForm from "../components/TaskCreateForm";
+import type { AfterTask } from "../components/TaskCreateForm";
 import TaskTemplatesTab from "../components/TaskTemplatesTab";
 import { COLLECT_MODE_LABELS, REVIEWER_LABELS, TASK_STATUS_LABELS } from "../constants/tasks";
 import { formatDateRu, formatServerDateTimeFull } from "../utils/date";
@@ -30,6 +31,7 @@ export default function TasksPage() {
   const [list, setList] = useState<TaskListRow[] | null>(null);
   const [queue, setQueue] = useState<ReviewQueueRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [afterTask, setAfterTask] = useState<AfterTask | null>(null);
 
   const loadList = useCallback(() => {
     api
@@ -45,7 +47,18 @@ export default function TasksPage() {
   useEffect(loadList, [loadList]);
 
   if (taskId) {
-    return <TaskView id={taskId} onBack={() => { setSearchParams({}); loadList(); }} onDeleted={() => { setSearchParams({}); loadList(); }} />;
+    return (
+      <TaskView
+        id={taskId}
+        onBack={() => { setSearchParams({}); loadList(); }}
+        onDeleted={() => { setSearchParams({}); loadList(); }}
+        onAddStep={(t) => {
+          setAfterTask({ id: t.id, title: t.title, due_date: t.due_date });
+          setTab("create");
+          setSearchParams({});
+        }}
+      />
+    );
   }
 
   return (
@@ -60,7 +73,7 @@ export default function TasksPage() {
         <button className={tab === "templates" ? "active" : ""} onClick={() => setTab("templates")}>
           Шаблоны
         </button>
-        <button className={tab === "create" ? "active" : ""} onClick={() => setTab("create")}>
+        <button className={tab === "create" ? "active" : ""} onClick={() => { setAfterTask(null); setTab("create"); }}>
           + Новая задача
         </button>
       </div>
@@ -70,7 +83,10 @@ export default function TasksPage() {
 
       {tab === "create" && (
         <TaskCreateForm
+          key={afterTask ? `after-${afterTask.id}` : "new"}
+          afterTask={afterTask}
           onCreated={(task) => {
+            setAfterTask(null);
             loadList();
             setTab("list");
             setSearchParams({ task: String(task.id) });
@@ -102,7 +118,8 @@ export default function TasksPage() {
                   style={t.is_closed ? { opacity: 0.6 } : undefined}
                 >
                   <td data-label="Задача">
-                    {t.title} {t.is_closed && <span className="locked-badge">закрыта</span>}
+                    {t.title} {t.step_total && <span className="hint">(шаг {t.step_no} из {t.step_total})</span>}{" "}
+                    {t.is_closed && <span className="locked-badge">закрыта</span>}
                     <br />
                     <span className="hint">{COLLECT_MODE_LABELS[t.collect_mode]}</span>
                   </td>
@@ -162,7 +179,7 @@ function reviewSummary(a: TaskDetail["assignments"][number]): string {
   return "—";
 }
 
-function TaskView({ id, onBack, onDeleted }: { id: string; onBack: () => void; onDeleted: () => void }) {
+function TaskView({ id, onBack, onDeleted, onAddStep }: { id: string; onBack: () => void; onDeleted: () => void; onAddStep: (task: TaskDetail) => void }) {
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
@@ -211,6 +228,27 @@ function TaskView({ id, onBack, onDeleted }: { id: string; onBack: () => void; o
         <h2>{task.title}</h2>
         {task.is_closed && <span className="locked-badge">закрыта</span>}
       </div>
+      {task.steps.length > 1 && (
+        <p>
+          <b>Шаги:</b>{" "}
+          {task.steps.map((s, i) => (
+            <span key={s.id}>
+              {i > 0 && " → "}
+              {s.id === task.id ? (
+                <b>{s.step_no}. {s.title}</b>
+              ) : (
+                <Link to={`?task=${s.id}`} className="link-btn">
+                  {s.step_no}. {s.title}
+                </Link>
+              )}{" "}
+              <span className="hint">до {formatDateRu(s.due_date)}</span>
+            </span>
+          ))}
+          {task.unlock_on && (
+            <span className="hint"> · этот шаг открывается {task.unlock_on === "submitted" ? "после сдачи" : "после приёмки"} предыдущего</span>
+          )}
+        </p>
+      )}
       <p className="hint">
         Срок {formatDateRu(task.due_date)} · {COLLECT_MODE_LABELS[task.collect_mode]} · проверяет: {REVIEWER_LABELS[task.reviewer_rule]} · автор:{" "}
         {task.author_name ?? "—"}
@@ -248,6 +286,14 @@ function TaskView({ id, onBack, onDeleted }: { id: string; onBack: () => void; o
         >
           Сохранить как шаблон
         </button>
+        {task.can_manage && (task.steps.length === 0 || task.steps[task.steps.length - 1].id === task.id) && (
+          <>
+            {" · "}
+            <button className="link-btn" onClick={() => onAddStep(task)}>
+              Добавить следующий шаг
+            </button>
+          </>
+        )}
         {task.can_manage && (
           <>
             {" · "}
