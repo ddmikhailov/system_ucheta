@@ -528,7 +528,8 @@
       файлах). Добавлены: `AdminPage` (вкладки и права по ролям), `DepartmentsTab`, `MarkCodesTab`, `StudentsTab`,
       `UsersTab`, `GroupsTab`, `DashboardsPage`, `AttendanceSummary` (вместе с чистыми функциями фильтров
       `summaryFilters` — ссылки, запоминание, проверка входных данных), `StudentCardPage`, `ChangePasswordPage`.
-      Не покрыты: `CuratorDaysModal`, `StudentMonthAttendance`.
+      Позже покрыты и `CuratorDaysModal` (разбор дисциплины по дням), и `StudentMonthAttendance` (листание месяцев,
+      граница года, сводка) — компонентов без тестов не осталось.
 - [x] 🔴 **Найдено тестами фронтенда:** при открытии сайта по корневому адресу `/` с действующим входом приложение сначала
       отправляло на страницу входа (не дожидалось `/auth/me`), а страница входа не перенаправляла вошедшего обратно —
       приходилось входить заново. — `HomeRedirect` ждёт загрузки, `LoginPage` уводит вошедшего на его стартовую страницу.
