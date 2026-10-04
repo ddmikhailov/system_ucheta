@@ -6,6 +6,7 @@ import { STUDENT_STATUS_LABELS } from "../../constants/studentStatus";
 import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { StudentAdmin, StudyGroupAdmin } from "../../api/types";
 import { formatDateRu, todayIso } from "../../utils/date";
+import SearchSelect from "../../components/SearchSelect";
 
 // Здесь только список, поиск и добавление. Всё управление конкретным
 // студентом (ФИО, перевод, статус, удаление) — на его личной карточке.
@@ -111,13 +112,14 @@ export default function StudentsTab({ canCreate }: { canEdit?: boolean; canCreat
       )}
 
       <div className="toolbar">
-        <select value={groupId ?? ""} onChange={(e) => setGroupId(Number(e.target.value))} disabled={isSearching}>
-          {groups.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.code} (курс {g.course})
-            </option>
-          ))}
-        </select>
+        <SearchSelect
+          value={groupId === null || groupId === undefined ? "" : String(groupId)}
+          options={groups.map((g) => ({ value: String(g.id), label: `${g.code} (курс ${g.course})` }))}
+          onChange={(v) => setGroupId(Number(v))}
+          disabled={isSearching}
+          ariaLabel="Группа"
+          title="Группа: начните вводить код, например «ГД»"
+        />
         <input
           placeholder="Поиск по ФИО — по всем группам"
           value={searchQuery}

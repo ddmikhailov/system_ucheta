@@ -8,6 +8,7 @@ import type { StudentCard } from "../api/types";
 import { makeUser } from "../test/utils";
 import { todayIso } from "../utils/date";
 import StudentCardPage from "./StudentCardPage";
+import { chooseOption } from "../test/searchSelect";
 
 vi.mock("../api/client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api/client")>();
@@ -186,7 +187,7 @@ describe("StudentCardPage — управление", () => {
     const user = userEvent.setup();
     open("admin");
     await screen.findByRole("heading", { name: "Управление" });
-    await user.selectOptions(screen.getAllByRole("combobox")[0], "8");
+    await chooseOption(user, screen.getByRole("combobox", { name: "Группа" }), "ИИ112");
     expect(screen.getByText(/будет выполнен перевод с сегодняшнего дня/)).toBeInTheDocument();
     const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false);
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
@@ -200,10 +201,14 @@ describe("StudentCardPage — управление", () => {
   });
 
   it("список групп для перевода — только активные; текущая группа есть всегда", async () => {
+    const user = userEvent.setup();
     open("admin");
     await screen.findByRole("heading", { name: "Управление" });
-    await waitFor(() => expect(screen.getAllByRole("combobox")[0].querySelectorAll("option").length).toBe(2));
-    expect(within(screen.getAllByRole("combobox")[0]).queryByRole("option", { name: "АРХ-1" })).not.toBeInTheDocument();
+    const box = screen.getByRole("combobox", { name: "Группа" });
+    await user.click(box);
+    const listbox = screen.getByRole("listbox");
+    expect(within(listbox).getAllByRole("option")).toHaveLength(2);
+    expect(within(listbox).queryByRole("option", { name: "АРХ-1" })).not.toBeInTheDocument();
   });
 
   it("смена статуса: подтверждение, дата выбытия только для не «Учится»", async () => {

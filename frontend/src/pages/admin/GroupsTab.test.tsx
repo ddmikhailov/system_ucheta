@@ -6,6 +6,7 @@ import type { StudyGroupAdmin, UserAdmin } from "../../api/types";
 import { renderPage } from "../../test/utils";
 import { todayIso } from "../../utils/date";
 import GroupsTab from "./GroupsTab";
+import { chooseOption } from "../../test/searchSelect";
 
 vi.mock("../../api/client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../api/client")>();
@@ -76,8 +77,39 @@ describe("GroupsTab — список", () => {
     expect(within(row("ИИ112")).getByText("нет куратора")).toBeInTheDocument();
     expect(row("ИИ112")).toHaveClass("not-submitted-row");
     expect(screen.queryByText("АРХ-1")).not.toBeInTheDocument();
-    await u.click(screen.getByRole("button", { name: "Архив (1)" }));
+    await u.click(screen.getByRole("button", { name: "Отключённые (1)" }));
     expect(within(row("АРХ-1")).getByText("нет")).toBeInTheDocument();
+  });
+
+  it("переключатель «Активна» отключает группу сразу из списка и сообщает, что она выпала из свода", async () => {
+    const u = userEvent.setup();
+    patch.mockResolvedValue({});
+    renderPage(<GroupsTab canEdit canCreate />, { role: "admin" });
+    await screen.findByRole("button", { name: "СА172" });
+
+    await u.click(screen.getByRole("switch", { name: "Активна: СА172" }));
+
+    expect(patch).toHaveBeenCalledWith("/admin/groups/1", { is_active: false });
+    expect(await screen.findByText(/Группа «СА172» отключена: в свод и общие списки не попадает/)).toBeInTheDocument();
+  });
+
+  it("отключённую группу можно включить тем же переключателем", async () => {
+    const u = userEvent.setup();
+    patch.mockResolvedValue({});
+    renderPage(<GroupsTab canEdit canCreate />, { role: "admin" });
+    await u.click(await screen.findByRole("button", { name: "Отключённые (1)" }));
+
+    await u.click(screen.getByRole("switch", { name: "Активна: АРХ-1" }));
+
+    expect(patch).toHaveBeenCalledWith("/admin/groups/3", { is_active: true });
+    expect(await screen.findByText(/Группа «АРХ-1» включена/)).toBeInTheDocument();
+  });
+
+  it("без права правки переключателя нет — только «да/нет»", async () => {
+    renderPage(<GroupsTab canEdit={false} canCreate={false} />, { role: "admin" });
+    await screen.findByText("СА172");
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    expect(within(row("СА172")).getByText("да")).toBeInTheDocument();
   });
 
   it("без права правки код — просто текст, формы добавления нет", async () => {
@@ -137,10 +169,10 @@ describe("GroupsTab — окно группы", () => {
     expect(await within(dialog).findByText("Группа с таким кодом уже существует")).toBeInTheDocument();
   });
 
-  it("в архив и обратно; окно закрывается", async () => {
+  it("отключить и включить обратно; окно закрывается", async () => {
     const { u, dialog } = await openGroup("СА172");
     patch.mockResolvedValue({});
-    await u.click(within(dialog).getByRole("button", { name: "В архив" }));
+    await u.click(within(dialog).getByRole("button", { name: "Отключить группу" }));
     expect(patch).toHaveBeenCalledWith("/admin/groups/1", { is_active: false });
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
@@ -189,7 +221,8 @@ describe("GroupsTab — назначение куратора и замести�
     const { u, dialog } = await openGroup("СА172");
     await u.click(within(dialog).getByRole("button", { name: "Сменить куратора" }));
     const modal = await screen.findByRole("dialog", { name: "Назначить куратора" });
-    const options = within(within(modal).getByLabelText("Куратор")).getAllByRole("option").map((o) => o.textContent);
+    await u.click(within(modal).getByLabelText("Куратор"));
+    const options = within(within(modal).getByRole("listbox")).getAllByRole("option").map((o) => o.textContent);
     expect(options).toEqual(["Куратор Первый", "Психолог Павел"]);
   });
 
@@ -198,7 +231,7 @@ describe("GroupsTab — назначение куратора и замести�
     post.mockResolvedValue({});
     await u.click(within(dialog).getByRole("button", { name: "Назначить заместителя" }));
     const modal = await screen.findByRole("dialog", { name: "Назначить куратора" });
-    await u.selectOptions(within(modal).getByLabelText("Куратор"), "12");
+    await chooseOption(u, within(modal).getByLabelText("Куратор"), "Психолог Павел");
     const loadsBefore = get.mock.calls.filter((c) => c[0] === "/admin/groups").length;
     await u.click(within(modal).getByRole("button", { name: "Сохранить" }));
     expect(post).toHaveBeenCalledWith("/admin/curator-assignments", {
@@ -249,7 +282,7 @@ describe("GroupsTab — удаление группы", () => {
     expect(within(dialog).queryByRole("button", { name: /Удалить/ })).not.toBeInTheDocument();
     await u.click(within(dialog).getByRole("button", { name: "Закрыть" }));
 
-    await u.click(screen.getByRole("button", { name: "Архив (1)" }));
+    await u.click(screen.getByRole("button", { name: "Отключённые (1)" }));
     await u.click(screen.getByRole("button", { name: "АРХ-1" }));
     dialog = await screen.findByRole("dialog", { name: "АРХ-1" });
     del.mockResolvedValue({ deleted: true, anonymized: false, detail: "Группа удалена" });
@@ -263,7 +296,7 @@ describe("GroupsTab — удаление группы", () => {
   it("обычное удаление: отказ в подтверждении ничего не отправляет, ошибка сервера показывается", async () => {
     const u = userEvent.setup();
     renderPage(<GroupsTab canEdit canCreate />, { role: "dept_head", user: { department_name: "Диджитал" } });
-    await u.click(await screen.findByRole("button", { name: "Архив (1)" }));
+    await u.click(await screen.findByRole("button", { name: "Отключённые (1)" }));
     await u.click(screen.getByRole("button", { name: "АРХ-1" }));
     const dialog = await screen.findByRole("dialog", { name: "АРХ-1" });
     const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false);

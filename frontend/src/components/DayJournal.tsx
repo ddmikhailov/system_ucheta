@@ -8,6 +8,7 @@ import MarkCommentModal from "./MarkCommentModal";
 import { scrollToTop } from "../utils/scroll";
 import type { MarkCodeOption, MonthDayStatus, RosterResponse } from "../api/types";
 import { formatServerDateTime, todayIso } from "../utils/date";
+import SearchSelect from "./SearchSelect";
 
 // Раньше подсказка точки в полоске месяца была просто ISO-датой (см. TODO.md 4).
 const MONTH_DOT_TITLES: Record<string, string> = {
@@ -221,19 +222,16 @@ export default function DayJournal({
     <div>
       <div className="roster-sticky-header">
         <div className="toolbar">
-          <select
-            value={groupId ?? ""}
-            onChange={(e) => {
+          <SearchSelect
+            value={groupId === null || groupId === undefined ? "" : String(groupId)}
+            options={groups.map((g) => ({ value: String(g.id), label: g.label }))}
+            ariaLabel="Группа"
+            title="Группа: начните вводить код, например «ГД»"
+            onChange={(v) => {
               if (absentCount > 0 && !window.confirm("Несохранённые изменения будут потеряны. Сменить группу?")) return;
-              setGroupId(Number(e.target.value));
+              setGroupId(Number(v));
             }}
-          >
-            {groups.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.label}
-              </option>
-            ))}
-          </select>
+          />
           <input
             type="date"
             value={date}

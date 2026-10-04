@@ -3,6 +3,7 @@ import { api, ApiError } from "../api/client";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import type { UserAdmin } from "../api/types";
 import { todayIso } from "../utils/date";
+import SearchSelect from "./SearchSelect";
 
 export default function AssignCuratorModal({
   groupId,
@@ -54,13 +55,12 @@ export default function AssignCuratorModal({
           <>
             <label>
               Куратор
-              <select value={userId ?? ""} onChange={(e) => setUserId(Number(e.target.value))}>
-                {curators.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.full_name}
-                  </option>
-                ))}
-              </select>
+              <SearchSelect
+                value={userId === null || userId === undefined ? "" : String(userId)}
+                options={curators.map((c) => ({ value: String(c.id), label: c.full_name }))}
+                onChange={(v) => setUserId(Number(v))}
+                ariaLabel="Куратор"
+              />
             </label>
             <label>
               Роль

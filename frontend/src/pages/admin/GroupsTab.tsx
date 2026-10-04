@@ -31,8 +31,10 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
   // одном модальном окне, как в UsersTab.
   const [detailId, setDetailId] = useState<number | null>(null);
 
-  // Архивные группы не мешаются в основном списке — их можно найти отдельно.
+  // Отключённые группы (не учитываются в своде и общих списках) не мешаются в
+  // основном списке — их можно показать отдельно и включить обратно.
   const [showArchived, setShowArchived] = useState(false);
+  const [togglingId, setTogglingId] = useState<number | null>(null);
 
   function load() {
     api.get<StudyGroupAdmin[]>("/admin/groups").then(setRows).catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка"));
@@ -64,6 +66,24 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
       setError(err instanceof ApiError ? err.message : "Не удалось создать группу");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function toggleGroup(g: StudyGroupAdmin) {
+    setTogglingId(g.id);
+    setError(null);
+    try {
+      await api.patch(`/admin/groups/${g.id}`, { is_active: !g.is_active });
+      setNotice(
+        g.is_active
+          ? `Группа «${g.code}» отключена: в свод и общие списки не попадает.`
+          : `Группа «${g.code}» включена: учитывается в своде и общих списках.`,
+      );
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не удалось изменить статус группы");
+    } finally {
+      setTogglingId(null);
     }
   }
 
@@ -114,7 +134,7 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
             <th>Курс</th>
             <th>Форма обучения</th>
             <th>Куратор</th>
-            <th>Активна</th>
+            <th title="Отключённая группа не учитывается в своде и общих списках">Активна</th>
           </tr>
         </thead>
         <tbody>
@@ -132,7 +152,25 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
               <td>{g.course}</td>
               <td>{g.study_form ?? "—"}</td>
               <td>{g.curator_name ?? "нет куратора"}</td>
-              <td>{g.is_active ? "да" : "нет"}</td>
+              <td>
+                {canEdit ? (
+                  <label className="switch" title="Отключённая группа не учитывается в своде и общих списках">
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      checked={g.is_active}
+                      disabled={togglingId === g.id}
+                      aria-label={`Активна: ${g.code}`}
+                      onChange={() => toggleGroup(g)}
+                    />{" "}
+                    {g.is_active ? "да" : "нет"}
+                  </label>
+                ) : g.is_active ? (
+                  "да"
+                ) : (
+                  "нет"
+                )}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -153,7 +191,7 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
       {archivedCount > 0 && (
         <p className="hint archive-toggle">
           <button className="link-btn" onClick={() => setShowArchived((v) => !v)}>
-            {showArchived ? "Скрыть архив" : `Архив (${archivedCount})`}
+            {showArchived ? "Скрыть отключённые" : `Отключённые (${archivedCount})`}
           </button>
         </p>
       )}
@@ -306,7 +344,7 @@ function GroupDetailModal({
         <div className="actions">
           <button onClick={onClose}>Закрыть</button>
           <button className="link-btn" onClick={toggleActive}>
-            {group.is_active ? "В архив" : "Вернуть из архива"}
+            {group.is_active ? "Отключить группу" : "Включить группу"}
           </button>
         </div>
 

@@ -14,6 +14,7 @@ import {
   defaultSummaryFilters,
 } from "../utils/summaryFilters";
 import type { SliceMode, SummaryFilters, SummaryView } from "../utils/summaryFilters";
+import SearchSelect from "./SearchSelect";
 import { formatDateRu } from "../utils/date";
 
 
@@ -340,139 +341,138 @@ export default function AttendanceSummaryView({
     ));
   }
 
+  // Дополнительные фильтры (только на экране) прячутся под одну кнопку, но если
+  // что-то из них включено — панель открыта, а на кнопке видно, сколько включено.
+  // Считаем только то, что отличается от значений по умолчанию.
+  const extraActive =
+    filters.hiddenCodes.length +
+    (onlyProblems ? 1 : 0) +
+    (filters.hideEmpty !== defaultSummaryFilters().hideEmpty ? 1 : 0) +
+    (view === "groups" && groupQuery ? 1 : 0);
+  const [moreOpen, setMoreOpen] = useState(extraActive > 0);
+  const sliceOptions: { mode: SliceMode; label: string }[] = [
+    { mode: "both", label: "Оба" },
+    { mode: "all", label: "Всего" },
+    { mode: "pair", label: pairLabel },
+  ];
+
   return (
     <div>
       <div className="filter-bar">
-        <div className="filter-bar__row">
-          {SUMMARY_PRESETS.map((p) => {
-            const [from, to] = p.range();
-            return (
-              <button
-                key={p.key}
-                className={`chip${filters.preset === p.key ? " active" : ""}`}
-                onClick={() => update({ dateFrom: from, dateTo: to, preset: p.key })}
-              >
-                {p.label}
-              </button>
-            );
-          })}
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => update({ dateFrom: e.target.value, preset: null })}
-          />
-          <span>—</span>
-          <input type="date" value={dateTo} onChange={(e) => update({ dateTo: e.target.value, preset: null })} />
+        <div className="filter-bar__section">
+          <span className="filter-label">Период</span>
+          <div className="filter-bar__row">
+            {SUMMARY_PRESETS.map((p) => {
+              const [from, to] = p.range();
+              return (
+                <button
+                  key={p.key}
+                  className={`chip${filters.preset === p.key ? " active" : ""}`}
+                  onClick={() => update({ dateFrom: from, dateTo: to, preset: p.key })}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => update({ dateFrom: e.target.value, preset: null })}
+            />
+            <span>—</span>
+            <input type="date" value={dateTo} onChange={(e) => update({ dateTo: e.target.value, preset: null })} />
+          </div>
         </div>
 
-        <div className="filter-bar__row">
-          {canFilterDepartment && (
+        <div className="filter-bar__section">
+          <span className="filter-label">Кого учитывать</span>
+          <div className="filter-bar__row">
+            {canFilterDepartment && (
+              <select
+                value={departmentId}
+                onChange={(e) => updateScope({ departmentId: e.target.value === "all" ? "all" : Number(e.target.value) })}
+                title="Отделение"
+              >
+                <option value="all">Все отделения</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            )}
             <select
-              value={departmentId}
-              onChange={(e) => updateScope({ departmentId: e.target.value === "all" ? "all" : Number(e.target.value) })}
-              title="Отделение"
+              value={course}
+              onChange={(e) => updateScope({ course: e.target.value === "all" ? "all" : Number(e.target.value) })}
+              title="Курс"
             >
-              <option value="all">Все отделения</option>
-              {departments.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
+              <option value="all">Все курсы</option>
+              {COURSES.map((c) => (
+                <option key={c} value={c}>
+                  {c} курс
                 </option>
               ))}
             </select>
-          )}
-          <select
-            value={course}
-            onChange={(e) => updateScope({ course: e.target.value === "all" ? "all" : Number(e.target.value) })}
-            title="Курс"
-          >
-            <option value="all">Все курсы</option>
-            {COURSES.map((c) => (
-              <option key={c} value={c}>
-                {c} курс
-              </option>
-            ))}
-          </select>
-          <select
-            value={groupId}
-            onChange={(e) => update({ groupId: e.target.value === "all" ? "all" : Number(e.target.value) })}
-            title="Группа"
-          >
-            <option value="all">Все группы</option>
-            {groupOptions.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.code}
-              </option>
-            ))}
-          </select>
-          <select value={slice} onChange={(e) => update({ slice: e.target.value as SliceMode })} title="Срез">
-            <option value="both">Всего и «{pairLabel}»</option>
-            <option value="all">Только «Всего»</option>
-            <option value="pair">Только «{pairLabel}»</option>
-          </select>
-          <select value={pair} onChange={(e) => update({ pair: Number(e.target.value) })} title="Пара для среза «К N паре»">
-            {PAIR_OPTIONS.map((n) => (
-              <option key={n} value={n}>
-                К {n} паре
-              </option>
-            ))}
-          </select>
+            <SearchSelect
+              value={groupId === "all" ? "" : String(groupId)}
+              options={groupOptions.map((g) => ({ value: String(g.id), label: g.code }))}
+              onChange={(v) => update({ groupId: v === "" ? "all" : Number(v) })}
+              allLabel="Все группы"
+              ariaLabel="Группа"
+              title="Группа: начните вводить код, например «ГД»"
+            />
+          </div>
         </div>
 
-        <div className="filter-bar__row">
-          <details className="filter-dropdown">
-            <summary>
-              Столбцы кодов ({visibleCodes.length}/{allCodes.length})
-            </summary>
-            <div className="filter-dropdown__panel">
-              <div className="filter-dropdown__actions">
-                <button className="link-btn" onClick={() => update({ hiddenCodes: [] })}>
-                  Все
+        <div className="filter-bar__section">
+          <span className="filter-label">Что показать</span>
+          <div className="filter-bar__row">
+            <div className="segmented" role="group" aria-label="Вид таблицы">
+              {(Object.keys(VIEW_LABELS) as SummaryView[]).map((v) => (
+                <button key={v} className={view === v ? "active" : ""} onClick={() => changeView(v)}>
+                  {VIEW_LABELS[v]}
                 </button>
-                <button className="link-btn" onClick={absenceOnly}>
-                  Только пропуски
-                </button>
-              </div>
-              {allCodes.map((c) => (
-                <label key={c.code}>
-                  <input
-                    type="checkbox"
-                    checked={!filters.hiddenCodes.includes(c.code)}
-                    onChange={() => toggleCode(c.code)}
-                  />{" "}
-                  <b>{c.code.toUpperCase()}</b> — {c.name}
-                </label>
               ))}
             </div>
-          </details>
+            <div className="segmented" role="group" aria-label="Срез">
+              {sliceOptions.map((o) => (
+                <button
+                  key={o.mode}
+                  className={slice === o.mode ? "active" : ""}
+                  title={
+                    o.mode === "pair"
+                      ? `Только группы, пришедшие к ${pair} паре`
+                      : o.mode === "all"
+                        ? "Все студенты тех групп, что сдали день"
+                        : "Обе строки: всего и к выбранной паре"
+                  }
+                  onClick={() => update({ slice: o.mode })}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+            {slice !== "all" && (
+              <select value={pair} onChange={(e) => update({ pair: Number(e.target.value) })} title="Какая пара считается первой для среза">
+                {PAIR_OPTIONS.map((n) => (
+                  <option key={n} value={n}>
+                    К {n} паре
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        </div>
 
-          <label className="filter-check">
-            <input type="checkbox" checked={onlyProblems} onChange={(e) => update({ onlyProblems: e.target.checked })} />{" "}
-            Только проблемные: ниже
-            <input
-              type="number"
-              min={1}
-              max={100}
-              value={threshold}
-              onChange={(e) => update({ threshold: Math.min(100, Math.max(1, Number(e.target.value) || 1)) })}
-              className="filter-number"
-            />
-            % или не сдано
-          </label>
-
-          <label className="filter-check" title={onlyProblems ? "Не действует вместе с «Только проблемные»" : undefined}>
-            <input
-              type="checkbox"
-              checked={hideEmpty}
-              disabled={onlyProblems}
-              onChange={(e) => update({ hideEmpty: e.target.checked })}
-            />{" "}
-            Скрыть строки без данных
-          </label>
-
-          {view === "groups" && (
-            <input placeholder="Поиск по коду группы" value={groupQuery} onChange={(e) => setGroupQuery(e.target.value)} />
-          )}
-
+        <div className="filter-bar__row filter-bar__actions">
+          <button
+            className={`link-btn${extraActive > 0 ? " has-active" : ""}`}
+            aria-expanded={moreOpen}
+            onClick={() => setMoreOpen((v) => !v)}
+            title="Столбцы, «только проблемные», скрытие пустых строк — действуют только на экране"
+          >
+            Дополнительно{extraActive > 0 ? ` (${extraActive})` : ""} {moreOpen ? "▴" : "▾"}
+          </button>
           <button
             className="link-btn"
             disabled={isDefault}
@@ -484,26 +484,78 @@ export default function AttendanceSummaryView({
           >
             Сбросить
           </button>
-
           <button className="link-btn" onClick={copyLink} title="Ссылка откроет «Свод» с этими же фильтрами и датами">
             {copied ? "Ссылка скопирована" : "Копировать ссылку"}
           </button>
         </div>
-      </div>
 
-      <div className="toolbar">
-        {(Object.keys(VIEW_LABELS) as SummaryView[]).map((v) => (
-          <button key={v} className={view === v ? "active" : ""} onClick={() => changeView(v)}>
-            {VIEW_LABELS[v]}
-          </button>
-        ))}
+        {moreOpen && (
+          <div className="filter-bar__section filter-bar__more">
+            <span className="filter-label">Только на экране (в Excel не попадает)</span>
+            <div className="filter-bar__row">
+              <details className="filter-dropdown">
+                <summary>
+                  Столбцы кодов ({visibleCodes.length}/{allCodes.length})
+                </summary>
+                <div className="filter-dropdown__panel">
+                  <div className="filter-dropdown__actions">
+                    <button className="link-btn" onClick={() => update({ hiddenCodes: [] })}>
+                      Все
+                    </button>
+                    <button className="link-btn" onClick={absenceOnly}>
+                      Только пропуски
+                    </button>
+                  </div>
+                  {allCodes.map((c) => (
+                    <label key={c.code}>
+                      <input
+                        type="checkbox"
+                        checked={!filters.hiddenCodes.includes(c.code)}
+                        onChange={() => toggleCode(c.code)}
+                      />{" "}
+                      <b>{c.code.toUpperCase()}</b> — {c.name}
+                    </label>
+                  ))}
+                </div>
+              </details>
+
+              <label className="filter-check">
+                <input type="checkbox" checked={onlyProblems} onChange={(e) => update({ onlyProblems: e.target.checked })} />{" "}
+                Только проблемные: ниже
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={threshold}
+                  onChange={(e) => update({ threshold: Math.min(100, Math.max(1, Number(e.target.value) || 1)) })}
+                  className="filter-number"
+                />
+                % или не сдано
+              </label>
+
+              <label className="filter-check" title={onlyProblems ? "Не действует вместе с «Только проблемные»" : undefined}>
+                <input
+                  type="checkbox"
+                  checked={hideEmpty}
+                  disabled={onlyProblems}
+                  onChange={(e) => update({ hideEmpty: e.target.checked })}
+                />{" "}
+                Скрыть строки без данных
+              </label>
+
+              {view === "groups" && (
+                <input placeholder="Поиск по коду группы" value={groupQuery} onChange={(e) => setGroupQuery(e.target.value)} />
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <p className="hint">
         «Учтено» — студенты тех групп, что сдали день; несданные группы в «Прибыли» не попадают. «{pairLabel}» —
-        группы, у которых куратор указал эту пару первой (дни без указанной пары в срез не входят).
-        {view === "period" && " За период числа — в студенто-днях."} Столбцы кодов, «только проблемные» и сортировка
-        действуют только на экране; в Excel попадают период, отделение, курс, группа и пара.
+        группы, у которых куратор указал эту пару первой.
+        {view === "period" && " За период числа — в студенто-днях."} В Excel попадают период, отделение, курс, группа
+        и пара.
       </p>
 
       {rangeInvalid && <div className="error-text">Дата начала позже даты окончания</div>}

@@ -4,6 +4,7 @@ import { api, ApiError } from "../api/client";
 import DossierImport from "../components/DossierImport";
 import { STUDENT_STATUS_LABELS } from "../constants/studentStatus";
 import type { StudyGroupAdmin } from "../api/types";
+import SearchSelect from "../components/SearchSelect";
 
 interface StudentRow {
   id: number;
@@ -65,14 +66,14 @@ export default function StudentsSearchPage() {
           onChange={(e) => setQuery(e.target.value)}
           autoFocus
         />
-        <select value={groupId} onChange={(e) => setGroup(e.target.value)}>
-          <option value="">Все группы</option>
-          {groups.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.code}
-            </option>
-          ))}
-        </select>
+        <SearchSelect
+          value={groupId}
+          options={groups.map((g) => ({ value: String(g.id), label: g.code }))}
+          onChange={setGroup}
+          allLabel="Все группы"
+          ariaLabel="Группа"
+          title="Группа: начните вводить код, например «ГД»"
+        />
       </div>
 
       {error && <div className="error-text">{error}</div>}

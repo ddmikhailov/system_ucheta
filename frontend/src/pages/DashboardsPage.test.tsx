@@ -291,16 +291,64 @@ describe("DashboardsPage — экспорт и отделение", () => {
     const user = userEvent.setup();
     open("admin");
     await screen.findByText("СА172");
-    await user.selectOptions(await screen.findByTitle("Отделение для свода и экспорта"), "2");
+    await user.selectOptions(await screen.findByTitle("Отделение: данные на вкладках и экспорт"), "2");
     await user.click(exportButton());
     expect(download.mock.calls[0][0]).toBe(`/export/excel?date_from=${todayIso()}&date_to=${todayIso()}&department_id=2`);
+  });
+
+  it("смена отделения перезапрашивает данные открытой вкладки", async () => {
+    const user = userEvent.setup();
+    open("admin");
+    await screen.findByText("СА172");
+    const select = await screen.findByTitle("Отделение: данные на вкладках и экспорт");
+
+    await user.selectOptions(select, "2");
+    await waitFor(() => expect(apiCalls("/dashboards/day")).toContain(`/dashboards/day?date=${todayIso()}&department_id=2`));
+
+    await user.selectOptions(select, "all");
+    await waitFor(() => expect(apiCalls("/dashboards/day").filter((p) => p === `/dashboards/day?date=${todayIso()}`).length).toBe(2));
+  });
+
+  it("кнопка «Обновить» запрашивает день заново", async () => {
+    const user = userEvent.setup();
+    open("admin");
+    await screen.findByText("СА172");
+    const before = apiCalls("/dashboards/day").length;
+
+    await user.click(screen.getByRole("button", { name: "Обновить" }));
+
+    await waitFor(() => expect(apiCalls("/dashboards/day").length).toBe(before + 1));
+  });
+
+  it("при возврате на вкладку браузера день обновляется сам", async () => {
+    open("admin");
+    await screen.findByText("СА172");
+    const before = apiCalls("/dashboards/day").length;
+
+    document.dispatchEvent(new Event("visibilitychange"));
+
+    await waitFor(() => expect(apiCalls("/dashboards/day").length).toBe(before + 1));
+  });
+
+  it("отделение передаётся и на других вкладках: группа риска, динамика, дисциплина", async () => {
+    const user = userEvent.setup();
+    open("admin");
+    await screen.findByText("СА172");
+    await user.selectOptions(await screen.findByTitle("Отделение: данные на вкладках и экспорт"), "2");
+
+    await user.click(screen.getByRole("button", { name: "Группа риска" }));
+    await waitFor(() => expect(apiCalls("/dashboards/risk-students")[0]).toContain("&department_id=2"));
+    await user.click(screen.getByRole("button", { name: "Динамика" }));
+    await waitFor(() => expect(apiCalls("/dashboards/dynamics")[0]).toContain("&department_id=2"));
+    await user.click(screen.getByRole("button", { name: "Дисциплина кураторов" }));
+    await waitFor(() => expect(apiCalls("/dashboards/curator-discipline")[0]).toContain("&department_id=2"));
   });
 
   it("у зав. отделением выбора отделения нет — выгрузка только по своему", async () => {
     const user = userEvent.setup();
     open("dept_head");
     await screen.findByText("СА172");
-    expect(screen.queryByTitle("Отделение для свода и экспорта")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Отделение: данные на вкладках и экспорт")).not.toBeInTheDocument();
     await user.click(exportButton());
     expect(download.mock.calls[0][0]).not.toContain("department_id");
   });

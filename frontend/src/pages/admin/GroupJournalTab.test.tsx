@@ -6,6 +6,7 @@ import type { RosterEntry, RosterResponse } from "../../api/types";
 import { renderPage } from "../../test/utils";
 import { todayIso } from "../../utils/date";
 import GroupJournalTab from "./GroupJournalTab";
+import { chooseOption } from "../../test/searchSelect";
 
 vi.mock("../../api/client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../api/client")>();
@@ -61,7 +62,8 @@ describe("GroupJournalTab — журнал администрации", () => {
     mockApi(roster([entry(1, "Алексеев Пётр")]));
     renderPage(<GroupJournalTab />, { role: "admin" });
     await screen.findByText("Алексеев Пётр");
-    const options = within(groupSelect()).getAllByRole("option").map((o) => o.textContent);
+    await userEvent.setup().click(groupSelect());
+    const options = within(screen.getByRole("listbox")).getAllByRole("option").map((o) => o.textContent);
     expect(options).toEqual(["СА172 (курс 1) — Иванова Анна", "ИИ212 (курс 2) — нет куратора"]);
     // первая группа открыта сразу
     expect(get).toHaveBeenCalledWith(`/curator/groups/7/day?date=${todayIso()}`);
@@ -98,12 +100,12 @@ describe("GroupJournalTab — журнал администрации", () => {
     await user.click(within(studentRow("Алексеев")).getByRole("button", { name: "Н" }));
 
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
-    await user.selectOptions(groupSelect(), "8");
+    await chooseOption(user, groupSelect(), "ИИ212 (курс 2) — нет куратора");
     expect(confirm).toHaveBeenCalledWith("Несохранённые изменения будут потеряны. Сменить группу?");
     expect(get).not.toHaveBeenCalledWith(`/curator/groups/8/day?date=${todayIso()}`);
 
     confirm.mockReturnValue(true);
-    await user.selectOptions(groupSelect(), "8");
+    await chooseOption(user, groupSelect(), "ИИ212 (курс 2) — нет куратора");
     expect(get).toHaveBeenCalledWith(`/curator/groups/8/day?date=${todayIso()}`);
     confirm.mockRestore();
   });

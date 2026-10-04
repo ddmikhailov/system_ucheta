@@ -5,6 +5,7 @@ import { ApiError, api } from "../api/client";
 import type { IndividualWorkGroup, IndividualWorkRow } from "../api/types";
 import { renderPage } from "../test/utils";
 import IndividualWorkPage from "./IndividualWorkPage";
+import { chooseOption } from "../test/searchSelect";
 
 vi.mock("../api/client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api/client")>();
@@ -73,7 +74,7 @@ describe("IndividualWorkPage", () => {
     mock({ 7: group(7, "СА172", [row(1, "Алексеев Пётр", { work_count: 1, last_work_on: "2026-10-01" })]), 8: group(8, "ИИ212", [row(9, "Захаров Олег", { work_count: 1, last_work_on: "2026-10-02" })]) });
     renderPage(<IndividualWorkPage />, { role: "dept_head" });
     await screen.findByRole("link", { name: "Алексеев Пётр" });
-    await user.selectOptions(screen.getByLabelText("Группа"), "8");
+    await chooseOption(user, screen.getByLabelText("Группа"), /ИИ212/);
     expect(await screen.findByRole("link", { name: "Захаров Олег" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Алексеев Пётр" })).not.toBeInTheDocument();
   });

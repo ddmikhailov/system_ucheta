@@ -3,6 +3,7 @@ import { api, ApiError } from "../../api/client";
 import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { CalendarDay, GroupCalendarOverride, StudyGroupAdmin } from "../../api/types";
 import { formatDateRu, toIso, todayIso } from "../../utils/date";
+import SearchSelect from "../../components/SearchSelect";
 
 function monthsAheadIso(n: number): string {
   const d = new Date();
@@ -218,13 +219,13 @@ export default function CalendarTab({ canEdit, canEditGroups }: { canEdit: boole
 
       <h4>Исключения по конкретной группе</h4>
       <div className="toolbar">
-        <select value={overrideGroupId ?? ""} onChange={(e) => setOverrideGroupId(Number(e.target.value))}>
-          {groups.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.code} (курс {g.course})
-            </option>
-          ))}
-        </select>
+        <SearchSelect
+          value={overrideGroupId === null || overrideGroupId === undefined ? "" : String(overrideGroupId)}
+          options={groups.map((g) => ({ value: String(g.id), label: `${g.code} (курс ${g.course})` }))}
+          onChange={(v) => setOverrideGroupId(Number(v))}
+          ariaLabel="Группа для исключений"
+          title="Группа: начните вводить код, например «ГД»"
+        />
       </div>
 
       {canEditGroups && (

@@ -141,12 +141,21 @@ describe("AttendanceSummaryView — период и область", () => {
     const user = userEvent.setup();
     render(<Harness />);
     await ready();
-    const names = () => within(screen.getByTitle("Группа")).getAllByRole("option").map((o) => o.textContent);
+    const names = () => {
+      const list = screen.queryByRole("listbox");
+      return list ? within(list).getAllByRole("option").map((o) => o.textContent) : [];
+    };
+    const open = async () => {
+      if (!screen.queryByRole("listbox")) await user.click(screen.getByRole("combobox", { name: "Группа" }));
+    };
+    await open();
     expect(names()).toEqual(["Все группы", "СА172", "ИИ212", "ИТ301"]);
     await user.selectOptions(screen.getByTitle("Курс"), "1");
+    await open();
     expect(names()).toEqual(["Все группы", "СА172"]);
     await user.selectOptions(screen.getByTitle("Курс"), "all");
     await user.selectOptions(screen.getByTitle("Отделение"), "2");
+    await open();
     expect(names()).toEqual(["Все группы", "ИТ301"]);
   });
 
@@ -173,6 +182,7 @@ describe("AttendanceSummaryView — отбор строк на экране", ()
     const user = userEvent.setup();
     render(<Harness />);
     await ready();
+    await user.click(screen.getByRole("button", { name: /Дополнительно/ }));
     await user.click(screen.getByLabelText(/Скрыть строки без данных/));
     expect(screen.getByText("03.10.2026")).toBeInTheDocument();
   });
@@ -181,9 +191,10 @@ describe("AttendanceSummaryView — отбор строк на экране", ()
     const user = userEvent.setup();
     render(<Harness />);
     await ready();
-    await user.selectOptions(screen.getByTitle("Срез"), "all");
+    await user.click(screen.getByRole("button", { name: "Всего" }));
     expect(screen.queryByText("К 1 паре", { selector: "b" })).not.toBeInTheDocument();
-    await user.selectOptions(screen.getByTitle("Срез"), "pair");
+    expect(screen.queryByTitle("Какая пара считается первой для среза")).not.toBeInTheDocument(); // при «Всего» выбор пары не нужен
+    await user.click(screen.getByRole("button", { name: "К 1 паре" }));
     expect(screen.getAllByText("К 1 паре", { selector: "b" })).toHaveLength(1);
     expect(screen.queryByText("Всего", { selector: "b" })).not.toBeInTheDocument();
   });
@@ -192,6 +203,7 @@ describe("AttendanceSummaryView — отбор строк на экране", ()
     const user = userEvent.setup();
     render(<Harness />);
     await ready();
+    await user.click(screen.getByRole("button", { name: /Дополнительно/ }));
     await user.click(screen.getByLabelText(/Только проблемные/));
     // 01.10 всего: 95% и все сдали — не проблема; 01.10 «к паре»: 83% — проблема; 02.10: 88%, сдали 3 из 4 — проблема;
     // 04.10: 99%, но сдали 3 из 4 — проблема; 03.10: нет данных, но 0 из 4 не сдали — проблема.
@@ -204,8 +216,10 @@ describe("AttendanceSummaryView — отбор строк на экране", ()
   });
 
   it("порог ограничен 1–100", async () => {
+    const user = userEvent.setup();
     render(<Harness />);
     await ready();
+    await user.click(screen.getByRole("button", { name: /Дополнительно/ }));
     const input = screen.getByRole("spinbutton");
     fireEvent.change(input, { target: { value: "500" } });
     expect(current.threshold).toBe(100);
@@ -219,6 +233,7 @@ describe("AttendanceSummaryView — столбцы кодов и сортиро�
     const user = userEvent.setup();
     render(<Harness />);
     await ready();
+    await user.click(screen.getByRole("button", { name: /Дополнительно/ }));
     expect(headers().slice(-3)).toEqual(["О", "Н", "Б"]);
     await user.click(screen.getByLabelText(/Опоздание/));
     expect(headers().slice(-2)).toEqual(["Н", "Б"]);
@@ -280,6 +295,7 @@ describe("AttendanceSummaryView — «За период» и «По группа
     expect(within(cell("СА172", 0)).getByText("2")).toBeInTheDocument(); // пара, указанная куратором
     expect(within(cell("СА172", 1)).getByText("не указана")).toBeInTheDocument();
 
+    // hideEmpty: false отличается от умолчания, поэтому панель «Дополнительно» уже открыта.
     const search = screen.getByPlaceholderText("Поиск по коду группы");
     await user.type(search, "ии");
     expect(within(table).queryByText("СА172", { selector: "td" })).not.toBeInTheDocument();
@@ -294,6 +310,49 @@ describe("AttendanceSummaryView — «За период» и «По группа
     const table = await screen.findByRole("table");
     expect(within(table).getAllByText("СА172", { selector: "td" })).toHaveLength(2);
     expect(within(table).queryByText("ИИ212", { selector: "td" })).not.toBeInTheDocument();
+  });
+});
+
+describe("AttendanceSummaryView — панель фильтров", () => {
+  it("группа выбирается вводом с клавиатуры: «GD» оставляет группы с ГД, Enter берёт первую", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await ready();
+    const box = screen.getByRole("combobox", { name: "Группа" });
+    await user.click(box);
+    await user.type(box, "ии");
+    expect(within(screen.getByRole("listbox")).getAllByRole("option").map((o) => o.textContent)).toEqual(["ИИ212"]);
+    await user.keyboard("{Enter}");
+    expect(current.groupId).toBe(2);
+  });
+
+  it("блоки подписаны: период, кого учитывать, что показать; доп. фильтры скрыты и показывают счётчик", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await ready();
+    for (const label of ["Период", "Кого учитывать", "Что показать"]) expect(screen.getByText(label)).toBeInTheDocument();
+    expect(screen.queryByText(/Только на экране/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Дополнительно/ })).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(screen.getByRole("button", { name: /Дополнительно/ }));
+    expect(screen.getByText(/Только на экране/)).toBeInTheDocument();
+    await user.click(screen.getByLabelText(/Только проблемные/));
+    expect(screen.getByRole("button", { name: /Дополнительно \(1\)/ })).toBeInTheDocument();
+  });
+
+  it("если доп. фильтр уже включён (из ссылки), панель открыта сразу", async () => {
+    render(<Harness initial={{ onlyProblems: true }} />);
+    await ready();
+    expect(screen.getByRole("button", { name: /Дополнительно \(1\)/ })).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("выбор пары показывается только когда срез «К N паре» участвует", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await ready();
+    expect(screen.getByTitle("Какая пара считается первой для среза")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Всего" }));
+    expect(screen.queryByTitle("Какая пара считается первой для среза")).not.toBeInTheDocument();
   });
 });
 

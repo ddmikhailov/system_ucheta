@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "../api/client";
 import { renderPage } from "../test/utils";
 import StudentsSearchPage from "./StudentsSearchPage";
+import { chooseOption } from "../test/searchSelect";
 
 vi.mock("../api/client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api/client")>();
@@ -55,15 +56,16 @@ describe("StudentsSearchPage", () => {
     const user = userEvent.setup();
     renderPage(<StudentsSearchPage />, { role: "admin" });
     await screen.findByRole("link", { name: "Алексеев Пётр" });
+    await user.click(screen.getByRole("combobox"));
     expect(screen.queryByRole("option", { name: "АРХ-1" })).not.toBeInTheDocument();
-    await user.selectOptions(screen.getByRole("combobox"), "7");
+    await chooseOption(user, screen.getByRole("combobox"), "СА172");
     await waitFor(() => expect(studentCalls().at(-1)).toContain("group_id=7"));
   });
 
   it("открытие по ссылке с группой сразу применяет фильтр", async () => {
     renderPage(<StudentsSearchPage />, { route: "/students?group=7", role: "admin" });
     await waitFor(() => expect(studentCalls().some((p) => p.includes("group_id=7"))).toBe(true));
-    expect(await screen.findByRole("combobox")).toHaveValue("7");
+    expect(await screen.findByRole("combobox")).toHaveValue("СА172");
   });
 
   it("никого не нашли и ошибка сервера", async () => {

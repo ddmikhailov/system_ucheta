@@ -6,6 +6,7 @@ import { ApiError, api } from "../../api/client";
 import { renderPage } from "../../test/utils";
 import { todayIso } from "../../utils/date";
 import StudentsTab from "./StudentsTab";
+import { chooseOption } from "../../test/searchSelect";
 
 vi.mock("../../api/client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../api/client")>();
@@ -75,7 +76,7 @@ describe("StudentsTab", () => {
     const user = userEvent.setup();
     renderPage(<StudentsTab canCreate />);
     await screen.findByRole("link", { name: "Алексеев Пётр" });
-    await user.selectOptions(screen.getByRole("combobox"), "8");
+    await chooseOption(user, screen.getByRole("combobox"), /ИИ112/);
     expect(await screen.findByRole("link", { name: "Захаров Андрей" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Алексеев Пётр" })).not.toBeInTheDocument();
   });
@@ -108,7 +109,7 @@ describe("StudentsTab", () => {
     post.mockResolvedValue({});
     renderPage(<StudentsTab canCreate />);
     await screen.findByRole("link", { name: "Алексеев Пётр" });
-    await user.selectOptions(screen.getByRole("combobox"), "8");
+    await chooseOption(user, screen.getByRole("combobox"), /ИИ112/);
     await user.type(screen.getByPlaceholderText("Фамилия"), "Новиков");
     await user.type(screen.getByPlaceholderText("Имя"), "Олег");
     await user.click(screen.getByRole("button", { name: "Добавить студента" }));

@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.core.xlsx import safe_cell
 from app.models import AttendanceMark, MarkCode, StudyGroup
-from app.services import calendar_service, group_scope, stats_service, summary_service
+from app.services import calendar_service, stats_service, summary_service
 from app.services.attendance_service import get_active_students
 
 # Стандартные шрифты reportlab (Helvetica) не содержат кириллицу — без TTF
@@ -77,7 +77,7 @@ def build_summary_workbook(
         cell.font = Font(bold=True)
         cell.alignment = Alignment(horizontal="center", wrap_text=True)
 
-    stmt = select(StudyGroup).where(StudyGroup.is_active.is_(True), group_scope.has_curator())
+    stmt = select(StudyGroup).where(StudyGroup.is_active.is_(True))
     if department_id is not None:
         stmt = stmt.where(StudyGroup.department_id == department_id)
     if course is not None:

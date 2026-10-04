@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { formatDateRu } from "../utils/date";
 import type { IndividualWorkGroup } from "../api/types";
+import SearchSelect from "../components/SearchSelect";
 
 interface GroupOption {
   id: number;
@@ -60,13 +61,13 @@ export default function IndividualWorkPage() {
   return (
     <div>
       <div className="toolbar">
-        <select value={groupId ?? ""} onChange={(e) => setSearchParams({ group: e.target.value })} aria-label="Группа">
-          {groups.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.code} (курс {g.course})
-            </option>
-          ))}
-        </select>
+        <SearchSelect
+          value={groupId === null || groupId === undefined ? "" : String(groupId)}
+          options={groups.map((g) => ({ value: String(g.id), label: `${g.code} (курс ${g.course})` }))}
+          onChange={(v) => setSearchParams({ group: v })}
+          ariaLabel="Группа"
+          title="Группа: начните вводить код, например «ГД»"
+        />
       </div>
       <p className="hint">
         Здесь — студенты с серией неуважительных пропусков и те, с кем уже ведётся индивидуальная работа. Беседы, вызовы

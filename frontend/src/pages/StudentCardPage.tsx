@@ -12,6 +12,7 @@ import StudentMonthAttendanceView from "../components/StudentMonthAttendance";
 import { useScrollToTopOnChange } from "../hooks/useScrollToTopOnChange";
 import type { DeleteResult, StudentCard, StudyGroupAdmin } from "../api/types";
 import { formatDateRu, todayIso } from "../utils/date";
+import SearchSelect from "../components/SearchSelect";
 
 // Личная карточка студента: вся информация на одном экране и всё управление
 // им (правка ФИО, перевод в другую группу, статус обучения, удаление).
@@ -307,16 +308,16 @@ function ManageSection({
           <input placeholder="Фамилия" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
           <input placeholder="Имя" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
           <input placeholder="Отчество" value={middleName} onChange={(e) => setMiddleName(e.target.value)} />
-          <select value={groupId} onChange={(e) => setGroupId(Number(e.target.value))}>
-            {!groups.some((g) => g.id === card.group.id) && (
-              <option value={card.group.id}>{card.group.code}</option>
-            )}
-            {groups.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.code}
-              </option>
-            ))}
-          </select>
+          <SearchSelect
+            value={String(groupId)}
+            options={[
+              ...(groups.some((g) => g.id === card.group.id) ? [] : [{ value: String(card.group.id), label: card.group.code }]),
+              ...groups.map((g) => ({ value: String(g.id), label: g.code })),
+            ]}
+            onChange={(v) => setGroupId(Number(v))}
+            ariaLabel="Группа"
+            title="Группа: начните вводить код, например «ГД»"
+          />
           <button type="submit" disabled={busy}>
             Сохранить
           </button>

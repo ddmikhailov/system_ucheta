@@ -54,6 +54,9 @@ export default function DashboardsPage() {
   const [loading, setLoading] = useState(false);
 
   const [date, setDate] = useState(todayIso());
+  // Счётчик перезагрузки: кнопка «Обновить» и возврат на вкладку браузера заново
+  // запрашивают данные — статусы сдачи дня меняются, пока страница открыта.
+  const [reloadKey, setReloadKey] = useState(0);
   const [dayRows, setDayRows] = useState<DayOverviewRow[]>([]);
 
   const [dateFrom, setDateFrom] = useState(daysAgoIso(14));
@@ -72,7 +75,9 @@ export default function DashboardsPage() {
   const vacantGroups = useMemo(() => groups.filter((g) => g.is_active && !g.curator_name), [groups]);
 
   const [departments, setDepartments] = useState<DepartmentAdmin[]>([]);
+  // Выбранное отделение (для админа/тьютора/учебного отдела) сужает все вкладки и экспорт.
   const [exportDepartmentId, setExportDepartmentId] = useState<number | "all">("all");
+  const deptQuery = canFilterDepartment && exportDepartmentId !== "all" ? `&department_id=${exportDepartmentId}` : "";
   // Фильтры «Свода» живут здесь, чтобы выгрузка в Excel брала тот же отбор.
   const [rawSummaryFilters, setSummaryFilters] = useState<SummaryFilters>(() => initialSummaryFilters(searchParams));
   const [exportError, setExportError] = useState<string | null>(null);
@@ -84,6 +89,14 @@ export default function DashboardsPage() {
   );
 
   useEffect(() => saveFilters(summaryFilters), [summaryFilters]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") setReloadKey((k) => k + 1);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
 
   useEffect(() => {
     if (tab === "summary") {
@@ -108,53 +121,53 @@ export default function DashboardsPage() {
     if (tab !== "day") return;
     setLoading(true);
     api
-      .get<DayOverviewRow[]>(`/dashboards/day?date=${date}`)
+      .get<DayOverviewRow[]>(`/dashboards/day?date=${date}${deptQuery}`)
       .then((rows) => {
         setDayRows(rows);
         setError(null);
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка загрузки"))
       .finally(() => setLoading(false));
-  }, [tab, date]);
+  }, [tab, date, deptQuery, reloadKey]);
 
   useEffect(() => {
     if (tab !== "dynamics") return;
     setLoading(true);
     api
-      .get<DynamicsPoint[]>(`/dashboards/dynamics?date_from=${dateFrom}&date_to=${dateTo}`)
+      .get<DynamicsPoint[]>(`/dashboards/dynamics?date_from=${dateFrom}&date_to=${dateTo}${deptQuery}`)
       .then((points) => {
         setDynamicsPoints(points);
         setError(null);
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка загрузки"))
       .finally(() => setLoading(false));
-  }, [tab, dateFrom, dateTo]);
+  }, [tab, dateFrom, dateTo, deptQuery, reloadKey]);
 
   useEffect(() => {
     if (tab !== "risk") return;
     setLoading(true);
     api
-      .get<RiskStudentRow[]>(`/dashboards/risk-students?as_of_date=${date}`)
+      .get<RiskStudentRow[]>(`/dashboards/risk-students?as_of_date=${date}${deptQuery}`)
       .then((rows) => {
         setRiskRows(rows);
         setError(null);
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка загрузки"))
       .finally(() => setLoading(false));
-  }, [tab, date]);
+  }, [tab, date, deptQuery, reloadKey]);
 
   useEffect(() => {
     if (tab !== "discipline") return;
     setLoading(true);
     api
-      .get<CuratorDisciplineRow[]>(`/dashboards/curator-discipline?date_from=${dateFrom}&date_to=${dateTo}`)
+      .get<CuratorDisciplineRow[]>(`/dashboards/curator-discipline?date_from=${dateFrom}&date_to=${dateTo}${deptQuery}`)
       .then((rows) => {
         setDisciplineRows(rows);
         setError(null);
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка загрузки"))
       .finally(() => setLoading(false));
-  }, [tab, dateFrom, dateTo]);
+  }, [tab, dateFrom, dateTo, deptQuery, reloadKey]);
 
   function loadVacantGroups() {
     api
@@ -186,11 +199,10 @@ export default function DashboardsPage() {
 
   function handleExport() {
     setExportError(null);
-    const deptParam = canFilterDepartment && exportDepartmentId !== "all" ? `&department_id=${exportDepartmentId}` : "";
     const query =
       tab === "summary"
         ? summaryExportParams(summaryFilters, canFilterDepartment)
-        : `date_from=${exportDateFrom}&date_to=${exportDateTo}${deptParam}`;
+        : `date_from=${exportDateFrom}&date_to=${exportDateTo}${deptQuery}`;
     downloadFile(
       `/export/excel?${query}`,
       `itog_${exportDateFrom}_${exportDateTo}.xlsx`,
@@ -225,8 +237,12 @@ export default function DashboardsPage() {
         {canFilterDepartment && tab !== "summary" && (
           <select
             value={exportDepartmentId}
-            onChange={(e) => setExportDepartmentId(e.target.value === "all" ? "all" : Number(e.target.value))}
-            title="Отделение для свода и экспорта"
+            onChange={(e) => {
+              setExportDepartmentId(e.target.value === "all" ? "all" : Number(e.target.value));
+              setCourseFilter("all");
+              setOpenDisciplineGroupId(null);
+            }}
+            title="Отделение: данные на вкладках и экспорт"
           >
             <option value="all">Весь колледж</option>
             {departments.map((d) => (
@@ -248,6 +264,9 @@ export default function DashboardsPage() {
       {(tab === "day" || tab === "risk") && (
         <div className="toolbar">
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <button className="link-btn" onClick={() => setReloadKey((k) => k + 1)} title="Запросить данные заново">
+            Обновить
+          </button>
           {tab === "day" && (
             <select value={courseFilter} onChange={(e) => setCourseFilter(e.target.value === "all" ? "all" : Number(e.target.value))}>
               <option value="all">Все курсы</option>

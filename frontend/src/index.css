@@ -1555,3 +1555,122 @@ th.sortable-th:hover {
     flex: 1 1 220px;
   }
 }
+
+/* Выбор из длинного списка с поиском по набору текста (SearchSelect) */
+.search-select {
+  position: relative;
+  display: inline-block;
+  min-width: 160px;
+}
+
+.search-select input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.search-select__list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 100%;
+  max-height: 280px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+}
+
+.search-select__option,
+.search-select__empty {
+  padding: 6px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.search-select__option.active {
+  background: var(--primary-light);
+}
+
+.search-select__option.selected {
+  font-weight: 700;
+}
+
+.search-select__empty {
+  color: var(--muted);
+  cursor: default;
+}
+
+/* Панель фильтров «Свода»: блоки с подписями */
+.filter-bar__section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.filter-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.filter-bar__actions {
+  justify-content: flex-end;
+  margin-bottom: 6px;
+}
+
+.filter-bar__more {
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.link-btn.has-active {
+  font-weight: 700;
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.segmented button {
+  border: 0;
+  border-radius: 0;
+  background: var(--card-bg);
+  color: var(--text);
+  padding: 6px 12px;
+}
+
+.segmented button + button {
+  border-left: 1px solid var(--border);
+}
+
+.segmented button.active {
+  background: var(--primary);
+  color: #fff;
+}
+
+/* Список нескольких вариантов с поиском (FilterableMultiSelect) */
+.filterable-multi__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.filterable-multi__bar input[type="search"] {
+  flex: 1 1 200px;
+}

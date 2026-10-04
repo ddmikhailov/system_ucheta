@@ -6,6 +6,7 @@ import { COLLECT_MODE_LABELS, FIELD_TYPE_LABELS, REVIEWER_LABELS } from "../cons
 import { todayIso } from "../utils/date";
 import type { DepartmentAdmin, DossierTarget, StudyGroupAdmin, TaskDetail, TaskField, TaskFieldType, TaskTemplate } from "../api/types";
 import { DEPARTMENT_SCOPED_ROLES, inRoles } from "../constants/roles";
+import FilterableMultiSelect from "./FilterableMultiSelect";
 
 type ScopeKind = "all" | "departments" | "courses" | "groups";
 
@@ -261,35 +262,23 @@ export default function TaskCreateForm({ onCreated, afterTask }: { onCreated: (t
         </div>
       )}
       {scopeKind === "groups" && (
-        <select
-          multiple
+        <FilterableMultiSelect
+          options={groups.map((g) => ({ value: String(g.id), label: `${g.code} (курс ${g.course})` }))}
+          selected={groupIds.map(String)}
+          onChange={(next) => setGroupIds(next.map(Number))}
           size={8}
-          style={{ width: "100%" }}
-          value={groupIds.map(String)}
-          onChange={(e) => setGroupIds(Array.from(e.target.selectedOptions, (o) => Number(o.value)))}
-        >
-          {groups.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.code} (курс {g.course})
-            </option>
-          ))}
-        </select>
+          ariaLabel="Группы"
+        />
       )}
       <details>
         <summary>Исключить группы</summary>
-        <select
-          multiple
+        <FilterableMultiSelect
+          options={groups.map((g) => ({ value: String(g.id), label: g.code }))}
+          selected={excludeIds.map(String)}
+          onChange={(next) => setExcludeIds(next.map(Number))}
           size={6}
-          style={{ width: "100%" }}
-          value={excludeIds.map(String)}
-          onChange={(e) => setExcludeIds(Array.from(e.target.selectedOptions, (o) => Number(o.value)))}
-        >
-          {groups.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.code}
-            </option>
-          ))}
-        </select>
+          ariaLabel="Исключить группы"
+        />
       </details>
         </>
       )}
