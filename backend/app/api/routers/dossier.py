@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, require_dept_editor
 from app.api.routers.students import _get_accessible_student
 from app.core import field_crypto
+from app.core.time import today_local
 from app.db.session import get_db
 from app.models import (
     DossierAccessLog,
@@ -23,6 +24,7 @@ from app.models import (
 from app.schemas.dossier import (
     AccessLogRead,
     DossierRead,
+    FollowUpIn,
     GuardianIn,
     GuardianRead,
     NoteIn,
@@ -31,6 +33,7 @@ from app.schemas.dossier import (
     ProfileUpdate,
     SpecialData,
 )
+from app.services import individual_work_service
 from app.services.audit_service import log_action
 
 router = APIRouter(prefix="/students/{student_id}/dossier", tags=["dossier"])
@@ -57,7 +60,8 @@ def _note_read(n: StudentNote, user: User) -> NoteRead:
     return NoteRead(
         id=n.id, kind=n.kind, text=n.text, author_id=n.author_id,
         author_name=n.author.full_name if n.author else None, created_at=n.created_at,
-        can_delete=is_admin or n.author_id == user.id,
+        can_delete=is_admin or n.author_id == user.id, occurred_on=n.occurred_on, follow_up_on=n.follow_up_on,
+        follow_up_done=n.follow_up_done,
     )
 
 
@@ -198,8 +202,35 @@ def add_note(
     user: User = Depends(get_current_user), db: Session = Depends(get_db),
 ):
     student = _student(db, user, student_id)
-    note = StudentNote(student_id=student.id, author_id=user.id, kind=payload.kind, text=payload.text.strip())
+    today = today_local()
+    if payload.occurred_on is not None and payload.occurred_on > today:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Дата события не может быть в будущем")
+    if payload.follow_up_on is not None and payload.follow_up_on < (payload.occurred_on or today):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Вернуться к вопросу нужно не раньше даты события")
+    note = StudentNote(
+        student_id=student.id, author_id=user.id, kind=payload.kind, text=payload.text.strip(),
+        occurred_on=payload.occurred_on or today, follow_up_on=payload.follow_up_on,
+    )
     db.add(note)
+    db.commit()
+    db.refresh(note)
+    return _note_read(note, user)
+
+
+@router.put("/notes/{note_id}/follow-up", response_model=NoteRead)
+def set_follow_up(
+    student_id: int, note_id: int, payload: FollowUpIn,
+    user: User = Depends(get_current_user), db: Session = Depends(get_db),
+):
+    """Отметить «вернуться к вопросу» выполненным (или вернуть в работу) — может любой, у кого есть доступ к досье."""
+    student = _student(db, user, student_id)
+    note = db.get(StudentNote, note_id)
+    if note is None or note.student_id != student.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Заметка не найдена")
+    try:
+        individual_work_service.set_follow_up_done(db, user, note, payload.done)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
     db.commit()
     db.refresh(note)
     return _note_read(note, user)

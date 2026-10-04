@@ -11,6 +11,7 @@ import AdminPage from "./pages/AdminPage";
 import StudentCardPage from "./pages/StudentCardPage";
 import { DOSSIER_STAFF_ROLES, MANAGEMENT_ROLES, inRoles } from "./constants/roles";
 import StudentsSearchPage from "./pages/StudentsSearchPage";
+import IndividualWorkPage from "./pages/IndividualWorkPage";
 import PassportPage from "./pages/PassportPage";
 import TasksPage from "./pages/TasksPage";
 import MyTasksPage from "./pages/MyTasksPage";
@@ -146,6 +147,16 @@ export default function App() {
               <RequireAuth>
                 <Layout>
                   <PassportPage />
+                </Layout>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/individual-work"
+            element={
+              <RequireAuth>
+                <Layout>
+                  <IndividualWorkPage />
                 </Layout>
               </RequireAuth>
             }

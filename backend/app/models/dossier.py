@@ -49,6 +49,10 @@ class StudentNote(Base):
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    # Журнал индивидуальной работы: когда это было (по умолчанию — день записи) и когда вернуться к вопросу.
+    occurred_on: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
+    follow_up_on: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
+    follow_up_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
 
     author: Mapped["User"] = relationship()
 

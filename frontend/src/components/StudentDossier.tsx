@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { api, ApiError } from "../api/client";
-import { formatServerDateTimeFull } from "../utils/date";
+import { formatDateRu, formatServerDateTimeFull, todayIso } from "../utils/date";
 import type { Dossier, DossierAccessEntry, DossierProfile, DossierSpecial } from "../api/types";
 
 const NOTE_KINDS: Record<string, string> = {
   conversation: "Беседа",
   call: "Звонок",
+  parent_invited: "Вызов родителей",
+  prevention_council: "Совет профилактики",
+  home_visit: "Визит домой",
   incident: "Инцидент",
   agreement: "Договорённость",
   other: "Другое",
@@ -337,17 +340,31 @@ function Notes({
 }) {
   const [kind, setKind] = useState("conversation");
   const [text, setText] = useState("");
+  const [occurredOn, setOccurredOn] = useState(todayIso());
+  const [followUpOn, setFollowUpOn] = useState("");
   const base = `/students/${studentId}/dossier/notes`;
 
   async function add(e: FormEvent) {
     e.preventDefault();
     onError(null);
     try {
-      await api.post(base, { kind, text });
+      await api.post(base, { kind, text, occurred_on: occurredOn || null, ...(followUpOn ? { follow_up_on: followUpOn } : {}) });
       setText("");
+      setFollowUpOn("");
+      setOccurredOn(todayIso());
       onChanged();
     } catch (err) {
       onError(err instanceof ApiError ? err.message : "Не удалось добавить заметку");
+    }
+  }
+
+  async function setDone(id: number, done: boolean) {
+    onError(null);
+    try {
+      await api.put(`${base}/${id}/follow-up`, { done });
+      onChanged();
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : "Не удалось изменить заметку");
     }
   }
 
@@ -364,7 +381,7 @@ function Notes({
 
   return (
     <>
-      <h3 className="student-card__section">Заметки куратора</h3>
+      <h3 className="student-card__section">Индивидуальная работа и заметки</h3>
       <form className="add-block" onSubmit={add}>
         <div className="inline-form">
           <select value={kind} onChange={(e) => setKind(e.target.value)}>
@@ -374,6 +391,10 @@ function Notes({
               </option>
             ))}
           </select>
+          <label>
+            Дата{" "}
+            <input type="date" value={occurredOn} max={todayIso()} onChange={(e) => setOccurredOn(e.target.value)} />
+          </label>
           <input
             placeholder="Что произошло, о чём договорились"
             value={text}
@@ -381,6 +402,10 @@ function Notes({
             required
             style={{ flex: 1, minWidth: 200 }}
           />
+          <label title="Когда напомнить вернуться к вопросу (необязательно)">
+            Вернуться к вопросу{" "}
+            <input type="date" value={followUpOn} min={occurredOn || todayIso()} onChange={(e) => setFollowUpOn(e.target.value)} />
+          </label>
           <button type="submit">Добавить</button>
         </div>
       </form>
@@ -400,10 +425,25 @@ function Notes({
           <tbody>
             {dossier.notes.map((n) => (
               <tr key={n.id}>
-                <td data-label="Дата">{formatServerDateTimeFull(n.created_at)}</td>
+                <td data-label="Дата">{n.occurred_on ? formatDateRu(n.occurred_on) : formatServerDateTimeFull(n.created_at)}</td>
                 <td data-label="Тип">{NOTE_KINDS[n.kind] ?? n.kind}</td>
                 <td data-label="Заметка" style={{ whiteSpace: "pre-wrap" }}>
                   {n.text}
+                  {n.follow_up_on && (
+                    <div className="hint">
+                      {n.follow_up_done ? (
+                        <>Вернуться к вопросу: выполнено </>
+                      ) : (
+                        <b className={n.follow_up_on < todayIso() ? "error-text" : undefined}>
+                          Вернуться к вопросу до {formatDateRu(n.follow_up_on)}
+                          {n.follow_up_on < todayIso() ? " (просрочено)" : ""}{" "}
+                        </b>
+                      )}
+                      <button className="link-btn" onClick={() => setDone(n.id, !n.follow_up_done)}>
+                        {n.follow_up_done ? "Вернуть в работу" : "Выполнено"}
+                      </button>
+                    </div>
+                  )}
                 </td>
                 <td data-label="Автор">{n.author_name ?? "—"}</td>
                 <td>

@@ -54,6 +54,11 @@ export default function Layout({ children }: { children: ReactNode }) {
               Соц. паспорт
             </NavLink>
           )}
+          {(inRoles(user?.role, VIEWER_ROLES) || leadsGroups(user)) && (
+            <NavLink to="/individual-work" className={({ isActive }) => (isActive ? "active" : "")}>
+              Индивидуальная работа
+            </NavLink>
+          )}
           {inRoles(user?.role, MANAGEMENT_ROLES) && (
             <NavLink to="/admin" className={({ isActive }) => (isActive ? "active" : "")}>
               Админка

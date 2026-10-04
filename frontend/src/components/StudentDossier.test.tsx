@@ -1,8 +1,9 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "../api/client";
 import type { Dossier, DossierSpecial } from "../api/types";
+import { todayIso } from "../utils/date";
 import StudentDossier from "./StudentDossier";
 
 vi.mock("../api/client", async (importOriginal) => {
@@ -165,7 +166,7 @@ describe("StudentDossier — представители", () => {
 });
 
 describe("StudentDossier — заметки и журнал", () => {
-  const NOTE = { id: 9, kind: "call", text: "Звонок маме", author_id: 2, author_name: "Куратор К.", created_at: "2026-10-01T09:00:00", can_delete: true };
+  const NOTE = { id: 9, kind: "call", text: "Звонок маме", author_id: 2, author_name: "Куратор К.", created_at: "2026-10-01T09:00:00", can_delete: true, occurred_on: null, follow_up_on: null, follow_up_done: false };
 
   it("добавляет заметку выбранного типа", async () => {
     const user = userEvent.setup();
@@ -175,7 +176,43 @@ describe("StudentDossier — заметки и журнал", () => {
     await user.type(screen.getByPlaceholderText(/Что произошло/), "Конфликт на паре");
     post.mockResolvedValue({});
     await user.click(within(noteForm()).getByRole("button", { name: "Добавить" }));
-    expect(post).toHaveBeenCalledWith("/students/10/dossier/notes", { kind: "incident", text: "Конфликт на паре" });
+    expect(post).toHaveBeenCalledWith("/students/10/dossier/notes", { kind: "incident", text: "Конфликт на паре", occurred_on: todayIso() });
+  });
+
+  it("новые виды записей и «вернуться к вопросу» уходят на сервер", async () => {
+    const user = userEvent.setup();
+    open(dossier());
+    await screen.findByText("Заметок пока нет.");
+    const form = noteForm();
+    expect(within(form).getByRole("option", { name: "Вызов родителей" })).toBeInTheDocument();
+    expect(within(form).getByRole("option", { name: "Совет профилактики" })).toBeInTheDocument();
+    expect(within(form).getByRole("option", { name: "Визит домой" })).toBeInTheDocument();
+    await user.selectOptions(within(form).getByRole("combobox"), "parent_invited");
+    await user.type(screen.getByPlaceholderText(/Что произошло/), "Пригласили маму");
+    fireEvent.change(within(form).getByLabelText("Дата"), { target: { value: "2026-10-02" } });
+    fireEvent.change(within(form).getByLabelText(/Вернуться к вопросу/), { target: { value: "2026-10-09" } });
+    post.mockResolvedValue({});
+    await user.click(within(form).getByRole("button", { name: "Добавить" }));
+    expect(post).toHaveBeenCalledWith("/students/10/dossier/notes", {
+      kind: "parent_invited", text: "Пригласили маму", occurred_on: "2026-10-02", follow_up_on: "2026-10-09",
+    });
+  });
+
+  it("в списке: дата события, срок возврата с пометкой просрочки, «Выполнено» и «Вернуть в работу»", async () => {
+    const user = userEvent.setup();
+    const overdue = { ...NOTE, id: 11, text: "Беседа", kind: "conversation", occurred_on: "2026-09-20", follow_up_on: "2026-09-27" };
+    const done = { ...NOTE, id: 12, text: "Совет", kind: "prevention_council", occurred_on: "2026-09-21", follow_up_on: "2026-09-30", follow_up_done: true };
+    open(dossier({ notes: [overdue, done] }));
+    const row = (await screen.findByText("20.09.2026")).closest("tr") as HTMLElement;
+    expect(within(row).getByText("20.09.2026")).toBeInTheDocument();
+    expect(within(row).getByText(/Вернуться к вопросу до 27\.09\.2026 \(просрочено\)/)).toBeInTheDocument();
+    put.mockResolvedValue({});
+    await user.click(within(row).getByRole("button", { name: "Выполнено" }));
+    expect(put).toHaveBeenCalledWith("/students/10/dossier/notes/11/follow-up", { done: true });
+    const doneRow = screen.getByText("21.09.2026").closest("tr") as HTMLElement;
+    expect(within(doneRow).getByText(/выполнено/)).toBeInTheDocument();
+    await user.click(within(doneRow).getByRole("button", { name: "Вернуть в работу" }));
+    expect(put).toHaveBeenCalledWith("/students/10/dossier/notes/12/follow-up", { done: false });
   });
 
   it("кнопка «Удалить» у заметки только там, где разрешено", async () => {

@@ -25,7 +25,7 @@ from app.models import (
     AuditLog, CuratorAssignment, InAppNotification, RoleCode, Student, StudyGroup, Task, TaskAssignment, TaskComment, TaskRow, TaskTemplate, User,
 )
 from app.schemas.tasks import FieldDef, Progress, ScopeDef, TaskCreate
-from app.services import attendance_service, in_app_notification_service, task_dossier
+from app.services import attendance_service, in_app_notification_service, individual_work_service, task_dossier
 from app.services.access_service import get_curator_group_ids
 
 TASK_MANAGER_ROLES = (RoleCode.ADMIN, RoleCode.EDU_DEPARTMENT, RoleCode.TUTOR, RoleCode.DEPT_HEAD)
@@ -689,6 +689,7 @@ def generate_reminders(db: Session, user: User, today: datetime.date | None = No
             if can_review(user, a):
                 remind("task_review_waiting", a,
                        f"Ждёт проверки больше {REVIEW_WAIT_DAYS} дн.: «{a.task.title}», группа {a.study_group.code}.")
+    created += individual_work_service.generate_followup_reminders(db, user, today)
     return created
 
 

@@ -44,6 +44,28 @@ export interface DossierNote {
   author_name: string | null;
   created_at: string;
   can_delete: boolean;
+  occurred_on: string | null;
+  follow_up_on: string | null;
+  follow_up_done: boolean;
+}
+
+export interface IndividualWorkRow {
+  student_id: number;
+  full_name: string;
+  risk_streak: number;
+  is_risk: boolean;
+  work_count: number;
+  last_work_on: string | null;
+  next_follow_up_on: string | null;
+  follow_up_overdue: boolean;
+  needs_attention: boolean;
+}
+
+export interface IndividualWorkGroup {
+  group_id: number;
+  group_code: string;
+  no_work_days: number;
+  rows: IndividualWorkRow[];
 }
 
 export interface Dossier {

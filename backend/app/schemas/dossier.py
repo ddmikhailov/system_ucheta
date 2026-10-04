@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-NoteKind = Literal["conversation", "call", "incident", "agreement", "other"]
+NoteKind = Literal["conversation", "call", "parent_invited", "prevention_council", "home_visit", "incident", "agreement", "other"]
 
 
 class ProfileFields(BaseModel):
@@ -51,6 +51,12 @@ class GuardianRead(GuardianIn):
 class NoteIn(BaseModel):
     kind: NoteKind = "other"
     text: str = Field(min_length=1, max_length=5000)
+    occurred_on: datetime.date | None = None  # когда это было; по умолчанию — сегодня
+    follow_up_on: datetime.date | None = None  # когда вернуться к вопросу
+
+
+class FollowUpIn(BaseModel):
+    done: bool
 
 
 class NoteRead(BaseModel):
@@ -61,6 +67,9 @@ class NoteRead(BaseModel):
     author_name: str | None
     created_at: datetime.datetime
     can_delete: bool
+    occurred_on: datetime.date | None = None
+    follow_up_on: datetime.date | None = None
+    follow_up_done: bool = False
 
 
 class DossierRead(BaseModel):
