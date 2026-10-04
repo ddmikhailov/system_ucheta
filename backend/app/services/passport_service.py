@@ -7,14 +7,14 @@
 import datetime
 from dataclasses import dataclass, field
 
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import DEPARTMENT_SCOPED_ROLES, DOSSIER_STAFF_ROLES, get_curator_group_ids
 from app.core import field_crypto
 from app.core.time import today_local
-from app.models import RoleCode, Student, StudentGuardian, StudentProfile, StudyGroup, User
+from app.models import RoleCode, Student, StudentGroupMembership, StudentGuardian, StudentProfile, StudyGroup, User
 from app.schemas.dossier import SpecialData
-from app.services import attendance_service
 
 # (ключ, название, функция по SpecialData)
 CATEGORIES: list[tuple[str, str, callable]] = [
@@ -54,7 +54,7 @@ def accessible_groups(db: Session, user: User, department_id: int | None = None)
     и тьютор — своего отделения, остальные (админ, воспитательный отдел, соц. педагог, психолог) — все."""
     today = today_local()
     role = RoleCode(user.role.code)
-    q = db.query(StudyGroup).filter(StudyGroup.is_active.is_(True))
+    q = db.query(StudyGroup).options(joinedload(StudyGroup.department)).filter(StudyGroup.is_active.is_(True))
     if role in DEPARTMENT_SCOPED_ROLES:
         q = q.filter(StudyGroup.department_id == user.department_id) if user.department_id is not None else q.filter(False)
     elif role in (RoleCode.ADMIN, RoleCode.EDU_DEPARTMENT, *DOSSIER_STAFF_ROLES):
@@ -67,15 +67,63 @@ def accessible_groups(db: Session, user: User, department_id: int | None = None)
     return q.order_by(StudyGroup.course, StudyGroup.code).all()
 
 
-def build_passport(db: Session, group: StudyGroup, today: datetime.date, with_names: bool) -> GroupPassport:
-    students: list[Student] = attendance_service.get_active_students(db, group.id, today)
-    ids = [s.id for s in students]
-    profiles = {p.student_id: p for p in db.query(StudentProfile).filter(StudentProfile.student_id.in_(ids)).all()} if ids else {}
-    with_guardians = (
-        {row[0] for row in db.query(StudentGuardian.student_id).filter(StudentGuardian.student_id.in_(ids)).distinct()}
-        if ids else set()
-    )
+def build_passports(
+    db: Session, groups: list[StudyGroup], today: datetime.date, with_names: bool
+) -> list[GroupPassport]:
+    """Паспорта сразу нескольких групп: число запросов не зависит от числа групп (состав групп,
+    студенты, профили и представители грузятся по одному запросу на всю выборку)."""
+    if not groups:
+        return []
+    group_ids = [g.id for g in groups]
+    # Кто числится в группе сегодня — по истории членства, как в журнале посещаемости.
+    member_rows = db.execute(
+        select(StudentGroupMembership.study_group_id, StudentGroupMembership.student_id).where(
+            StudentGroupMembership.study_group_id.in_(group_ids),
+            StudentGroupMembership.start_date <= today,
+            (StudentGroupMembership.end_date.is_(None)) | (StudentGroupMembership.end_date >= today),
+        )
+    ).all()
+    student_ids = list({r.student_id for r in member_rows})
+    students: dict[int, Student] = {}
+    if student_ids:
+        students = {
+            s.id: s for s in db.execute(
+                select(Student).where(
+                    Student.id.in_(student_ids), Student.enrolled_at <= today,
+                    (Student.left_at.is_(None)) | (Student.left_at >= today),
+                )
+            ).scalars()
+        }
+    by_group: dict[int, list[Student]] = {gid: [] for gid in group_ids}
+    for r in member_rows:
+        if r.student_id in students:
+            by_group[r.study_group_id].append(students[r.student_id])
+    for roster in by_group.values():
+        roster.sort(key=lambda s: (s.last_name, s.first_name))
+
+    profiles: dict[int, StudentProfile] = {}
+    with_guardians: set[int] = set()
+    if students:
+        ids = list(students)
+        profiles = {p.student_id: p for p in db.query(StudentProfile).filter(StudentProfile.student_id.in_(ids))}
+        with_guardians = {
+            row[0] for row in db.query(StudentGuardian.student_id).filter(StudentGuardian.student_id.in_(ids)).distinct()
+        }
     encryption_ok = field_crypto.is_available()
+    return [
+        _passport_for(group, by_group[group.id], profiles, with_guardians, today, with_names, encryption_ok)
+        for group in groups
+    ]
+
+
+def build_passport(db: Session, group: StudyGroup, today: datetime.date, with_names: bool) -> GroupPassport:
+    return build_passports(db, [group], today, with_names)[0]
+
+
+def _passport_for(
+    group: StudyGroup, students: list[Student], profiles: dict[int, StudentProfile], with_guardians: set[int],
+    today: datetime.date, with_names: bool, encryption_ok: bool,
+) -> GroupPassport:
     result = GroupPassport(group=group, students_total=len(students), special_available=encryption_ok)
     result.counts = {key: 0 for key, _, _ in CATEGORIES}
     result.names = {key: [] for key, _, _ in CATEGORIES}

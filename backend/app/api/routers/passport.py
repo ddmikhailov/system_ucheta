@@ -105,15 +105,16 @@ def _log_named_view(db: Session, user: User, passport: svc.GroupPassport) -> Non
 def group_passport(group_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     group = _group_or_403(db, user, group_id)
     passport = svc.build_passport(db, group, today_local(), with_names=True)
+    result = _passport_read(passport)  # до commit(): после него объекты считаются устаревшими
     _log_named_view(db, user, passport)
     log_action(db, user, "passport.view", "study_group", str(group.id))
     db.commit()
-    return _passport_read(passport)
+    return result
 
 
 def _summary(db: Session, user: User, department_id: int | None) -> tuple[list[svc.GroupPassport], bool]:
     today = today_local()
-    passports = [svc.build_passport(db, g, today, with_names=False) for g in svc.accessible_groups(db, user, department_id)]
+    passports = svc.build_passports(db, svc.accessible_groups(db, user, department_id), today, with_names=False)
     return passports, all(p.special_available for p in passports)
 
 
@@ -146,13 +147,16 @@ def summary(
     department_id: int | None = None, user: User = Depends(get_current_user), db: Session = Depends(get_db),
 ):
     passports, special_ok = _summary(db, user, department_id)
-    log_action(db, user, "passport.summary", "department", str(department_id or "all"))
-    db.commit()
-    return SummaryRead(
+    # Ответ собираем до commit(): после него все объекты групп считаются устаревшими и каждая
+    # перечитывалась бы отдельным запросом (на 44 группы — 44 лишних запроса).
+    result = SummaryRead(
         special_available=special_ok,
         categories=[{"key": k, "title": t} for k, t, _ in svc.CATEGORIES],
         rows=[_row(p) for p in passports], totals=_totals(passports),
     )
+    log_action(db, user, "passport.summary", "department", str(department_id or "all"))
+    db.commit()
+    return result
 
 
 _XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

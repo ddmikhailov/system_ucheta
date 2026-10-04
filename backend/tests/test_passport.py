@@ -119,3 +119,57 @@ def test_export_excel_summary_and_group_lists(client, curator_headers, curator_g
 def test_staff_and_edu_department_see_all_groups(client, edu_department_headers, db, imported):
     data = client.get("/passport/summary", headers=edu_department_headers).json()
     assert len(data["rows"]) == db.query(StudyGroup).filter(StudyGroup.is_active.is_(True)).count()
+
+
+# ---------- число запросов не должно расти с числом групп ----------
+
+def _count_queries(db_engine, action):
+    from sqlalchemy import event
+
+    counter = {"n": 0}
+
+    def on_execute(*_args):
+        counter["n"] += 1
+
+    event.listen(db_engine, "before_cursor_execute", on_execute)
+    try:
+        action()
+    finally:
+        event.remove(db_engine, "before_cursor_execute", on_execute)
+    return counter["n"]
+
+
+def test_summary_query_count_does_not_grow_with_the_number_of_groups(client, admin_headers, imported, db, test_engine):
+    """Сводка раньше делала ~5 запросов на каждую группу (222 на 44 группы)."""
+    groups = db.query(StudyGroup).filter(StudyGroup.is_active.is_(True)).order_by(StudyGroup.id).all()
+    assert len(groups) > 10
+    client.get("/passport/summary", headers=admin_headers)  # прогрев: вход, импорты
+
+    def summary():
+        assert client.get("/passport/summary", headers=admin_headers).status_code == 200
+
+    def one_department_slice():  # та же сводка по одной группе — для сравнения (department_id группы с одной строкой нет)
+        assert client.get(f"/passport/group/{groups[0].id}", headers=admin_headers).status_code == 200
+
+    all_groups = _count_queries(test_engine, summary)
+    one_group = _count_queries(test_engine, one_department_slice)
+    assert all_groups <= 15, f"{all_groups} запросов на {len(groups)} групп"
+    assert all_groups <= one_group + 10  # 44 группы стоят почти столько же, сколько одна
+
+
+def test_summary_numbers_match_the_single_group_passport(client, admin_headers, curator_headers, curator_group, imported, db):
+    """Пакетный расчёт сводки и поштучный паспорт группы дают одни и те же цифры."""
+    students = _group_students(db, curator_group)[:3]
+    _fill(client, curator_headers, students[0], birth_date="2010-01-01", funding="budget", special={"is_orphan": True})
+    _fill(client, curator_headers, students[1], funding="contract", special={"large_family": True, "pdn_kdn": True})
+    client.post(f"/students/{students[2].id}/dossier/guardians", headers=curator_headers,
+                json={"full_name": "Мать", "relation": "мать"})
+
+    summary = client.get("/passport/summary", headers=admin_headers).json()
+    row = next(r for r in summary["rows"] if r["group_id"] == curator_group.id)
+    single = client.get(f"/passport/group/{curator_group.id}", headers=admin_headers).json()
+    assert row["students_total"] == single["students_total"]
+    assert (row["minors"], row["budget"], row["contract"]) == (single["minors"], single["budget"], single["contract"])
+    assert (row["no_guardians"], row["dossier_empty"]) == (single["no_guardians"], single["dossier_empty"])
+    assert row["counts"] == {c["key"]: c["count"] for c in single["categories"]}
+    assert summary["totals"]["students_total"] == sum(r["students_total"] for r in summary["rows"])
