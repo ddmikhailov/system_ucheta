@@ -9,10 +9,10 @@ from sqlalchemy.orm import Session, joinedload
 from app.api.deps import get_current_user, require_roles
 from app.core.time import today_local
 from app.db.session import get_db
-from app.models import RoleCode, StudyGroup, Task, TaskAssignment, TaskComment, User
+from app.models import RoleCode, StudyGroup, Task, TaskAssignment, TaskComment, TaskTemplate, User
 from app.schemas.tasks import (
     AnswersIn, AssignmentDetail, AssignmentSummary, CommentIn, CommentRead, FieldDef, MyAssignmentRow,
-    HistoryEvent, ReviewIn, ReviewQueueRow, RowRead, ScopeDef, TaskCreate, TaskDetail, TaskListRow, TaskUpdate,
+    HistoryEvent, ReviewIn, ReviewQueueRow, RowRead, ScopeDef, TaskCreate, TaskDetail, TaskListRow, TaskUpdate, TemplateCreate, TemplateRead,
 )
 from app.services import attendance_service
 from app.services.access_service import get_curator_group_ids
@@ -57,6 +57,49 @@ def create_task(payload: TaskCreate, user: User = Depends(require_task_manager),
 def dossier_fields(user: User = Depends(require_task_manager)):
     """Поля досье, к которым можно привязать поле формы (для конструктора)."""
     return task_dossier.targets_list()
+
+
+def _template_read(t: TaskTemplate, user: User) -> TemplateRead:
+    data = json.loads(t.payload_json)
+    return TemplateRead(
+        id=t.id, name=t.name, author_name=t.author.full_name if t.author else None, created_at=t.created_at,
+        can_manage=RoleCode(user.role.code) == RoleCode.ADMIN or t.created_by == user.id,
+        title=data["title"], description=data.get("description"), collect_mode=data["collect_mode"],
+        reviewer_rule=data["reviewer_rule"], fields=[FieldDef(**f) for f in data["fields"]],
+        scope=ScopeDef(**data["scope"]),
+    )
+
+
+@router.get("/templates", response_model=list[TemplateRead])
+def list_templates(user: User = Depends(require_task_manager), db: Session = Depends(get_db)):
+    return [_template_read(t, user) for t in db.query(TaskTemplate).order_by(TaskTemplate.name, TaskTemplate.id)]
+
+
+@router.post("/templates", response_model=TemplateRead, status_code=status.HTTP_201_CREATED)
+def create_template(payload: TemplateCreate, user: User = Depends(require_task_manager), db: Session = Depends(get_db)):
+    """Сохраняет существующую задачу как шаблон (без срока)."""
+    task = _task_or_404(db, payload.task_id)
+    if not svc.visible_assignments(db, user, task) and task.created_by != user.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Нет доступа к этой задаче")
+    template = svc.template_from_task(task, user, payload.name)
+    db.add(template)
+    db.flush()
+    log_action(db, user, "task.template_create", "task_template", str(template.id), new_value=template.name)
+    db.commit()
+    db.refresh(template)
+    return _template_read(template, user)
+
+
+@router.delete("/templates/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_template(template_id: int, user: User = Depends(require_task_manager), db: Session = Depends(get_db)):
+    template = db.get(TaskTemplate, template_id)
+    if template is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Шаблон не найден")
+    if not _template_read(template, user).can_manage:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Удалить шаблон может его автор или администратор")
+    log_action(db, user, "task.template_delete", "task_template", str(template.id), old_value=template.name)
+    db.delete(template)
+    db.commit()
 
 
 @router.get("", response_model=list[TaskListRow])

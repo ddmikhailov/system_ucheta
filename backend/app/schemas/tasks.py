@@ -38,6 +38,25 @@ class TaskCreate(BaseModel):
     scope: ScopeDef
 
 
+class TemplateCreate(BaseModel):
+    task_id: int
+    name: str | None = Field(default=None, max_length=255)
+
+
+class TemplateRead(BaseModel):
+    id: int
+    name: str
+    author_name: str | None
+    created_at: datetime.datetime
+    can_manage: bool
+    title: str
+    description: str | None
+    collect_mode: str
+    reviewer_rule: str
+    fields: list[FieldDef]
+    scope: ScopeDef
+
+
 class TaskUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=5000)

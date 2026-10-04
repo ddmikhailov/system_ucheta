@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api, downloadFile } from "../api/client";
 import type { TaskDetail, TaskListRow } from "../api/types";
 import { renderPage } from "../test/utils";
+import { REVIEWER_LABELS } from "../constants/tasks";
 import TasksPage from "./TasksPage";
 
 vi.mock("../api/client", async (importOriginal) => {
@@ -43,11 +44,24 @@ const DOSSIER_TARGETS = [
   { key: "additional_education", label: "Дополнительное образование", types: ["text", "multiselect"] },
 ];
 
+let templates: object[] = [];
+
+const TEMPLATE = {
+  id: 4, name: "Ежегодная сверка", author_name: "Админ", created_at: "2026-09-01T10:00:00", can_manage: true,
+  title: "Сверка контактов", description: "Проверить телефоны", collect_mode: "selected", reviewer_rule: "two_step",
+  fields: [
+    { key: "f1", label: "Телефон", type: "text", required: true, options: [], dossier_field: "phone" },
+    { key: "f2", label: "Кружки", type: "multiselect", required: false, options: ["Спорт", "Танцы"], dossier_field: null },
+  ],
+  scope: { all_groups: false, department_ids: [], courses: [1, 2], group_ids: [], exclude_group_ids: [5] },
+};
+
 function mockApi(over: { list?: TaskListRow[]; queue?: object[]; detail?: TaskDetail } = {}) {
   get.mockImplementation(async (path: string) => {
     if (path === "/tasks") return over.list ?? LIST;
     if (path === "/tasks/review-queue") return over.queue ?? [];
     if (path === "/tasks/dossier-fields") return DOSSIER_TARGETS;
+    if (path === "/tasks/templates") return templates;
     if (path.startsWith("/tasks/")) return over.detail ?? DETAIL;
     if (path === "/admin/departments") return [{ id: 1, name: "Диджитал", is_active: true }, { id: 2, name: "Моссовет", is_active: true }];
     if (path === "/admin/groups") return [{ id: 1, code: "СА172", course: 1, is_active: true }, { id: 2, code: "ИИ112", course: 1, is_active: true }];
@@ -56,6 +70,7 @@ function mockApi(over: { list?: TaskListRow[]; queue?: object[]; detail?: TaskDe
 }
 
 beforeEach(() => {
+  templates = [];
   for (const fn of [get, post, patch, del, download]) fn.mockReset();
   download.mockResolvedValue(undefined);
 });
@@ -165,6 +180,31 @@ describe("TasksPage — карточка задачи", () => {
     expect(screen.getByRole("button", { name: "Выгрузить в Excel" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Закрыть задачу" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Удалить" })).not.toBeInTheDocument();
+  });
+
+  it("«Сохранить как шаблон»: запрашивает название, сохраняет и сообщает; доступно и не-автору", async () => {
+    const user = userEvent.setup();
+    mockApi({ detail: { ...DETAIL, can_manage: false } });
+    post.mockResolvedValue({});
+    const prompt = vi.spyOn(window, "prompt").mockReturnValue("Ежегодная сверка");
+    openTask();
+    await user.click(await screen.findByRole("button", { name: "Сохранить как шаблон" }));
+    expect(prompt).toHaveBeenCalledWith("Название шаблона", "Кружки доп. образования");
+    expect(post).toHaveBeenCalledWith("/tasks/templates", { task_id: DETAIL.id, name: "Ежегодная сверка" });
+    expect(await screen.findByText(/Шаблон «Ежегодная сверка» сохранён/)).toBeInTheDocument();
+  });
+
+  it("отмена в окне названия ничего не сохраняет; ошибка сервера показывается", async () => {
+    const user = userEvent.setup();
+    mockApi();
+    openTask();
+    const prompt = vi.spyOn(window, "prompt").mockReturnValueOnce(null);
+    await user.click(await screen.findByRole("button", { name: "Сохранить как шаблон" }));
+    expect(post).not.toHaveBeenCalled();
+    prompt.mockReturnValueOnce("X");
+    post.mockRejectedValueOnce(new ApiError(403, "Нет доступа к этой задаче"));
+    await user.click(screen.getByRole("button", { name: "Сохранить как шаблон" }));
+    expect(await screen.findByText("Нет доступа к этой задаче")).toBeInTheDocument();
   });
 
   it("закрывает задачу и перезагружает карточку", async () => {
@@ -338,6 +378,60 @@ describe("TasksPage — создание задачи", () => {
     await user.click(screen.getByRole("button", { name: "Создать и разослать" }));
     const sent = post.mock.calls[0][1] as { fields: Array<Record<string, unknown>> };
     expect(sent.fields[0]).not.toHaveProperty("dossier_field");
+  });
+
+  it("шаблон заполняет форму целиком, кроме срока; запрос уходит с полями шаблона", async () => {
+    templates = [TEMPLATE];
+    const user = await openForm();
+    post.mockResolvedValue(DETAIL);
+    await user.selectOptions(screen.getByLabelText("Шаблон"), "4");
+    expect(screen.getByPlaceholderText("Название")).toHaveValue("Сверка контактов");
+    expect(screen.getByPlaceholderText(/Описание/)).toHaveValue("Проверить телефоны");
+    expect(screen.getByDisplayValue("По выбранным студентам")).toBeInTheDocument();
+    expect(screen.getByDisplayValue(REVIEWER_LABELS.two_step)).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Телефон")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Спорт, Танцы")).toBeInTheDocument();
+    expect(screen.getAllByLabelText("Записать в досье")[0]).toHaveValue("phone");
+    expect(screen.getByLabelText(/1 курс/)).toBeChecked();
+    expect(screen.getByLabelText(/3 курс/)).not.toBeChecked();
+
+    await user.click(screen.getByRole("button", { name: "Создать и разослать" }));
+    expect(post).toHaveBeenCalledWith("/tasks", expect.objectContaining({
+      title: "Сверка контактов", collect_mode: "selected", reviewer_rule: "two_step",
+      fields: [
+        expect.objectContaining({ label: "Телефон", type: "text", required: true, dossier_field: "phone" }),
+        expect.objectContaining({ label: "Кружки", type: "multiselect", options: ["Спорт", "Танцы"] }),
+      ],
+      scope: { all_groups: false, department_ids: [], courses: [1, 2], group_ids: [], exclude_group_ids: [5] },
+    }));
+  });
+
+  it("без шаблонов выбор не показывается", async () => {
+    templates = [];
+    await openForm();
+    expect(screen.queryByLabelText("Шаблон")).not.toBeInTheDocument();
+  });
+
+  it("удаление шаблона: подтверждение, запрос, шаблон исчезает из списка", async () => {
+    templates = [TEMPLATE];
+    const user = await openForm();
+    expect(screen.queryByRole("button", { name: "Удалить шаблон" })).not.toBeInTheDocument(); // пока не выбран
+    await user.selectOptions(screen.getByLabelText("Шаблон"), "4");
+    vi.spyOn(window, "confirm").mockReturnValueOnce(false);
+    await user.click(screen.getByRole("button", { name: "Удалить шаблон" }));
+    expect(del).not.toHaveBeenCalled();
+    vi.spyOn(window, "confirm").mockReturnValueOnce(true);
+    del.mockResolvedValue(undefined);
+    await user.click(screen.getByRole("button", { name: "Удалить шаблон" }));
+    expect(del).toHaveBeenCalledWith("/tasks/templates/4");
+    await vi.waitFor(() => expect(screen.queryByLabelText("Шаблон")).not.toBeInTheDocument());
+  });
+
+  it("чужой шаблон (can_manage=false) удалить нельзя — кнопки нет", async () => {
+    templates = [{ ...TEMPLATE, can_manage: false }];
+    const user = await openForm();
+    await user.selectOptions(screen.getByLabelText("Шаблон"), "4");
+    expect(screen.queryByRole("button", { name: "Удалить шаблон" })).not.toBeInTheDocument();
   });
 
   it("после создания открывается карточка задачи", async () => {

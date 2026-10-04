@@ -428,6 +428,20 @@ export interface TaskField {
   dossier_field?: string | null;
 }
 
+export interface TaskTemplate {
+  id: number;
+  name: string;
+  author_name: string | null;
+  created_at: string;
+  can_manage: boolean;
+  title: string;
+  description: string | null;
+  collect_mode: string;
+  reviewer_rule: string;
+  fields: TaskField[];
+  scope: TaskScope;
+}
+
 export interface DossierTarget {
   key: string;
   label: string;

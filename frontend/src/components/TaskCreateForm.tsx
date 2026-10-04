@@ -4,7 +4,7 @@ import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/useAuth";
 import { COLLECT_MODE_LABELS, FIELD_TYPE_LABELS, REVIEWER_LABELS } from "../constants/tasks";
 import { todayIso } from "../utils/date";
-import type { DepartmentAdmin, DossierTarget, StudyGroupAdmin, TaskDetail, TaskField, TaskFieldType } from "../api/types";
+import type { DepartmentAdmin, DossierTarget, StudyGroupAdmin, TaskDetail, TaskField, TaskFieldType, TaskTemplate } from "../api/types";
 import { DEPARTMENT_SCOPED_ROLES, inRoles } from "../constants/roles";
 
 type ScopeKind = "all" | "departments" | "courses" | "groups";
@@ -38,6 +38,8 @@ export default function TaskCreateForm({ onCreated }: { onCreated: (task: TaskDe
   const [departments, setDepartments] = useState<DepartmentAdmin[]>([]);
   const [groups, setGroups] = useState<StudyGroupAdmin[]>([]);
   const [targets, setTargets] = useState<DossierTarget[]>([]);
+  const [templates, setTemplates] = useState<TaskTemplate[]>([]);
+  const [templateId, setTemplateId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -48,6 +50,7 @@ export default function TaskCreateForm({ onCreated }: { onCreated: (task: TaskDe
       .then((all) => setGroups(all.filter((g) => g.is_active)))
       .catch(() => setGroups([]));
     api.get<DossierTarget[]>("/tasks/dossier-fields").then(setTargets).catch(() => setTargets([]));
+    api.get<TaskTemplate[]>("/tasks/templates").then(setTemplates).catch(() => setTemplates([]));
   }, []);
 
   const toggle = (list: number[], set: (v: number[]) => void, id: number) =>
@@ -82,6 +85,45 @@ export default function TaskCreateForm({ onCreated }: { onCreated: (task: TaskDe
         return { ...f, type, dossierField: target && !target.types.includes(type) ? "" : f.dossierField };
       })
     );
+
+  // Шаблон заполняет форму целиком, кроме срока: его всегда выбирают заново.
+  function applyTemplate(id: string) {
+    setTemplateId(id);
+    const t = templates.find((x) => String(x.id) === id);
+    if (!t) return;
+    setTitle(t.title);
+    setDescription(t.description ?? "");
+    setMode(t.collect_mode);
+    setReviewer(t.reviewer_rule);
+    setFields(
+      t.fields.map((f) => ({
+        label: f.label,
+        type: f.type,
+        required: f.required,
+        optionsText: f.options.join(", "),
+        dossierField: f.dossier_field ?? "",
+      }))
+    );
+    const s = t.scope;
+    setScopeKind(s.all_groups ? "all" : s.department_ids.length ? "departments" : s.courses.length ? "courses" : "groups");
+    setDepartmentIds(s.department_ids);
+    setCourses(s.courses);
+    setGroupIds(s.group_ids);
+    setExcludeIds(s.exclude_group_ids);
+    setError(null);
+  }
+
+  async function deleteTemplate() {
+    const t = templates.find((x) => String(x.id) === templateId);
+    if (!t || !window.confirm(`Удалить шаблон «${t.name}»? Созданные по нему задачи не изменятся.`)) return;
+    try {
+      await api.delete(`/tasks/templates/${t.id}`);
+      setTemplates((prev) => prev.filter((x) => x.id !== t.id));
+      setTemplateId("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не удалось удалить шаблон");
+    }
+  }
 
   const move = (i: number, delta: number) =>
     setFields((prev) => {
@@ -132,6 +174,24 @@ export default function TaskCreateForm({ onCreated }: { onCreated: (task: TaskDe
     <form className="add-block" onSubmit={submit}>
       <p className="add-block__title">Новая задача</p>
       {error && <div className="error-text">{error}</div>}
+
+      {templates.length > 0 && (
+        <div className="inline-form">
+          <select value={templateId} onChange={(e) => applyTemplate(e.target.value)} aria-label="Шаблон">
+            <option value="">Начать с пустой формы</option>
+            {templates.map((t) => (
+              <option key={t.id} value={t.id}>
+                Из шаблона: {t.name}
+              </option>
+            ))}
+          </select>
+          {templates.find((t) => String(t.id) === templateId)?.can_manage && (
+            <button type="button" className="link-btn" onClick={deleteTemplate}>
+              Удалить шаблон
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="inline-form">
         <input placeholder="Название" value={title} onChange={(e) => setTitle(e.target.value)} required style={{ flex: 1, minWidth: 220 }} />

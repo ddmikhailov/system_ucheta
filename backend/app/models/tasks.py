@@ -29,6 +29,22 @@ class Task(Base):
     assignments: Mapped[list["TaskAssignment"]] = relationship(back_populates="task", cascade="all, delete-orphan")
 
 
+class TaskTemplate(Base):
+    """Шаблон задачи: всё, кроме срока (его задают при запуске). Виден всем, кто создаёт задачи;
+    удалить может автор или администратор."""
+
+    __tablename__ = "task_templates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    # title, description, collect_mode, reviewer_rule, fields, scope — как в TaskCreate, без due_date
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+
+    author: Mapped["User | None"] = relationship()
+
+
 class TaskAssignment(Base):
     """Экземпляр задачи для одной группы: свой статус, свои ответы, своя проверка."""
 

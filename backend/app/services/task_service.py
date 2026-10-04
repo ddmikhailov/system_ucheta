@@ -22,7 +22,7 @@ from app.core.roles import DEPARTMENT_SCOPED_ROLES
 from app.core.time import today_local, utcnow
 from app.core.xlsx import append_row
 from app.models import (
-    AuditLog, CuratorAssignment, InAppNotification, RoleCode, Student, StudyGroup, Task, TaskAssignment, TaskComment, TaskRow, User,
+    AuditLog, CuratorAssignment, InAppNotification, RoleCode, Student, StudyGroup, Task, TaskAssignment, TaskComment, TaskRow, TaskTemplate, User,
 )
 from app.schemas.tasks import FieldDef, Progress, ScopeDef, TaskCreate
 from app.services import attendance_service, in_app_notification_service, task_dossier
@@ -178,6 +178,17 @@ def create_task(db: Session, creator: User, payload: TaskCreate) -> Task:
                 entity_type="task_assignment", entity_id=str(assignment.id),
             )
     return task
+
+
+def template_from_task(task: Task, user: User, name: str | None) -> TaskTemplate:
+    """Шаблон = задача без срока. Форма и охват берутся как сохранены (поля уже нормализованы)."""
+    payload = {
+        "title": task.title, "description": task.description, "collect_mode": task.collect_mode,
+        "reviewer_rule": task.reviewer_rule, "fields": json.loads(task.fields_json), "scope": json.loads(task.scope_json),
+    }
+    return TaskTemplate(
+        name=(name or "").strip() or task.title, created_by=user.id, payload_json=json.dumps(payload, ensure_ascii=False),
+    )
 
 
 def task_fields(task: Task) -> list[dict]:

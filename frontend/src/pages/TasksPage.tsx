@@ -160,6 +160,7 @@ function TaskView({ id, onBack, onDeleted }: { id: string; onBack: () => void; o
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(() => {
     api
@@ -184,6 +185,7 @@ function TaskView({ id, onBack, onDeleted }: { id: string; onBack: () => void; o
 
   const act = async (action: () => Promise<unknown>, fail: string, after: () => void) => {
     setError(null);
+    setNotice(null);
     try {
       await action();
       after();
@@ -216,6 +218,7 @@ function TaskView({ id, onBack, onDeleted }: { id: string; onBack: () => void; o
         <ProgressText p={task.progress} />
       </p>
       {error && <div className="error-text">{error}</div>}
+      {notice && <div className="day-status submitted">{notice}</div>}
 
       <p>
         <button
@@ -223,6 +226,21 @@ function TaskView({ id, onBack, onDeleted }: { id: string; onBack: () => void; o
           onClick={() => act(() => downloadFile(`/tasks/${task.id}/export`, `task_${task.id}.xlsx`), "Не удалось скачать файл", () => undefined)}
         >
           Выгрузить в Excel
+        </button>
+        {" · "}
+        <button
+          className="link-btn"
+          onClick={() => {
+            const name = window.prompt("Название шаблона", task.title);
+            if (name === null) return;
+            act(
+              () => api.post("/tasks/templates", { task_id: task.id, name }),
+              "Не удалось сохранить шаблон",
+              () => setNotice(`Шаблон «${name.trim() || task.title}» сохранён — он доступен при создании новой задачи`)
+            );
+          }}
+        >
+          Сохранить как шаблон
         </button>
         {task.can_manage && (
           <>
