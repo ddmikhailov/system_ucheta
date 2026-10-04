@@ -4,10 +4,11 @@
 Что делает:
   * отделение определяется по адресу площадки (ADDRESS_TO_DEPARTMENT), нужных
     отделений, которых ещё нет, заводит;
-  * группы: совпадение по коду; если в базе группа ещё под старым кодом без
-    года («ИИ112» → «ИИ112-26»), она переименовывается — вместе с кураторами,
-    историей и отметками (переименование разрешено, только если у старой
-    группы есть общие студенты с новой, иначе это просто разные группы);
+  * группы: код на платформе — без хвоста реестра (год набора «-26» или
+    номер подгруппы «.8»): «ИИ112-26» → «ИИ112»; группы, отличавшиеся только
+    хвостом, считаются одной — студенты подгрупп переходят в основную, а
+    опустевшие подгруппы скрываются. Существующая группа переименовывается
+    вместе с кураторами, историей и отметками;
   * студенты: совпадение по группе + ФИО; не найденного в своей группе ищем по
     ФИО среди ещё не сопоставленных (однозначно) и переводим; иначе создаём;
     статус («Обучается» / «В академическом отпуске») берётся из реестра;
@@ -46,6 +47,7 @@ from app.models import (
     StudentStatus, StudyGroup,
 )
 from app.services import group_membership_service
+from app.services.erasure_service import erase_student_personal_data
 
 # Адрес площадки (как в реестре) → отделение.
 ADDRESS_TO_DEPARTMENT = {
@@ -60,14 +62,23 @@ STATUS_BY_TEXT = {
     "Обучается": StudentStatus.STUDYING,
     "В академическом отпуске": StudentStatus.ACADEMIC_LEAVE,
 }
-EXPECTED_HEADER = ("ФИО", "Дата рождения", "Пол", "Статус обучения")
-# Колонки реестра (после строки заголовка): ФИО, …, статус, …, группа, адрес, курс.
-COL_FIO, COL_STATUS, COL_GROUP, COL_ADDRESS, COL_COURSE = 0, 3, 6, 7, 8
+# Нужные колонки ищутся по названию в строке заголовка — порядок и наличие
+# остальных колонок (телефон, почта и т. п.) не важны, и эти данные в базу
+# не попадают.
+HEADER_FIO, HEADER_STATUS, HEADER_GROUP, HEADER_ADDRESS, HEADER_COURSE = (
+    "ФИО", "Статус обучения", "Учебная группа", "Адрес площадки", "Курс обучения",
+)
 # Дата зачисления для студентов, которых в базе ещё не было, — как у прошлого
 # импорта: отметки посещаемости на платформе начинаются с запуска.
 ENROLLED_AT = datetime.date(2026, 9, 1)
-# Старый код группы + «-26» (год набора) = код в реестре.
-LEGACY_SUFFIX = re.compile(r"-\d{2}")
+# Хвост кода группы в реестре — год набора («-26») или номер подгруппы («.8»):
+# на платформе группа называется без него («ИИ112»), а группы, отличавшиеся
+# только хвостом, считаются одной.
+CODE_SUFFIX = re.compile(r"(-\d{2}|\.\d+)$")
+
+
+def normalize_code(code: str) -> str:
+    return CODE_SUFFIX.sub("", code.strip())
 
 
 @dataclass(frozen=True)
@@ -88,31 +99,35 @@ class RegistryRow:
 def read_registry(path: str) -> list[RegistryRow]:
     workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
     rows = list(workbook.active.iter_rows(values_only=True))
+    needed = (HEADER_FIO, HEADER_STATUS, HEADER_GROUP, HEADER_ADDRESS, HEADER_COURSE)
     header_index = next(
-        (i for i, r in enumerate(rows) if tuple(r[: len(EXPECTED_HEADER)]) == EXPECTED_HEADER), None
+        (i for i, r in enumerate(rows) if all(name in [str(c).strip() for c in r if c is not None] for name in needed)),
+        None,
     )
     if header_index is None:
-        raise RuntimeError("В файле не найдена строка заголовка реестра (ФИО, Дата рождения, Пол, …).")
+        raise RuntimeError(f"В файле не найдена строка заголовка реестра с колонками: {', '.join(needed)}.")
+    titles = [str(c).strip() if c is not None else "" for c in rows[header_index]]
+    col_fio, col_status, col_group, col_address, col_course = (titles.index(name) for name in needed)
 
     result = []
     for number, row in enumerate(rows[header_index + 1:], start=header_index + 2):
-        if not row[COL_FIO]:
+        if not row[col_fio]:
             continue
-        parts = " ".join(str(row[COL_FIO]).split()).split(" ")
+        parts = " ".join(str(row[col_fio]).split()).split(" ")
         if len(parts) < 2:
-            raise RuntimeError(f"Строка {number}: в ФИО меньше двух слов — «{row[COL_FIO]}»")
-        status = STATUS_BY_TEXT.get(str(row[COL_STATUS]).strip())
+            raise RuntimeError(f"Строка {number}: в ФИО меньше двух слов — «{row[col_fio]}»")
+        status = STATUS_BY_TEXT.get(str(row[col_status]).strip())
         if status is None:
-            raise RuntimeError(f"Строка {number}: неизвестный статус обучения «{row[COL_STATUS]}»")
-        department = ADDRESS_TO_DEPARTMENT.get(str(row[COL_ADDRESS]).strip())
+            raise RuntimeError(f"Строка {number}: неизвестный статус обучения «{row[col_status]}»")
+        department = ADDRESS_TO_DEPARTMENT.get(str(row[col_address]).strip())
         if department is None:
-            raise RuntimeError(f"Строка {number}: неизвестный адрес площадки «{row[COL_ADDRESS]}»")
-        course_match = re.match(r"\s*(\d+)", str(row[COL_COURSE]))
-        if course_match is None or not row[COL_GROUP]:
+            raise RuntimeError(f"Строка {number}: неизвестный адрес площадки «{row[col_address]}»")
+        course_match = re.match(r"\s*(\d+)", str(row[col_course]))
+        if course_match is None or not row[col_group]:
             raise RuntimeError(f"Строка {number}: нет курса или группы")
         result.append(RegistryRow(
             last_name=parts[0], first_name=parts[1], middle_name=" ".join(parts[2:]) or None,
-            status=status, group=str(row[COL_GROUP]).strip(), department=department,
+            status=status, group=normalize_code(str(row[col_group])), department=department,
             course=int(course_match.group(1)),
         ))
     return result
@@ -161,28 +176,28 @@ def run(path: str, apply: bool, today: datetime.date | None = None) -> dict[str,
             students_by_group[s.study_group_id].append(s)
 
         # ---- группы ----
-        claimed = {code for code in registry_groups if code in groups}
+        # Код на платформе — без хвоста реестра. Основная группа: уже имеющая
+        # такой код, иначе самая многочисленная из групп, отличавшихся от него
+        # только хвостом («ИИ112-26», «ИИ112.8»), — её переименовываем. Остальные
+        # такие группы опустеют (их студентов ниже переведёт в основную по ФИО)
+        # и будут скрыты.
+        by_normalized: dict[str, list[StudyGroup]] = defaultdict(list)
+        for g in groups.values():
+            by_normalized[normalize_code(g.code)].append(g)
         for code, members in sorted(registry_groups.items()):
             department = departments[members[0].department]
             course = members[0].course
             if code not in groups:
-                names = {r.fio for r in members}
-                legacy = next(
-                    (
-                        g for old_code, g in sorted(groups.items())
-                        if old_code not in claimed and old_code not in registry_groups
-                        and code.startswith(old_code) and LEGACY_SUFFIX.fullmatch(code[len(old_code):])
-                        and any((s.last_name, s.first_name, s.middle_name or "") in names
-                                for s in students_by_group[g.id])
-                    ),
-                    None,
+                candidates = sorted(
+                    by_normalized.get(code, []),
+                    key=lambda g: (-len(students_by_group[g.id]), g.code),
                 )
-                if legacy is not None:
-                    print(f"~ группа {legacy.code} → {code}")
-                    del groups[legacy.code]
-                    legacy.code = code
-                    groups[code] = legacy
-                    claimed.add(code)
+                if candidates:
+                    primary = candidates[0]
+                    print(f"~ группа {primary.code} → {code}")
+                    del groups[primary.code]
+                    primary.code = code
+                    groups[code] = primary
                     stats["групп переименовано"] += 1
                 else:
                     groups[code] = StudyGroup(code=code, course=course, department_id=department.id)
@@ -264,6 +279,7 @@ def run(path: str, apply: bool, today: datetime.date | None = None) -> dict[str,
             db.query(AbsencePeriod).filter(AbsencePeriod.student_id.in_(chunk)).delete(synchronize_session=False)
             db.query(StudentGroupMembership).filter(
                 StudentGroupMembership.student_id.in_(chunk)).delete(synchronize_session=False)
+            erase_student_personal_data(db, chunk, include_access_log=True)
             db.query(AuditLog).filter(
                 AuditLog.entity_type == "student", AuditLog.entity_id.in_([str(i) for i in chunk])
             ).update({"old_value": "[обезличено]", "new_value": "[обезличено]"}, synchronize_session=False)

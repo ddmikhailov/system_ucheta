@@ -5,10 +5,18 @@ from app.api.deps import get_current_user
 from app.core.time import utcnow
 from app.db.session import get_db
 from app.models import InAppNotification, User
-from app.services import in_app_notification_service
+from app.services import in_app_notification_service, task_schedule, task_service
 from app.schemas.notifications import NotificationRead, UnreadCountResponse
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
+
+
+def _task_reminders(db: Session, user: User) -> None:
+    """Сроки задач проверяем при открытии платформы (колокольчик опрашивает эти ручки)."""
+    # Сначала периодические задачи: их «новая задача» тоже попадёт в этот же опрос.
+    task_schedule.run_due_templates(db)
+    if task_service.generate_reminders(db, user):
+        db.commit()
 
 
 @router.get("", response_model=list[NotificationRead])
@@ -17,6 +25,7 @@ def list_notifications(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    _task_reminders(db, user)
     rows = (
         db.query(InAppNotification)
         .filter(InAppNotification.user_id == user.id)
@@ -29,6 +38,7 @@ def list_notifications(
 
 @router.get("/unread-count", response_model=UnreadCountResponse)
 def unread_count(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    _task_reminders(db, user)
     count = (
         db.query(InAppNotification)
         .filter(InAppNotification.user_id == user.id, InAppNotification.read_at.is_(None))

@@ -5,6 +5,8 @@ import os
 # (через lru_cache) закэширует значение до того, как мы его зададим (см.
 # TODO.md 1.6: без этого get_settings() падает на слабом секрете по умолчанию).
 os.environ.setdefault("JWT_SECRET", "pytest-only-secret-do-not-use-in-production-32chars")
+# Тестовый ключ Fernet для шифрования особых полей досье (не используется нигде, кроме тестов).
+os.environ.setdefault("DOSSIER_ENCRYPTION_KEY", "Zm9yLXRlc3RzLW9ubHktMzItYnl0ZXMta2V5LTAwMDA=")
 
 import pytest
 from fastapi.testclient import TestClient
@@ -96,9 +98,13 @@ def _reset_rate_limit():
     тест ожидает 401/200."""
     from app.core.rate_limit import _attempts
 
+    from app.services import task_service
+
     _attempts.clear()
+    task_service.reset_reminder_throttle()
     yield
     _attempts.clear()
+    task_service.reset_reminder_throttle()
 
 
 @pytest.fixture()
@@ -259,4 +265,9 @@ def today() -> datetime.date:
     # понятием "сегодня", иначе изредка расходились бы около полуночи UTC.
     from app.core.time import today_local
 
-    return today_local()
+    # Отметки посещаемости ставят только в учебные дни, а набор тестов должен проходить в любой
+    # день недели: по выходным (в воскресенье падали 10 тестов) берём ближайший прошедший будний.
+    day = today_local()
+    while day.weekday() >= 5:
+        day -= datetime.timedelta(days=1)
+    return day

@@ -74,7 +74,10 @@ def test_month_attendance_summary_counts(client, admin_headers, db, curator_grou
     assert summary["by_code"] == {"н": 1}
 
 
-def test_month_attendance_skips_days_before_enrollment_and_future(client, admin_headers, db, curator_group, today):
+def test_month_attendance_skips_days_before_enrollment_and_future(client, admin_headers, db, curator_group):
+    from app.core.time import today_local
+
+    today = today_local()  # «будущее» считается от настоящего сегодня, даже в выходной
     student = db.query(Student).filter(Student.study_group_id == curator_group.id).first()
     student.enrolled_at = today - datetime.timedelta(days=3)
     db.commit()

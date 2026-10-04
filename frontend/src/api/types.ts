@@ -4,6 +4,146 @@ export interface MeGroupInfo {
   course: number;
 }
 
+export interface DossierProfile {
+  birth_date: string | null;
+  gender: "male" | "female" | null;
+  funding: "budget" | "contract" | null;
+  phone: string | null;
+  email: string | null;
+  messenger: string | null;
+  registration_address: string | null;
+  residence_address: string | null;
+  additional_education: string | null;
+}
+
+export interface DossierSpecial {
+  is_orphan: boolean;
+  under_guardianship: boolean;
+  disability_group: string | null;
+  has_ovz: boolean;
+  large_family: boolean;
+  low_income: boolean;
+  pdn_kdn: boolean;
+  internal_record: boolean;
+  scholarship: string | null;
+  health_note: string | null;
+}
+
+export interface DossierGuardian {
+  id: number;
+  full_name: string;
+  relation: string;
+  phone: string | null;
+  is_primary: boolean;
+}
+
+export interface DossierNote {
+  id: number;
+  kind: string;
+  text: string;
+  author_id: number | null;
+  author_name: string | null;
+  created_at: string;
+  can_delete: boolean;
+  occurred_on: string | null;
+  follow_up_on: string | null;
+  follow_up_done: boolean;
+}
+
+export interface IndividualWorkRow {
+  student_id: number;
+  full_name: string;
+  risk_streak: number;
+  is_risk: boolean;
+  work_count: number;
+  last_work_on: string | null;
+  next_follow_up_on: string | null;
+  follow_up_overdue: boolean;
+  needs_attention: boolean;
+}
+
+export interface IndividualWorkGroup {
+  group_id: number;
+  group_code: string;
+  no_work_days: number;
+  rows: IndividualWorkRow[];
+}
+
+export interface MyDayGroup {
+  id: number;
+  code: string;
+  course: number;
+  today_status: "submitted" | "pending" | "no_study_day";
+  is_on_time: boolean | null;
+  missed_dates: string[];
+  missed_total: number;
+}
+
+export interface MyDayTask {
+  assignment_id: number;
+  title: string;
+  group_code: string;
+  due_date: string;
+  kind: "overdue" | "returned" | "due_soon";
+  status: string;
+  days_left: number;
+}
+
+export interface MyDayAttention {
+  student_id: number;
+  full_name: string;
+  group_code: string;
+  risk_streak: number;
+  needs_work: boolean;
+  last_work_on: string | null;
+  follow_up_on: string | null;
+  follow_up_overdue: boolean;
+  follow_up_today: boolean;
+}
+
+export interface MyDayBirthday {
+  student_id: number;
+  full_name: string;
+  group_code: string;
+  date: string;
+  days_until: number;
+  turns: number;
+}
+
+export interface MyDay {
+  today: string;
+  leads_groups: boolean;
+  groups: MyDayGroup[];
+  tasks: MyDayTask[];
+  attention: MyDayAttention[];
+  attention_total: number;
+  no_work_days: number;
+  birthdays: MyDayBirthday[];
+  review_waiting: { count: number; oldest_submitted_at: string | null } | null;
+}
+
+export interface AbsenceMessage {
+  days: number;
+  absences: { date: string; code: string; name: string }[];
+  text: string;
+}
+
+export interface Dossier {
+  student_id: number;
+  profile: DossierProfile;
+  special: DossierSpecial | null;
+  special_available: boolean;
+  guardians: DossierGuardian[];
+  notes: DossierNote[];
+}
+
+export interface DossierAccessEntry {
+  user_id: number;
+  user_name: string;
+  included_special: boolean;
+  created_at: string;
+}
+
 export interface MeResponse {
   id: number;
   full_name: string;
@@ -356,4 +496,187 @@ export interface CuratorDaysRead {
   total_study_days: number;
   average_on_time_submission: string | null;
   days: CuratorDayRow[];
+}
+
+export type TaskFieldType = "text" | "number" | "date" | "bool" | "select" | "multiselect" | "link";
+
+export interface TaskField {
+  key?: string | null;
+  label: string;
+  type: TaskFieldType;
+  required: boolean;
+  options: string[];
+  // Поле досье, которое наполняется принятыми ответами.
+  dossier_field?: string | null;
+}
+
+export interface TaskTemplate {
+  id: number;
+  name: string;
+  author_name: string | null;
+  created_at: string;
+  can_manage: boolean;
+  title: string;
+  description: string | null;
+  collect_mode: string;
+  reviewer_rule: string;
+  fields: TaskField[];
+  scope: TaskScope;
+  repeat: "" | "monthly" | "semester";
+  repeat_day: number;
+  due_offset_days: number;
+  next_run: string | null;
+  last_run_date: string | null;
+  last_error: string | null;
+}
+
+export interface DossierTarget {
+  key: string;
+  label: string;
+  types: TaskFieldType[];
+}
+
+export interface TaskScope {
+  all_groups: boolean;
+  department_ids: number[];
+  courses: number[];
+  group_ids: number[];
+  exclude_group_ids: number[];
+}
+
+export interface TaskProgress {
+  total: number;
+  new: number;
+  in_progress: number;
+  submitted: number;
+  returned: number;
+  accepted: number;
+  overdue: number;
+}
+
+export interface TaskListRow {
+  id: number;
+  title: string;
+  collect_mode: string;
+  reviewer_rule: string;
+  due_date: string;
+  is_closed: boolean;
+  author_name: string | null;
+  progress: TaskProgress;
+  step_no: number;
+  step_total: number | null;
+}
+
+export interface TaskAssignmentSummary {
+  id: number;
+  study_group_id: number;
+  group_code: string;
+  course: number;
+  department_name: string;
+  status: string;
+  is_overdue: boolean;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  reviewed_by_name: string | null;
+}
+
+export interface TaskDetail {
+  id: number;
+  title: string;
+  description: string | null;
+  collect_mode: string;
+  reviewer_rule: string;
+  due_date: string;
+  is_closed: boolean;
+  author_id: number | null;
+  author_name: string | null;
+  fields: TaskField[];
+  scope: TaskScope;
+  can_manage: boolean;
+  progress: TaskProgress;
+  assignments: TaskAssignmentSummary[];
+  step_no: number;
+  unlock_on: "submitted" | "accepted" | null;
+  steps: { id: number; title: string; step_no: number; due_date: string }[];
+}
+
+export interface MyAssignmentRow {
+  id: number;
+  task_id: number;
+  title: string;
+  collect_mode: string;
+  group_code: string;
+  due_date: string;
+  status: string;
+  is_overdue: boolean;
+  is_closed: boolean;
+  is_locked: boolean;
+  step_no: number;
+  step_total: number | null;
+}
+
+export interface TaskRowRead {
+  student_id: number;
+  student_name: string;
+  is_included: boolean;
+  values: Record<string, unknown>;
+}
+
+export interface TaskCommentRead {
+  id: number;
+  student_id: number | null;
+  author_name: string | null;
+  text: string;
+  created_at: string;
+}
+
+export interface TaskHistoryEvent {
+  kind: "submitted" | "accepted" | "returned" | "auto_accepted";
+  user_name: string | null;
+  at: string;
+  step: number | null;
+}
+
+export interface AssignmentDetail {
+  id: number;
+  task_id: number;
+  title: string;
+  description: string | null;
+  collect_mode: string;
+  reviewer_rule: string;
+  due_date: string;
+  is_closed: boolean;
+  fields: (TaskField & { key: string })[];
+  study_group_id: number;
+  group_code: string;
+  status: string;
+  is_overdue: boolean;
+  group_values: Record<string, unknown>;
+  rows: TaskRowRead[];
+  comments: TaskCommentRead[];
+  review_comment: string | null;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  reviewed_by_name: string | null;
+  history: TaskHistoryEvent[];
+  review_step: number;
+  review_steps: number;
+  can_edit: boolean;
+  can_submit: boolean;
+  can_review: boolean;
+  is_locked: boolean;
+  locked_reason: string | null;
+  step_no: number;
+  step_total: number | null;
+}
+
+export interface ReviewQueueRow {
+  id: number;
+  task_id: number;
+  title: string;
+  group_code: string;
+  department_name: string;
+  due_date: string;
+  submitted_at: string | null;
+  is_overdue: boolean;
 }

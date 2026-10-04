@@ -71,3 +71,59 @@ def test_cannot_submit_attendance_on_weekend(client, curator_headers, curator_gr
     assert sunday.weekday() == 6
     r = client.post(f"/curator/groups/{curator_group.id}/day/mark-all-present?date={sunday}", headers=curator_headers)
     assert r.status_code in (400, 403, 409)
+
+
+def _dept_head_world(db, dept_head_user):
+    """Своё отделение (из фикстуры) + чужое отделение с группой."""
+    other = Department(name="Чужое отделение")
+    db.add(other)
+    db.flush()
+    foreign = StudyGroup(code="FOREIGN-1", course=1, department_id=other.id)
+    db.add(foreign)
+    db.commit()
+    return other, foreign
+
+
+def test_dept_head_has_full_edit_access_within_own_department(client, dept_head_headers, dept_head_user, db, imported, today):
+    other, foreign = _dept_head_world(db, dept_head_user)
+    own_id = dept_head_user.department_id
+
+    r = client.post("/admin/groups", headers=dept_head_headers,
+                    json={"code": "OWN-NEW", "course": 1, "department_id": own_id, "study_form": None})
+    assert r.status_code == 201, r.text
+    group_id = r.json()["id"]
+    assert client.post("/admin/groups", headers=dept_head_headers,
+                       json={"code": "FOR-NEW", "course": 1, "department_id": other.id}).status_code == 403
+
+    r = client.post("/admin/students", headers=dept_head_headers,
+                    json={"last_name": "Новый", "first_name": "С", "study_group_id": group_id, "enrolled_at": str(today)})
+    assert r.status_code == 201, r.text
+    assert client.post("/admin/students", headers=dept_head_headers,
+                       json={"last_name": "Чужой", "first_name": "С", "study_group_id": foreign.id,
+                             "enrolled_at": str(today)}).status_code == 403
+
+    r = client.post("/admin/users", headers=dept_head_headers,
+                    json={"username": "new_curator", "full_name": "Куратор", "role": "curator", "department_id": other.id})
+    assert r.status_code == 201 and r.json()["department_id"] == own_id
+    assert client.post("/admin/users", headers=dept_head_headers,
+                       json={"username": "new_admin", "full_name": "А", "role": "admin"}).status_code == 403
+
+    # Отделения и общие справочники по-прежнему не его.
+    assert client.post("/admin/departments", headers=dept_head_headers, json={"name": "Н"}).status_code == 403
+
+
+def test_dept_head_group_calendar_override_only_for_own_groups(client, dept_head_headers, dept_head_user, db, imported, today):
+    other, foreign = _dept_head_world(db, dept_head_user)
+    own = db.query(StudyGroup).filter(StudyGroup.department_id == dept_head_user.department_id).first()
+    body = {"date": str(today), "day_type": "vacation"}
+    assert client.put("/admin/calendar/group-overrides", headers=dept_head_headers,
+                      json={**body, "study_group_id": own.id}).status_code == 200
+    assert client.put("/admin/calendar/group-overrides", headers=dept_head_headers,
+                      json={**body, "study_group_id": foreign.id}).status_code == 403
+    assert client.get(f"/admin/calendar/group-overrides?study_group_id={foreign.id}&date_from={today}&date_to={today}",
+                      headers=dept_head_headers).status_code == 403
+    assert client.delete(f"/admin/calendar/group-overrides?study_group_id={own.id}&date={today}",
+                         headers=dept_head_headers).status_code == 200
+    # общий календарь колледжа — нет
+    assert client.put("/admin/calendar", headers=dept_head_headers,
+                      json={"date": str(today), "day_type": "holiday"}).status_code == 403

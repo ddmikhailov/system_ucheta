@@ -3,11 +3,15 @@ import type { FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/useAuth";
+import { DOSSIER_AUDIT_ROLES, DOSSIER_STAFF_ROLES, STRUCTURE_EDITOR_ROLES, TEACHER_ROLES, inRoles } from "../constants/roles";
 import { STUDENT_STATUS_LABELS } from "../constants/studentStatus";
+import AbsenceMessageButton from "../components/AbsenceMessageButton";
+import AbsenceSheetButton from "../components/AbsenceSheetButton";
+import StudentDossier from "../components/StudentDossier";
 import StudentMonthAttendanceView from "../components/StudentMonthAttendance";
 import { useScrollToTopOnChange } from "../hooks/useScrollToTopOnChange";
 import type { DeleteResult, StudentCard, StudyGroupAdmin } from "../api/types";
-import { todayIso } from "../utils/date";
+import { formatDateRu, todayIso } from "../utils/date";
 
 // Личная карточка студента: вся информация на одном экране и всё управление
 // им (правка ФИО, перевод в другую группу, статус обучения, удаление).
@@ -17,7 +21,7 @@ export default function StudentCardPage() {
   const { studentId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const canManage = user?.role === "admin" || user?.role === "tutor" || user?.role === "dept_head";
+  const canManage = inRoles(user?.role, STRUCTURE_EDITOR_ROLES);
 
   const [card, setCard] = useState<StudentCard | null>(null);
   const [groups, setGroups] = useState<StudyGroupAdmin[]>([]);
@@ -46,11 +50,12 @@ export default function StudentCardPage() {
   }, [canManage]);
 
   // Администрация возвращается в список студентов, куратор — в свой кабинет.
-  const isTeacher = user?.role === "curator" || user?.role === "deputy_curator";
+  const isTeacher = inRoles(user?.role, TEACHER_ROLES);
+  const isStaff = inRoles(user?.role, DOSSIER_STAFF_ROLES);
   const back = (
     <p>
-      <Link to={isTeacher ? "/cabinet" : "/admin?tab=students"} className="link-btn">
-        {isTeacher ? "← К моим группам" : "← К списку студентов"}
+      <Link to={isTeacher ? "/cabinet" : isStaff ? "/students" : "/admin?tab=students"} className="link-btn">
+        {isTeacher ? "← К моим группам" : isStaff ? "← К поиску студентов" : "← К списку студентов"}
       </Link>
     </p>
   );
@@ -91,12 +96,15 @@ export default function StudentCardPage() {
         <Item label="Куратор" value={card.curator_name ?? "нет куратора"} />
         <Item label="Заместитель куратора" value={card.deputy_name ?? "нет"} />
         <Item label="Статус обучения" value={STUDENT_STATUS_LABELS[card.status] ?? card.status} />
-        <Item label="Дата зачисления" value={card.enrolled_at} />
-        <Item label="Дата выбытия" value={card.left_at ?? "—"} />
+        <Item label="Дата зачисления" value={formatDateRu(card.enrolled_at)} />
+        <Item label="Дата выбытия" value={card.left_at ? formatDateRu(card.left_at) : "—"} />
       </dl>
 
+      <h3 className="student-card__section">Досье</h3>
+      <StudentDossier studentId={card.id} isAdmin={inRoles(user?.role, DOSSIER_AUDIT_ROLES)} />
+
       <h3 className="student-card__section">
-        Посещаемость за 30 дней ({stats.date_from} — {stats.date_to})
+        Посещаемость за 30 дней ({formatDateRu(stats.date_from)} — {formatDateRu(stats.date_to)})
       </h3>
       {stats.in_list === 0 ? (
         <p className="hint">За этот период нет сданных дней по группе.</p>
@@ -124,6 +132,9 @@ export default function StudentCardPage() {
         </>
       )}
 
+      <AbsenceMessageButton studentId={card.id} />
+      <AbsenceSheetButton studentId={card.id} lastName={card.last_name} groupCode={card.group.code} />
+
       <StudentMonthAttendanceView studentId={card.id} />
 
       <h3 className="student-card__section">Последние отметки</h3>
@@ -142,7 +153,7 @@ export default function StudentCardPage() {
           <tbody>
             {card.recent_marks.map((m) => (
               <tr key={m.date}>
-                <td data-label="Дата">{m.date}</td>
+                <td data-label="Дата">{formatDateRu(m.date)}</td>
                 <td data-label="Отметка">
                   <b>{m.code.toUpperCase()}</b> — {m.name}
                 </td>
@@ -167,8 +178,8 @@ export default function StudentCardPage() {
           {card.group_history.map((h) => (
             <tr key={`${h.group_id}-${h.start_date}`}>
               <td data-label="Группа">{h.group_code}</td>
-              <td data-label="С">{h.start_date}</td>
-              <td data-label="По">{h.end_date ?? "по настоящее время"}</td>
+              <td data-label="С">{formatDateRu(h.start_date)}</td>
+              <td data-label="По">{h.end_date ? formatDateRu(h.end_date) : "по настоящее время"}</td>
             </tr>
           ))}
         </tbody>

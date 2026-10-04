@@ -56,7 +56,7 @@ def test_creates_departments_groups_and_students_by_address(seeded, db, tmp_path
     stats = registry.run(path, apply=True, today=TODAY)
 
     assert db.query(Department).filter_by(name="Кибер").count() == 1
-    group = db.query(StudyGroup).filter_by(code="КИБ111-26").one()
+    group = db.query(StudyGroup).filter_by(code="КИБ111").one()
     assert group.course == 1 and group.department.name == "Кибер"
     leave = db.query(Student).filter_by(last_name="Петрова").one()
     assert leave.status == StudentStatus.ACADEMIC_LEAVE and leave.middle_name is None
@@ -91,7 +91,7 @@ def test_second_run_changes_nothing(seeded, db, tmp_path):
 
 
 def test_legacy_group_is_renamed_keeping_curator_and_students(seeded, db, tmp_path):
-    group = digital_group(db, "ИИ112", 1, [("Иванов", "Иван", "Иванович"), ("Петров", "Пётр", None)])
+    group = digital_group(db, "ИИ112-26", 1, [("Иванов", "Иван", "Иванович"), ("Петров", "Пётр", None)])
     curator_role = db.query(Role).filter_by(code=RoleCode.CURATOR.value).one()
     curator = User(username="cur", full_name="Куратор Тест", role_id=curator_role.id,
                    department_id=group.department_id, password_hash=None)
@@ -109,22 +109,33 @@ def test_legacy_group_is_renamed_keeping_curator_and_students(seeded, db, tmp_pa
     stats = registry.run(path, apply=True, today=TODAY)
 
     db.expire_all()
-    assert db.query(StudyGroup).filter_by(code="ИИ112").count() == 0
-    renamed = db.query(StudyGroup).filter_by(code="ИИ112-26").one()
+    assert db.query(StudyGroup).filter_by(code="ИИ112-26").count() == 0
+    renamed = db.query(StudyGroup).filter_by(code="ИИ112").one()
     assert renamed.id == group.id
     assert db.query(CuratorAssignment).filter_by(study_group_id=group.id).count() == 1
     assert db.query(Student).filter_by(study_group_id=group.id).count() == 3
     assert stats["групп переименовано"] == 1 and stats["студентов создано"] == 1
 
 
-def test_similar_code_without_common_students_is_not_renamed(seeded, db, tmp_path):
-    digital_group(db, "ИИ112", 1, [("Старый", "Студент", None)])
-    path = make_registry(tmp_path, [("Новикова Мария", "Обучается", "ИИ112-26", DIGITAL, 1)])
+def test_code_suffixes_are_dropped_and_subgroups_merge_into_the_main_group(seeded, db, tmp_path):
+    main = digital_group(db, "ИИ112-26", 1, [("Иванов", "Иван", None), ("Петров", "Пётр", None)])
+    sub_group = digital_group(db, "ИИ112.8", 1, [("Сидоров", "Семён", None)])
+    path = make_registry(tmp_path, [
+        ("Иванов Иван", "Обучается", "ИИ112-26", DIGITAL, 1),
+        ("Петров Пётр", "Обучается", "ИИ112-26", DIGITAL, 1),
+        ("Сидоров Семён", "Обучается", "ИИ112.8", DIGITAL, 1),
+    ])
 
     registry.run(path, apply=True, today=TODAY)
 
     db.expire_all()
-    assert {g.code for g in db.query(StudyGroup)} == {"ИИ112", "ИИ112-26"}
+    merged = db.query(StudyGroup).filter_by(code="ИИ112").one()
+    assert merged.id == main.id and merged.is_active is True
+    assert db.query(Student).filter_by(study_group_id=main.id).count() == 3
+    assert db.get(StudyGroup, sub_group.id).is_active is False
+    assert db.query(StudyGroup).filter(StudyGroup.is_active.is_(True)).count() == 1
+    assert registry.normalize_code("ИБС155.7") == "ИБС155" and registry.normalize_code("СА432-23") == "СА432"
+    assert registry.normalize_code("ИСПоз242д") == "ИСПоз242д"
 
 
 def test_student_in_other_group_is_transferred_and_absent_one_is_deleted(seeded, db, tmp_path):
@@ -139,7 +150,7 @@ def test_student_in_other_group_is_transferred_and_absent_one_is_deleted(seeded,
 
     db.expire_all()
     ivanov = db.query(Student).filter_by(last_name="Иванов").one()
-    assert ivanov.study_group.code == "ИИ122-26"
+    assert ivanov.study_group.code == "ИИ122"
     closed = db.query(StudentGroupMembership).filter_by(student_id=ivanov.id, study_group_id=old.id).one()
     assert closed.end_date == TODAY - datetime.timedelta(days=1)
     assert db.query(Student).filter_by(last_name="Ушедший").count() == 0
@@ -155,7 +166,7 @@ def test_group_without_active_students_is_hidden(seeded, db, tmp_path):
 
     db.expire_all()
     assert db.query(StudyGroup).filter_by(code="ОЛД111").one().is_active is False
-    assert db.query(StudyGroup).filter_by(code="ИИ112-26").one().is_active is True
+    assert db.query(StudyGroup).filter_by(code="ИИ112").one().is_active is True
 
 
 def test_returning_student_is_restored_not_duplicated(seeded, db, tmp_path):

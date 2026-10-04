@@ -59,6 +59,13 @@ class Settings(BaseSettings):
     # прописать DSN сюда — отдельное организационное решение, не код.
     sentry_dsn: str = ""
 
+    # Ключ Fernet (urlsafe base64, 32 байта) для шифрования особых полей досье
+    # (здоровье, соц. статус, учёт ПДН/КДН — спецкатегории по 152-ФЗ). Отдельный
+    # от JWT_SECRET: ротация JWT-секрета не должна делать данные нечитаемыми.
+    # Без ключа особые поля недоступны (чтение и запись), остальное работает.
+    # Сгенерировать: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    dossier_encryption_key: str = ""
+
     @property
     def database_url(self) -> str:
         return (

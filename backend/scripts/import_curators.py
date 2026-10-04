@@ -1,5 +1,6 @@
-"""Кураторы отделения по списку «ФИО <табуляция> код группы» (по строке на
-группу; один куратор может вести несколько групп).
+"""Кураторы отделений по списку «ФИО <табуляция> код группы [<табуляция>
+отделение]» (по строке на группу; один куратор может вести несколько групп).
+Отделение — третья колонка или, если её нет, аргумент командной строки.
 
 Что делает:
   * куратора с таким ФИО в отделении берёт из базы, иначе заводит (роль
@@ -13,8 +14,9 @@
   * чужих кураторов и их назначения не меняет; идемпотентен.
 
 Без --apply ничего не пишет:
-    python -m scripts.import_curators curators_Кибер.tsv Кибер
-    python -m scripts.import_curators curators_Кибер.tsv Кибер --apply
+    python -m scripts.import_curators curators.tsv               # единый файл с колонкой отделения
+    python -m scripts.import_curators curators_Кибер.tsv Кибер   # отделение задано аргументом
+    ... --apply                                                    # записать
 """
 import argparse
 import datetime
@@ -47,17 +49,21 @@ def base_username(full_name: str) -> str:
     return f"{translit(parts[0])}.{translit(parts[1])[:1]}"
 
 
-def read_pairs(path: str) -> list[tuple[str, str]]:
-    pairs = []
+def read_rows(path: str, default_department: str | None) -> list[tuple[str, str, str]]:
+    rows = []
     with open(path, encoding="utf-8-sig") as f:
         for number, line in enumerate(f, start=1):
             if not line.strip():
                 continue
             cells = [c.strip() for c in line.rstrip("\n").split("\t") if c.strip()]
-            if len(cells) != 2 or len(cells[0].split()) < 2:
-                raise RuntimeError(f"Строка {number}: нужно «ФИО<табуляция>группа», а там «{line.strip()}»")
-            pairs.append((" ".join(cells[0].split()), cells[1]))
-    return pairs
+            if len(cells) == 2 and default_department:
+                cells.append(default_department)
+            if len(cells) != 3 or len(cells[0].split()) < 2:
+                raise RuntimeError(
+                    f"Строка {number}: нужно «ФИО<табуляция>группа<табуляция>отделение», а там «{line.strip()}»"
+                )
+            rows.append((" ".join(cells[0].split()), cells[1], cells[2]))
+    return rows
 
 
 def resolve_group(code: str, groups: dict[str, StudyGroup]) -> StudyGroup | None:
@@ -67,8 +73,8 @@ def resolve_group(code: str, groups: dict[str, StudyGroup]) -> StudyGroup | None
     return found[0] if len(found) == 1 else None
 
 
-def run(path: str, department_name: str, apply: bool) -> dict[str, int]:
-    pairs = read_pairs(path)
+def run(path: str, department_name: str | None, apply: bool) -> dict[str, int]:
+    rows = read_rows(path, department_name)
     db = db_base.SessionLocal()
     stats: dict[str, int] = {}
 
@@ -76,34 +82,35 @@ def run(path: str, department_name: str, apply: bool) -> dict[str, int]:
         stats[name] = stats.get(name, 0) + 1
 
     try:
-        department = db.query(Department).filter(Department.name == department_name).one_or_none()
-        if department is None:
-            raise RuntimeError(f"Отделение «{department_name}» не найдено — сначала загрузите реестр.")
         role = db.query(Role).filter(Role.code == RoleCode.CURATOR.value).one_or_none()
         if role is None:
             raise RuntimeError("Роль curator не найдена — сначала запустите scripts.seed")
+        departments = {d.name: d for d in db.query(Department).all()}
+        unknown = sorted({dept for _, _, dept in rows if dept not in departments})
+        if unknown:
+            raise RuntimeError(f"Отделение не найдено: {', '.join(unknown)} — сначала загрузите реестр.")
 
-        groups = {g.code: g for g in db.query(StudyGroup).filter(StudyGroup.department_id == department.id)}
+        groups_by_dept = {
+            name: {g.code: g for g in db.query(StudyGroup).filter(StudyGroup.department_id == d.id)}
+            for name, d in departments.items()
+        }
         problems = []
         resolved = []
-        for full_name, code in pairs:
-            group = resolve_group(code, groups)
+        for full_name, code, dept in rows:
+            group = resolve_group(code, groups_by_dept[dept])
             if group is None:
-                problems.append(code)
+                problems.append(f"{code} ({dept})")
             else:
-                resolved.append((full_name, group))
+                resolved.append((full_name, group, departments[dept]))
         if problems:
-            raise RuntimeError(
-                f"В отделении «{department_name}» нет однозначной группы для кодов: {', '.join(problems)}. "
-                "Ничего не записано."
-            )
+            raise RuntimeError(f"Нет однозначной группы для кодов: {', '.join(problems)}. Ничего не записано.")
 
-        users_by_name = {
-            u.full_name: u for u in db.query(User).filter(User.department_id == department.id)
+        users_by_key = {
+            (u.department_id, u.full_name): u for u in db.query(User).filter(User.department_id.isnot(None))
         }
         taken = {u for (u,) in db.query(User.username).all()}
-        for full_name, group in resolved:
-            user = users_by_name.get(full_name)
+        for full_name, group, department in resolved:
+            user = users_by_key.get((department.id, full_name))
             if user is None:
                 username = candidate = base_username(full_name)
                 suffix = 1
@@ -115,7 +122,7 @@ def run(path: str, department_name: str, apply: bool) -> dict[str, int]:
                             department_id=department.id, password_hash=None)
                 db.add(user)
                 db.flush()
-                users_by_name[full_name] = user
+                users_by_key[(department.id, full_name)] = user
                 count("кураторов создано")
 
             active = (
@@ -145,14 +152,14 @@ def run(path: str, department_name: str, apply: bool) -> dict[str, int]:
     print("Загружено." if apply else "Проверка (ничего не записано; добавьте --apply):")
     for name, value in stats.items():
         print(f"  {name}: {value}")
-    print(f"  строк в списке: {len(pairs)}")
+    print(f"  строк в списке: {len(rows)}")
     return stats
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("path", help="файл «ФИО<табуляция>группа»")
-    parser.add_argument("department", help="название отделения, например Кибер")
+    parser.add_argument("path", help="файл «ФИО<табуляция>группа[<табуляция>отделение]»")
+    parser.add_argument("department", nargs="?", help="отделение, если в файле нет третьей колонки")
     parser.add_argument("--apply", action="store_true", help="записать изменения в базу")
     args = parser.parse_args()
     run(args.path, args.department, args.apply)

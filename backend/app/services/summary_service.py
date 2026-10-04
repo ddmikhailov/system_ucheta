@@ -20,7 +20,7 @@ from app.models import (
     StudentGroupMembership,
     StudyGroup,
 )
-from app.services import calendar_service
+from app.services import calendar_service, group_scope
 
 FIRST_PERIOD = 1
 
@@ -101,7 +101,7 @@ def collect_group_day_rows(
     stmt = (
         select(StudyGroup, Department.name)
         .join(Department, Department.id == StudyGroup.department_id)
-        .where(StudyGroup.is_active.is_(True))
+        .where(StudyGroup.is_active.is_(True), group_scope.has_curator())
     )
     if department_id is not None:
         stmt = stmt.where(StudyGroup.department_id == department_id)

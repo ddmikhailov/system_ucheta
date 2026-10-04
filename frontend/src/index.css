@@ -197,6 +197,7 @@ select:hover {
 
 .app-header__nav {
   display: flex;
+  flex-wrap: wrap; /* пунктов меню до 6 (задачи, витрины, студенты, паспорт, админка…) */
   gap: 6px;
   flex: 1;
 }
@@ -208,6 +209,7 @@ select:hover {
   font-size: 14px;
   padding: 8px 14px;
   border-radius: 8px;
+  white-space: nowrap; /* пункт меню не должен ломаться на две строки */
   transition: background 0.15s ease, color 0.15s ease;
 }
 
@@ -228,8 +230,72 @@ select:hover {
   font-size: 14px;
 }
 
-.app-header__user > span {
+.user-menu {
+  position: relative;
+}
+
+.user-menu__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 14px;
   font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.user-menu__toggle:hover,
+.user-menu__toggle[aria-expanded="true"] {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.user-menu__name {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-menu__panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md, 0 8px 24px rgba(28, 25, 48, 0.14));
+}
+
+.user-menu__panel a,
+.user-menu__panel button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.user-menu__panel a:hover,
+.user-menu__panel button:hover {
+  background: var(--primary-light);
+  color: var(--primary);
 }
 
 .notification-bell {
@@ -915,21 +981,42 @@ select:hover {
     padding: 14px;
   }
 
+  /* Первая строка — логотип, колокольчик и меню пользователя; вторая — разделы одной
+     прокручиваемой строкой (раньше всё это занимало около трети экрана). */
   .app-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-    padding: 10px 14px;
-  }
-
-  .app-header__nav {
-    width: 100%;
+    gap: 6px 12px;
+    padding: 8px 14px;
+    justify-content: space-between;
   }
 
   .app-header__user {
-    width: 100%;
-    justify-content: space-between;
-    flex-wrap: wrap;
+    order: 2;
+    margin-left: auto;
+    gap: 4px;
+  }
+
+  .app-header__nav {
+    order: 3;
+    flex: 1 1 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    margin: 0 -14px;
+    padding: 0 14px 2px;
+  }
+
+  .app-header__nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .app-header__nav a {
+    flex-shrink: 0;
+    padding: 8px 12px;
+  }
+
+  .user-menu__name {
+    max-width: 150px;
   }
 
   /* Код отметки в конце горизонтального скролла было не видно и легко было
@@ -1004,6 +1091,13 @@ select:hover {
   .roster-table td input {
     width: 100%;
     margin-bottom: 6px;
+  }
+
+  /* Флажки внутри карточки (ответы по задаче: «да/нет», множественный выбор) — не на всю ширину. */
+  .roster-table td input[type="checkbox"] {
+    width: auto;
+    min-height: 0;
+    margin: 0 6px 0 0;
   }
 
   /* Touch-цели покрупнее — за пределами этого пункта размеры не трогаем,
@@ -1217,6 +1311,12 @@ a.link-btn:hover {
   text-decoration: underline;
 }
 
+/* Ссылка-кнопка первой в ячейке: боковой padding не сдвигает текст относительно заголовка столбца и соседних строк. */
+td > .link-btn:first-child,
+th > .link-btn:first-child {
+  margin-left: -4px;
+}
+
 /* --- Свод «всего / к 1 паре» --- */
 
 .table-scroll {
@@ -1350,4 +1450,108 @@ th.sortable-th {
 
 th.sortable-th:hover {
   color: var(--primary);
+}
+
+
+/* Поле формы с подписью над полем (досье и т. п.) */
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.form-field > input,
+.form-field > select,
+.form-field > textarea {
+  font-weight: 400;
+  color: var(--text);
+}
+
+.form-fields {
+  align-items: flex-end;
+}
+
+/* --- «Мой день» и быстрые действия (plan-v2.md, этап 6) --- */
+
+.my-day {
+  max-width: 760px;
+}
+
+.my-day__section {
+  margin-top: 20px;
+}
+
+.my-day__section h3 {
+  margin-bottom: 8px;
+}
+
+.my-day__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.my-day__item {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.my-day__missed {
+  color: var(--warn-ink);
+  font-size: 13px;
+}
+
+.my-day__dates {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.modal textarea,
+.absence-message__text {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  width: 100%;
+  resize: vertical;
+}
+
+.absence-message {
+  margin: 12px 0;
+}
+
+.absence-message__text {
+  margin-top: 8px;
+  max-width: 640px;
+}
+
+@media (min-width: 641px) {
+  .my-day__item {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+  }
+
+  .my-day__item > :first-child {
+    flex: 1 1 220px;
+  }
 }

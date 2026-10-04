@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, ApiError } from "../api/client";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import type { CuratorDaysRead } from "../api/types";
+import { formatDateRu } from "../utils/date";
 
 const STATUS_LABELS: Record<string, string> = {
   on_time: "вовремя",
@@ -10,11 +11,6 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const WEEKDAYS = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
-
-function formatDateRu(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  return `${d}.${m}.${y}`;
-}
 
 function weekday(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);

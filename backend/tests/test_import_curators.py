@@ -85,8 +85,33 @@ def test_unknown_group_aborts_everything(kiber, db, tmp_path):
     assert db.query(CuratorAssignment).count() == 0 and db.query(User).filter_by(username="komlev.g").count() == 0
 
 
+def test_unified_file_with_department_column_covers_several_departments(kiber, db, tmp_path):
+    techno = Department(name="Техно")
+    db.add(techno)
+    db.flush()
+    db.add(StudyGroup(code="КСК114-26", course=1, department_id=techno.id))
+    db.commit()
+    path = write_list(tmp_path, [
+        "Комлев Глеб Сергеевич	ИБС115	Кибер",
+        "Гусева Мария Валерьевна	КСК114	Техно",
+    ])
+
+    stats = curators.run(path, None, apply=True)
+
+    assert stats == {"кураторов создано": 2, "назначений создано": 2}
+    assert db.query(User).filter_by(full_name="Гусева Мария Валерьевна").one().department_id == techno.id
+
+
+def test_group_is_looked_up_only_inside_its_department(kiber, db, tmp_path):
+    db.add(Department(name="Техно"))
+    db.commit()
+
+    with pytest.raises(RuntimeError, match="ИБС115 \(Техно\)"):
+        curators.run(write_list(tmp_path, ["Комлев Глеб Сергеевич	ИБС115	Техно"]), None, apply=True)
+
+
 def test_unknown_department_and_bad_line(kiber, db, tmp_path):
-    with pytest.raises(RuntimeError, match="не найдено"):
+    with pytest.raises(RuntimeError, match="Отделение не найдено"):
         curators.run(write_list(tmp_path, ["Комлев Глеб\tИБС115"]), "Нет такого", apply=True)
     with pytest.raises(RuntimeError, match="Строка 1"):
         curators.run(write_list(tmp_path, ["только-одна-колонка"]), "Кибер", apply=True)

@@ -31,6 +31,8 @@ INSTALL_GUIDE = REPO / "docs" / "install-guide.md"
 
 INCLUDE_ROOTS = ("backend/", "frontend/")
 EXCLUDE_PREFIXES = ("backend/tests/",)
+# Тесты и помощники тестов фронтенда (рядом с кодом: *.test.ts[x], src/test/) — разработчикам, не администратору.
+EXCLUDE_PATTERNS = (re.compile(r"^frontend/src/(test/|.*\.test\.tsx?$)"),)
 # Имена файлов (в любой папке), которым в передаваемой версии не место.
 EXCLUDE_BASENAMES = {
     "pytest.ini", "requirements-dev.in", "requirements-dev.txt",
@@ -51,7 +53,7 @@ def select_files(paths: Iterable[str]) -> list[str]:
     for path in paths:
         if not path.startswith(INCLUDE_ROOTS):
             continue
-        if path.startswith(EXCLUDE_PREFIXES):
+        if path.startswith(EXCLUDE_PREFIXES) or any(p.search(path) for p in EXCLUDE_PATTERNS):
             continue
         if path.rsplit("/", 1)[-1] in EXCLUDE_BASENAMES:
             continue

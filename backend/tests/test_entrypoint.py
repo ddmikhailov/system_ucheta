@@ -248,7 +248,7 @@ def test_registry_import_runs_only_when_enabled_and_file_exists(recorded, tmp_pa
 
     entrypoint.main({"IMPORT_REGISTRY_ON_START": "true", "IMPORT_DATA_DIR": str(tmp_path)})
 
-    args = [s for s, _ in recorded["steps"]][-1]
+    args = [s for s, _ in recorded["steps"]][-2]  # последний шаг — скрытие групп
     assert args == ["-m", "scripts.import_registry", str(tmp_path / entrypoint.REGISTRY_FILE), "--apply"]
     assert recorded["exec"] is not None
 
@@ -267,7 +267,7 @@ def test_curator_lists_run_per_department_file_when_enabled(recorded, tmp_path):
 
     entrypoint.main({"IMPORT_CURATORS_ON_START": "true", "IMPORT_DATA_DIR": str(tmp_path)})
 
-    args = [s for s, _ in recorded["steps"]][-1]
+    args = [s for s, _ in recorded["steps"]][-2]  # последний шаг — скрытие групп
     assert args == ["-m", "scripts.import_curators", str(tmp_path / "curators_Кибер.tsv"), "Кибер", "--apply"]
 
 
@@ -277,3 +277,22 @@ def test_curator_lists_skipped_when_disabled(recorded, tmp_path):
     entrypoint.main({"IMPORT_CURATORS_ON_START": "false", "IMPORT_DATA_DIR": str(tmp_path)})
 
     assert not any("scripts.import_curators" in s for s, _ in recorded["steps"])
+
+
+def test_unified_curators_file_runs_without_department_argument(recorded, tmp_path):
+    (tmp_path / "curators.tsv").write_text("x", encoding="utf-8")
+
+    entrypoint.main({"IMPORT_CURATORS_ON_START": "true", "IMPORT_DATA_DIR": str(tmp_path)})
+
+    args = [s for s, _ in recorded["steps"]][-2]  # последний шаг — скрытие групп
+    assert args == ["-m", "scripts.import_curators", str(tmp_path / "curators.tsv"), "--apply"]
+
+
+def test_groups_are_hidden_after_registry_or_curators_but_not_otherwise(recorded, tmp_path):
+    (tmp_path / entrypoint.REGISTRY_FILE).write_text("x", encoding="utf-8")
+    entrypoint.main({"IMPORT_REGISTRY_ON_START": "true", "IMPORT_DATA_DIR": str(tmp_path)})
+    assert [s for s, _ in recorded["steps"]][-1] == ["-m", "scripts.hide_groups", "--apply"]
+
+    recorded["steps"].clear()
+    entrypoint.main({"IMPORT_DATA_DIR": str(tmp_path)})
+    assert not any("scripts.hide_groups" in s for s, _ in recorded["steps"])

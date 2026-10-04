@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useAuth } from "../auth/useAuth";
-import { MANAGEMENT_ROLES } from "../constants/roles";
+import { MANAGEMENT_ROLES, inRoles } from "../constants/roles";
 import type { NotificationItem } from "../api/types";
 import { formatServerDateTime } from "../utils/date";
 
@@ -60,9 +60,19 @@ export default function NotificationBell() {
   // журнал группы (у управленцев — в админке, у куратора — в его кабинете).
   function openNotification(n: NotificationItem) {
     if (!n.read_at) markRead(n.id);
+    if (n.entity_type === "student" && n.entity_id) {
+      navigate(`/students/${n.entity_id}`);
+      setOpen(false);
+      return;
+    }
+    if (n.entity_type === "task_assignment" && n.entity_id) {
+      navigate(`/tasks/assignment/${n.entity_id}`);
+      setOpen(false);
+      return;
+    }
     if (n.entity_type === "study_group_day" && n.entity_id) {
       const [groupId, date] = n.entity_id.split(":");
-      if (user && MANAGEMENT_ROLES.includes(user.role)) {
+      if (inRoles(user?.role, MANAGEMENT_ROLES)) {
         navigate(`/admin?tab=journal&group=${groupId}&date=${date}`);
       } else {
         navigate(`/cabinet?group=${groupId}&date=${date}`);

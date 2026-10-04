@@ -32,6 +32,7 @@ PERSISTENT_IMPORT_DIR = Path("/data/import")
 IMPORT_FILES = ("students.csv", "curators.csv", "groups.csv")
 REGISTRY_FILE = "registry.xlsx"
 CURATORS_FILE_PREFIX = "curators_"  # curators_<Отделение>.tsv
+CURATORS_UNIFIED_FILE = "curators.tsv"  # ФИО, группа, отделение
 PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
 
 
@@ -170,20 +171,24 @@ def registry_file_if_enabled(environ: Mapping[str, str]) -> str | None:
     return path
 
 
-def curator_lists_if_enabled(environ: Mapping[str, str]) -> list[tuple[str, str]]:
-    """Списки кураторов отделений (scripts.import_curators): файлы
-    curators_<Отделение>.tsv рядом с выгрузками импорта. Включается разово
-    IMPORT_CURATORS_ON_START=true. Возвращает пары (путь, отделение)."""
+def curator_lists_if_enabled(environ: Mapping[str, str]) -> list[tuple[str, str | None]]:
+    """Списки кураторов (scripts.import_curators): единый curators.tsv с
+    колонкой отделения и/или файлы curators_<Отделение>.tsv рядом с выгрузками
+    импорта. Включается разово IMPORT_CURATORS_ON_START=true. Возвращает пары
+    (путь, отделение или None, если отделение указано в самом файле)."""
     if environ.get("IMPORT_CURATORS_ON_START", "false") != "true":
         return []
     import_dir = environ.get("IMPORT_DATA_DIR") or default_import_dir()
-    found = []
+    found: list[tuple[str, str | None]] = []
     if os.path.isdir(import_dir):
+        unified = os.path.join(import_dir, CURATORS_UNIFIED_FILE)
+        if os.path.isfile(unified):
+            found.append((unified, None))
         for name in sorted(os.listdir(import_dir)):
             if name.startswith(CURATORS_FILE_PREFIX) and name.endswith(".tsv"):
                 found.append((os.path.join(import_dir, name), name[len(CURATORS_FILE_PREFIX):-len(".tsv")]))
     if not found:
-        log(f"IMPORT_CURATORS_ON_START=true, но файлов {CURATORS_FILE_PREFIX}<Отделение>.tsv в {import_dir} нет.")
+        log(f"IMPORT_CURATORS_ON_START=true, но файла {CURATORS_UNIFIED_FILE} в {import_dir} нет.")
     return found
 
 
@@ -195,6 +200,15 @@ def main(environ: Mapping[str, str] = os.environ) -> None:
     from app.core.config import get_settings
 
     settings = get_settings()
+
+    # Ключ шифрования особых полей досье: без него эти поля недоступны (остальное работает),
+    # а испорченный ключ лучше поймать на старте, чем при первой записи.
+    from app.core import field_crypto
+
+    if not settings.dossier_encryption_key:
+        log("ВНИМАНИЕ: DOSSIER_ENCRYPTION_KEY не задан — особые поля досье (здоровье, соц. статус) недоступны.")
+    elif not field_crypto.is_available():
+        raise SystemExit("DOSSIER_ENCRYPTION_KEY некорректен: нужен ключ Fernet (см. .env.example).")
 
     log(f"Ожидание базы данных {settings.db_host}:{settings.db_port}...")
     wait_for_database(_connect_to_database)
@@ -213,9 +227,16 @@ def main(environ: Mapping[str, str] = os.environ) -> None:
     if registry_path is not None:
         run_step("-m", "scripts.import_registry", registry_path, "--apply")
 
-    for curators_path, department in curator_lists_if_enabled(environ):
-        log(f"Кураторы отделения {department}...")
-        run_step("-m", "scripts.import_curators", curators_path, department, "--apply")
+    curator_lists = curator_lists_if_enabled(environ)
+    for curators_path, department in curator_lists:
+        log(f"Кураторы: {department or os.path.basename(curators_path)}...")
+        run_step("-m", "scripts.import_curators", curators_path, *([department] if department else []), "--apply")
+
+    # Группы со строчной «о» в коде нигде не учитываются: скрываем их после
+    # реестра — иначе загрузка реестра вернула бы их в работу.
+    if registry_path is not None or curator_lists:
+        log("Скрытие групп со строчной «о» в коде...")
+        run_step("-m", "scripts.hide_groups", "--apply")
 
     log("Запуск приложения...")
     port = str(int(environ.get("PORT") or "8000"))

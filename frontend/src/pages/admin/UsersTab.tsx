@@ -1,31 +1,15 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { api, ApiError } from "../../api/client";
+import { MIN_PASSWORD_LENGTH } from "../../constants/password";
 import { useAuth } from "../../auth/useAuth";
 import { useEscapeKey } from "../../hooks/useEscapeKey";
 import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { DeleteResult, DepartmentAdmin, SetPasswordResult, UserAdmin } from "../../api/types";
-
-const ROLE_LABELS: Record<string, string> = {
-  curator: "Куратор",
-  deputy_curator: "Заместитель куратора",
-  dept_head: "Зав. отделением",
-  edu_department: "Воспитательный отдел",
-  admin: "Администратор",
-  tutor: "Тьютор",
-};
+import { DEPARTMENT_REQUIRED_ROLES, DEPARTMENT_SCOPED_ROLES, ROLE, ROLE_LABELS, assignableRoles, inRoles, type RoleCode } from "../../constants/roles";
 
 function roleDisplay(u: UserAdmin): string {
-  return ROLE_LABELS[u.role] || u.role;
-}
-
-// Менять роль могут только администратор и зав. отделением (обновление
-// 1.3) — зеркалит ограничение на бэкенде (_assert_can_assign_role в
-// admin.py). Зав. отделением не может назначить роль выше своей.
-function assignableRoles(myRole: string | undefined): string[] {
-  if (myRole === "admin") return Object.keys(ROLE_LABELS);
-  if (myRole === "dept_head") return ["curator", "deputy_curator", "dept_head"];
-  return [];
+  return ROLE_LABELS[u.role as RoleCode] || u.role;
 }
 
 function statusLabel(u: UserAdmin): string {
@@ -35,11 +19,6 @@ function statusLabel(u: UserAdmin): string {
   if (u.must_change_password) return "ждёт смены пароля";
   return "активен";
 }
-
-// Отделение обязательно только для ролей, привязанных к конкретному отделению
-// (зеркалит _resolve_department_for_role в admin.py) — остальным полю в форме
-// создания делать нечего (см. TODO.md 4).
-const ROLES_NEEDING_DEPARTMENT = new Set(["dept_head", "curator", "deputy_curator"]);
 
 const PAGE_SIZE = 15;
 
@@ -53,7 +32,7 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
 
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
-  const [role, setRole] = useState("curator");
+  const [role, setRole] = useState<string>(ROLE.CURATOR);
   const [departmentId, setDepartmentId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -69,10 +48,14 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
   const [departmentFilter, setDepartmentFilter] = useState<number | "all">("all");
 
   const [justCreated, setJustCreated] = useState<SetPasswordResult | null>(null);
+  // Итог удаления (например, «пользователь обезличен») показываем в самой вкладке: окно профиля к этому моменту закрыто.
+  const [notice, setNotice] = useState<string | null>(null);
 
   function load() {
     api.get<UserAdmin[]>("/admin/users").then(setRows).catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка"));
-    api.get<DepartmentAdmin[]>("/admin/departments").then((ds) => {
+    api.get<DepartmentAdmin[]>("/admin/departments").then((all) => {
+      // Зав. отделением и тьютор создают только в своём отделении.
+      const ds = inRoles(me?.role, DEPARTMENT_SCOPED_ROLES) ? all.filter((d) => d.name === me?.department_name) : all;
       setDepartments(ds);
       if (ds.length > 0 && departmentId === null) setDepartmentId(ds[0].id);
     });
@@ -81,30 +64,38 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(load, []);
 
-  const roleNeedsDepartment = ROLES_NEEDING_DEPARTMENT.has(role);
+  const roleNeedsDepartment = DEPARTMENT_REQUIRED_ROLES.includes(role);
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     setJustCreated(null);
+    let created: UserAdmin;
     try {
-      const created = await api.post<UserAdmin>("/admin/users", {
+      created = await api.post<UserAdmin>("/admin/users", {
         full_name: fullName,
         username,
         role,
         department_id: roleNeedsDepartment ? departmentId : null,
       });
-      setFullName("");
-      setUsername("");
-      // Сразу выдаём пароль новому пользователю — раньше для этого приходилось
-      // отдельно открывать его профиль (см. TODO.md 4).
-      const passwordResult = await api.post<SetPasswordResult>(`/admin/users/${created.id}/set-password`, {});
-      setJustCreated(passwordResult);
-      load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Не удалось создать пользователя");
+      setBusy(false);
+      return;
+    }
+    setFullName("");
+    setUsername("");
+    try {
+      // Сразу выдаём пароль новому пользователю — раньше для этого приходилось
+      // отдельно открывать его профиль (см. TODO.md 4).
+      setJustCreated(await api.post<SetPasswordResult>(`/admin/users/${created.id}/set-password`, {}));
+    } catch (err) {
+      // Пользователь уже создан: список обновляем в любом случае, а ошибку объясняем так, чтобы не создали его второй раз.
+      const reason = err instanceof ApiError ? ` (${err.message})` : "";
+      setError(`Пользователь «${created.full_name}» создан, но пароль выдать не удалось${reason} — выдайте его в профиле пользователя.`);
     } finally {
+      load();
       setBusy(false);
     }
   }
@@ -118,12 +109,22 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
   const visibleRows = showArchived ? searchedRows : searchedRows.filter((u) => u.is_active);
   const archivedCount = searchedRows.length - searchedRows.filter((u) => u.is_active).length;
   const pageCount = Math.max(1, Math.ceil(visibleRows.length / PAGE_SIZE));
-  const pageRows = visibleRows.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+  // Поиск/фильтр сокращают список: без этой поправки, стоя на странице 2, можно было увидеть пустую таблицу.
+  const currentPage = Math.min(page, pageCount - 1);
+  const pageRows = visibleRows.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);
   const profileUser = rows.find((u) => u.id === profileId) ?? null;
 
   return (
     <div>
       {error && <div className="error-text">{error}</div>}
+      {notice && (
+        <div className="day-status submitted">
+          {notice}{" "}
+          <button className="link-btn" onClick={() => setNotice(null)}>
+            Скрыть
+          </button>
+        </div>
+      )}
 
       {justCreated && (
         <div className="day-status submitted">
@@ -147,11 +148,13 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
             <input placeholder="ФИО" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
             <input placeholder="Логин" value={username} onChange={(e) => setUsername(e.target.value)} required />
             <select value={role} onChange={(e) => setRole(e.target.value)}>
-              {Object.entries(ROLE_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
+              {(Object.entries(ROLE_LABELS) as [RoleCode, string][])
+                .filter(([value]) => assignableRoles(me?.role).includes(value))
+                .map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
             </select>
             {roleNeedsDepartment && (
               <select value={departmentId ?? ""} onChange={(e) => setDepartmentId(Number(e.target.value))}>
@@ -173,7 +176,7 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
         <input placeholder="Поиск по ФИО" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
         <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
           <option value="all">Все роли</option>
-          {Object.entries(ROLE_LABELS).map(([value, label]) => (
+          {(Object.entries(ROLE_LABELS) as [RoleCode, string][]).map(([value, label]) => (
             <option key={value} value={value}>
               {label}
             </option>
@@ -230,13 +233,13 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
 
       {pageCount > 1 && (
         <div className="toolbar">
-          <button disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
+          <button disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>
             ← Назад
           </button>
           <span>
-            Страница {page + 1} из {pageCount}
+            Страница {currentPage + 1} из {pageCount}
           </span>
-          <button disabled={page >= pageCount - 1} onClick={() => setPage((p) => p + 1)}>
+          <button disabled={currentPage >= pageCount - 1} onClick={() => setPage(currentPage + 1)}>
             Вперёд →
           </button>
         </div>
@@ -249,6 +252,7 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
           departments={departments}
           onClose={() => setProfileId(null)}
           onChanged={load}
+          onNotice={setNotice}
         />
       )}
 
@@ -275,12 +279,14 @@ function UserProfileModal({
   departments,
   onClose,
   onChanged,
+  onNotice,
 }: {
   user: UserAdmin;
   me: { id: number; role: string } | null | undefined;
   departments: DepartmentAdmin[];
   onClose: () => void;
   onChanged: () => void;
+  onNotice: (detail: string) => void;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -327,8 +333,8 @@ function UserProfileModal({
 
   async function submitCustomPassword(e: FormEvent) {
     e.preventDefault();
-    if (customPasswordValue.length < 8) {
-      setError("Пароль должен быть не короче 8 символов");
+    if (customPasswordValue.length < MIN_PASSWORD_LENGTH) {
+      setError(`Пароль должен быть не короче ${MIN_PASSWORD_LENGTH} символов`);
       return;
     }
     setError(null);
@@ -371,7 +377,7 @@ function UserProfileModal({
     setError(null);
     try {
       const res = await api.delete<DeleteResult>(`/admin/users/${user.id}`);
-      setNotice(res.detail);
+      onNotice(res.detail);
       onChanged();
       onClose();
     } catch (err) {
@@ -408,19 +414,19 @@ function UserProfileModal({
         <label>
           Роль
           {isSelf || roleOptions.length <= 1 ? (
-            <input value={ROLE_LABELS[user.role] ?? user.role} disabled />
+            <input value={ROLE_LABELS[user.role as RoleCode] ?? user.role} disabled />
           ) : (
             <select value={editRole} onChange={(e) => setEditRole(e.target.value)}>
               {roleOptions.map((r) => (
                 <option key={r} value={r}>
-                  {ROLE_LABELS[r] ?? r}
+                  {ROLE_LABELS[r as RoleCode] ?? r}
                 </option>
               ))}
             </select>
           )}
         </label>
 
-        {!isSelf && ROLES_NEEDING_DEPARTMENT.has(editRole) && me?.role !== "dept_head" && (
+        {!isSelf && DEPARTMENT_REQUIRED_ROLES.includes(editRole) && !inRoles(me?.role, DEPARTMENT_SCOPED_ROLES) && (
           <label>
             Отделение
             <select value={editDepartmentId ?? ""} onChange={(e) => setEditDepartmentId(Number(e.target.value))}>
@@ -448,7 +454,7 @@ function UserProfileModal({
               placeholder="Свой пароль"
               value={customPasswordValue}
               onChange={(e) => setCustomPasswordValue(e.target.value)}
-              minLength={8}
+              minLength={MIN_PASSWORD_LENGTH}
               required
             />
             <button type="submit">Задать</button>

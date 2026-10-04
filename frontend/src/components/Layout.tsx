@@ -1,11 +1,20 @@
+import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
-import { MANAGEMENT_ROLES } from "../constants/roles";
+import { MANAGEMENT_ROLES, TASK_MANAGER_ROLES, VIEWER_ROLES, inRoles, leadsGroups } from "../constants/roles";
 import NotificationBell from "./NotificationBell";
+import UserMenu from "./UserMenu";
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
+  const navRef = useRef<HTMLElement>(null);
+  const { pathname } = useLocation();
+
+  // На телефоне меню — прокручиваемая строка: активный раздел подводим в видимую часть.
+  useEffect(() => {
+    (navRef.current?.querySelector("a.active") as HTMLElement | null)?.scrollIntoView?.({ inline: "center", block: "nearest" });
+  }, [pathname]);
 
   return (
     <div className="app-shell">
@@ -14,18 +23,48 @@ export default function Layout({ children }: { children: ReactNode }) {
         <div className="app-header__logo">
           <img src="/kait20-logo.webp" alt="КАИТ №20" />
         </div>
-        <nav className="app-header__nav">
-          {user?.role === "curator" || user?.role === "deputy_curator" ? (
+        <nav className="app-header__nav" ref={navRef} aria-label="Разделы">
+          {leadsGroups(user) ? (
+            <NavLink to="/my-day" className={({ isActive }) => (isActive ? "active" : "")}>
+              Мой день
+            </NavLink>
+          ) : null}
+          {leadsGroups(user) ? (
             <NavLink to="/cabinet" className={({ isActive }) => (isActive ? "active" : "")}>
               Мои группы
             </NavLink>
           ) : null}
-          {user && MANAGEMENT_ROLES.includes(user.role) && (
+          {leadsGroups(user) ? (
+            <NavLink to="/my-tasks" className={({ isActive }) => (isActive ? "active" : "")}>
+              Мои задачи
+            </NavLink>
+          ) : null}
+          {inRoles(user?.role, TASK_MANAGER_ROLES) && (
+            <NavLink to="/tasks" end className={({ isActive }) => (isActive ? "active" : "")}>
+              Задачи
+            </NavLink>
+          )}
+          {inRoles(user?.role, VIEWER_ROLES) && (
             <NavLink to="/dashboards" className={({ isActive }) => (isActive ? "active" : "")}>
               Витрины
             </NavLink>
           )}
-          {user && MANAGEMENT_ROLES.includes(user.role) && (
+          {inRoles(user?.role, VIEWER_ROLES) && (
+            <NavLink to="/students" className={({ isActive }) => (isActive ? "active" : "")}>
+              Студенты
+            </NavLink>
+          )}
+          {(inRoles(user?.role, VIEWER_ROLES) || leadsGroups(user)) && (
+            <NavLink to="/passport" className={({ isActive }) => (isActive ? "active" : "")}>
+              Соц. паспорт
+            </NavLink>
+          )}
+          {(inRoles(user?.role, VIEWER_ROLES) || leadsGroups(user)) && (
+            <NavLink to="/individual-work" className={({ isActive }) => (isActive ? "active" : "")}>
+              Индивидуальная работа
+            </NavLink>
+          )}
+          {inRoles(user?.role, MANAGEMENT_ROLES) && (
             <NavLink to="/admin" className={({ isActive }) => (isActive ? "active" : "")}>
               Админка
             </NavLink>
@@ -35,9 +74,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           {user && (
             <>
               <NotificationBell />
-              <span>{user.full_name}</span>
-              <NavLink to="/change-password">Сменить пароль</NavLink>
-              <button onClick={logout}>Выйти</button>
+              <UserMenu name={user.full_name} onLogout={logout} />
             </>
           )}
         </div>
