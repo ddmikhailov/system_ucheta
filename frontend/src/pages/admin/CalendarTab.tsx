@@ -2,17 +2,12 @@ import { useEffect, useState } from "react";
 import { api, ApiError } from "../../api/client";
 import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { CalendarDay, GroupCalendarOverride, StudyGroupAdmin } from "../../api/types";
-import { toIso, todayIso } from "../../utils/date";
+import { formatDateRu, toIso, todayIso } from "../../utils/date";
 
 function monthsAheadIso(n: number): string {
   const d = new Date();
   d.setMonth(d.getMonth() + n);
   return toIso(d);
-}
-
-function formatDateRu(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  return `${d}.${m}.${y}`;
 }
 
 const DAY_TYPE_LABELS: Record<string, string> = {

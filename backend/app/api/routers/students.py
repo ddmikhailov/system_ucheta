@@ -3,7 +3,7 @@ import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import DOSSIER_STAFF_ROLES, is_department_scoped, assert_can_access_group, get_current_user, scope_department_id
 from app.core.time import today_local
@@ -76,7 +76,10 @@ def search_students(
             Student.last_name.ilike(like) | Student.first_name.ilike(like)
             | Student.middle_name.ilike(like) | StudyGroup.code.ilike(like)
         )
-    students = query.order_by(Student.last_name, Student.first_name).limit(min(max(limit, 1), 200)).all()
+    students = (
+        query.options(joinedload(Student.study_group))
+        .order_by(Student.last_name, Student.first_name).limit(min(max(limit, 1), 200)).all()
+    )
     return [
         StudentSearchRow(id=s.id, full_name=s.full_name, group_code=s.study_group.code, status=s.status.value)
         for s in students

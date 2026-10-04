@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.time import today_local
+from app.core.xlsx import append_row
 from app.db.session import get_db
 from app.models import DossierAccessLog, StudyGroup, User
 from app.services import passport_service as svc
@@ -192,7 +193,7 @@ def export(
         ]
 
     for p in passports:
-        ws.append(cells(_row(p)))
+        append_row(ws, cells(_row(p)))
     if len(passports) > 1:
         ws.append(cells(_totals(passports)))
         for cell in ws[ws.max_row]:
@@ -205,7 +206,7 @@ def export(
         _sheet(names_ws, ["Категория", "Студент"])
         for key, title, _ in svc.CATEGORIES:
             for name in passports[0].names[key]:
-                names_ws.append([title, name])
+                append_row(names_ws, [title, name])
         names_ws.column_dimensions["A"].width = 28
         names_ws.column_dimensions["B"].width = 40
 

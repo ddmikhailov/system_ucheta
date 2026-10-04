@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { api, ApiError } from "../api/client";
+import { formatServerDateTimeFull } from "../utils/date";
 import type { Dossier, DossierAccessEntry, DossierProfile, DossierSpecial } from "../api/types";
 
 const NOTE_KINDS: Record<string, string> = {
@@ -42,11 +43,6 @@ const SPECIAL_FLAGS: [SpecialFlag, string][] = [
   ["pdn_kdn", "Учёт ПДН/КДН"],
   ["internal_record", "Внутренний учёт"],
 ];
-
-function formatDateTime(iso: string): string {
-  // Сервер отдаёт UTC без суффикса — добавляем Z, чтобы показать местное время.
-  return new Date(iso.endsWith("Z") ? iso : `${iso}Z`).toLocaleString("ru-RU");
-}
 
 // Досье студента: контакты, представители, особые данные (шифруются на сервере),
 // заметки куратора. Журнал просмотров — только администратору/тьютору.
@@ -92,6 +88,16 @@ export default function StudentDossier({ studentId, isAdmin }: { studentId: numb
   );
 }
 
+// Поле с видимой подписью: плейсхолдер исчезает при вводе и не читается скринридером как название.
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="form-field">
+      <span>{label}</span>
+      {children}
+    </label>
+  );
+}
+
 function ProfileForm({
   dossier,
   onSaved,
@@ -125,35 +131,34 @@ function ProfileForm({
   return (
     <form className="add-block" onSubmit={save}>
       <p className="add-block__title">Основное и контакты</p>
-      <div className="inline-form">
-        <label>
-          Дата рождения{" "}
+      <div className="inline-form form-fields">
+        <Field label="Дата рождения">
           <input type="date" value={profile.birth_date ?? ""} onChange={(e) => set("birth_date", e.target.value)} />
-        </label>
-        <select value={profile.funding ?? ""} onChange={(e) => set("funding", e.target.value)}>
-          <option value="">Форма финансирования</option>
-          <option value="budget">Бюджет</option>
-          <option value="contract">Договор</option>
-        </select>
-        <input placeholder="Телефон" value={profile.phone ?? ""} onChange={(e) => set("phone", e.target.value)} />
-        <input placeholder="E-mail" value={profile.email ?? ""} onChange={(e) => set("email", e.target.value)} />
-        <input
-          placeholder="Мессенджер / соцсеть"
-          value={profile.messenger ?? ""}
-          onChange={(e) => set("messenger", e.target.value)}
-        />
+        </Field>
+        <Field label="Финансирование">
+          <select value={profile.funding ?? ""} onChange={(e) => set("funding", e.target.value)}>
+            <option value="">не указано</option>
+            <option value="budget">Бюджет</option>
+            <option value="contract">Договор</option>
+          </select>
+        </Field>
+        <Field label="Телефон">
+          <input value={profile.phone ?? ""} onChange={(e) => set("phone", e.target.value)} />
+        </Field>
+        <Field label="E-mail">
+          <input type="email" value={profile.email ?? ""} onChange={(e) => set("email", e.target.value)} />
+        </Field>
+        <Field label="Мессенджер / соцсеть">
+          <input value={profile.messenger ?? ""} onChange={(e) => set("messenger", e.target.value)} />
+        </Field>
       </div>
-      <div className="inline-form">
-        <input
-          placeholder="Адрес регистрации"
-          value={profile.registration_address ?? ""}
-          onChange={(e) => set("registration_address", e.target.value)}
-        />
-        <input
-          placeholder="Адрес проживания"
-          value={profile.residence_address ?? ""}
-          onChange={(e) => set("residence_address", e.target.value)}
-        />
+      <div className="inline-form form-fields">
+        <Field label="Адрес регистрации">
+          <input value={profile.registration_address ?? ""} onChange={(e) => set("registration_address", e.target.value)} />
+        </Field>
+        <Field label="Адрес проживания">
+          <input value={profile.residence_address ?? ""} onChange={(e) => set("residence_address", e.target.value)} />
+        </Field>
       </div>
 
       <p className="add-block__title">Социальный статус и здоровье</p>
@@ -176,25 +181,28 @@ function ProfileForm({
               </label>
             ))}
           </div>
-          <div className="inline-form">
-            <input
-              placeholder="Группа инвалидности"
-              value={special?.disability_group ?? ""}
-              onChange={(e) => patchSpecial({ disability_group: e.target.value || null })}
-            />
-            <input
-              placeholder="Стипендия / соцвыплаты"
-              value={special?.scholarship ?? ""}
-              onChange={(e) => patchSpecial({ scholarship: e.target.value || null })}
-            />
+          <div className="inline-form form-fields">
+            <Field label="Группа инвалидности">
+              <input
+                value={special?.disability_group ?? ""}
+                onChange={(e) => patchSpecial({ disability_group: e.target.value || null })}
+              />
+            </Field>
+            <Field label="Стипендия / соцвыплаты">
+              <input
+                value={special?.scholarship ?? ""}
+                onChange={(e) => patchSpecial({ scholarship: e.target.value || null })}
+              />
+            </Field>
           </div>
-          <textarea
-            placeholder="Здоровье: что важно знать куратору"
-            rows={2}
-            style={{ width: "100%" }}
-            value={special?.health_note ?? ""}
-            onChange={(e) => patchSpecial({ health_note: e.target.value || null })}
-          />
+          <Field label="Здоровье: что важно знать куратору">
+            <textarea
+              rows={2}
+              style={{ width: "100%" }}
+              value={special?.health_note ?? ""}
+              onChange={(e) => patchSpecial({ health_note: e.target.value || null })}
+            />
+          </Field>
         </>
       )}
       <p>
@@ -383,7 +391,7 @@ function Notes({
           <tbody>
             {dossier.notes.map((n) => (
               <tr key={n.id}>
-                <td data-label="Дата">{formatDateTime(n.created_at)}</td>
+                <td data-label="Дата">{formatServerDateTimeFull(n.created_at)}</td>
                 <td data-label="Тип">{NOTE_KINDS[n.kind] ?? n.kind}</td>
                 <td data-label="Заметка" style={{ whiteSpace: "pre-wrap" }}>
                   {n.text}
@@ -440,7 +448,7 @@ function AccessLog({ studentId }: { studentId: number }) {
           <tbody>
             {rows.map((r, i) => (
               <tr key={i}>
-                <td data-label="Когда">{formatDateTime(r.created_at)}</td>
+                <td data-label="Когда">{formatServerDateTimeFull(r.created_at)}</td>
                 <td data-label="Кто">{r.user_name}</td>
                 <td data-label="Особые поля">{r.included_special ? "показаны" : "—"}</td>
               </tr>

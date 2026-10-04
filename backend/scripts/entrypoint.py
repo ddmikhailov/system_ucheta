@@ -196,6 +196,15 @@ def main(environ: Mapping[str, str] = os.environ) -> None:
 
     settings = get_settings()
 
+    # Ключ шифрования особых полей досье: без него эти поля недоступны (остальное работает),
+    # а испорченный ключ лучше поймать на старте, чем при первой записи.
+    from app.core import field_crypto
+
+    if not settings.dossier_encryption_key:
+        log("ВНИМАНИЕ: DOSSIER_ENCRYPTION_KEY не задан — особые поля досье (здоровье, соц. статус) недоступны.")
+    elif not field_crypto.is_available():
+        raise SystemExit("DOSSIER_ENCRYPTION_KEY некорректен: нужен ключ Fernet (см. .env.example).")
+
     log(f"Ожидание базы данных {settings.db_host}:{settings.db_port}...")
     wait_for_database(_connect_to_database)
 

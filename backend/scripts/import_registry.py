@@ -46,6 +46,7 @@ from app.models import (
     StudentStatus, StudyGroup,
 )
 from app.services import group_membership_service
+from app.services.erasure_service import erase_student_personal_data
 
 # Адрес площадки (как в реестре) → отделение.
 ADDRESS_TO_DEPARTMENT = {
@@ -264,6 +265,7 @@ def run(path: str, apply: bool, today: datetime.date | None = None) -> dict[str,
             db.query(AbsencePeriod).filter(AbsencePeriod.student_id.in_(chunk)).delete(synchronize_session=False)
             db.query(StudentGroupMembership).filter(
                 StudentGroupMembership.student_id.in_(chunk)).delete(synchronize_session=False)
+            erase_student_personal_data(db, chunk, include_access_log=True)
             db.query(AuditLog).filter(
                 AuditLog.entity_type == "student", AuditLog.entity_id.in_([str(i) for i in chunk])
             ).update({"old_value": "[обезличено]", "new_value": "[обезличено]"}, synchronize_session=False)

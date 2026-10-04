@@ -3,11 +3,10 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api, ApiError, downloadFile } from "../api/client";
 import TaskCreateForm from "../components/TaskCreateForm";
 import { COLLECT_MODE_LABELS, REVIEWER_LABELS, TASK_STATUS_LABELS } from "../constants/tasks";
+import { formatDateRu, formatServerDateTimeFull } from "../utils/date";
 import type { ReviewQueueRow, TaskDetail, TaskListRow, TaskProgress } from "../api/types";
 
 type Tab = "list" | "review" | "create";
-
-const fmtDate = (iso: string) => iso.split("-").reverse().join(".");
 
 function ProgressText({ p }: { p: TaskProgress }) {
   return (
@@ -79,7 +78,7 @@ export default function TasksPage() {
         ) : list.length === 0 ? (
           <p className="hint">Задач пока нет — создайте первую.</p>
         ) : (
-          <table className="dash-table">
+          <table className="dash-table roster-table">
             <thead>
               <tr>
                 <th>Задача</th>
@@ -101,7 +100,7 @@ export default function TasksPage() {
                     <br />
                     <span className="hint">{COLLECT_MODE_LABELS[t.collect_mode]}</span>
                   </td>
-                  <td data-label="Срок">{fmtDate(t.due_date)}</td>
+                  <td data-label="Срок">{formatDateRu(t.due_date)}</td>
                   <td data-label="Прогресс">
                     <ProgressText p={t.progress} />
                   </td>
@@ -116,7 +115,7 @@ export default function TasksPage() {
         (queue.length === 0 ? (
           <p className="hint">Ничего не ждёт вашей проверки.</p>
         ) : (
-          <table className="dash-table">
+          <table className="dash-table roster-table">
             <thead>
               <tr>
                 <th>Задача</th>
@@ -136,8 +135,8 @@ export default function TasksPage() {
                   <td data-label="Группа">
                     {q.group_code} <span className="hint">{q.department_name}</span>
                   </td>
-                  <td data-label="Отправлено">{q.submitted_at ? new Date(q.submitted_at.endsWith("Z") ? q.submitted_at : `${q.submitted_at}Z`).toLocaleString("ru-RU") : "—"}</td>
-                  <td data-label="Срок">{fmtDate(q.due_date)}</td>
+                  <td data-label="Отправлено">{q.submitted_at ? formatServerDateTimeFull(q.submitted_at) : "—"}</td>
+                  <td data-label="Срок">{formatDateRu(q.due_date)}</td>
                 </tr>
               ))}
             </tbody>
@@ -195,7 +194,7 @@ function TaskView({ id, onBack, onDeleted }: { id: string; onBack: () => void; o
         {task.is_closed && <span className="locked-badge">закрыта</span>}
       </div>
       <p className="hint">
-        Срок {fmtDate(task.due_date)} · {COLLECT_MODE_LABELS[task.collect_mode]} · проверяет: {REVIEWER_LABELS[task.reviewer_rule]} · автор:{" "}
+        Срок {formatDateRu(task.due_date)} · {COLLECT_MODE_LABELS[task.collect_mode]} · проверяет: {REVIEWER_LABELS[task.reviewer_rule]} · автор:{" "}
         {task.author_name ?? "—"}
       </p>
       {task.description && <p style={{ whiteSpace: "pre-wrap" }}>{task.description}</p>}
@@ -249,7 +248,7 @@ function TaskView({ id, onBack, onDeleted }: { id: string; onBack: () => void; o
           ))}
         </select>
       </div>
-      <table className="dash-table">
+      <table className="dash-table roster-table">
         <thead>
           <tr>
             <th>Группа</th>

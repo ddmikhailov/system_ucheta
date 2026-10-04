@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
+import { useScrollToTopOnChange } from "../hooks/useScrollToTopOnChange";
 import { COLLECT_MODE_LABELS, REVIEWER_LABELS, TASK_STATUS_LABELS } from "../constants/tasks";
+import { formatDateRu, formatServerDateTimeFull } from "../utils/date";
 import type { AssignmentDetail } from "../api/types";
 
 type Values = Record<string, unknown>;
@@ -74,10 +76,6 @@ function FieldInput({
   }
 }
 
-function formatDateTime(iso: string): string {
-  return new Date(iso.endsWith("Z") ? iso : `${iso}Z`).toLocaleString("ru-RU");
-}
-
 // Заполнение назначения куратором (черновик → отправка) и проверка: принять / вернуть.
 export default function TaskAssignmentPage() {
   const { assignmentId } = useParams();
@@ -89,8 +87,10 @@ export default function TaskAssignmentPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  useScrollToTopOnChange(error, notice);
   const [reviewComment, setReviewComment] = useState("");
   const [commentText, setCommentText] = useState("");
+  const [commentStudent, setCommentStudent] = useState("");
 
   const apply = useCallback((d: AssignmentDetail) => {
     setDetail(d);
@@ -172,8 +172,9 @@ export default function TaskAssignmentPage() {
   async function addComment(e: FormEvent) {
     e.preventDefault();
     if (!commentText.trim()) return;
-    await run(() => api.post(`${base}/comments`, { text: commentText }), () => {
+    await run(() => api.post(`${base}/comments`, { text: commentText, student_id: commentStudent ? Number(commentStudent) : null }), () => {
       setCommentText("");
+      setCommentStudent("");
       load();
     });
   }
@@ -193,7 +194,7 @@ export default function TaskAssignmentPage() {
   return (
     <div className="student-card">
       <p>
-        <button className="link-btn" onClick={() => navigate(-1)}>
+        <button className="link-btn" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/"))}>
           ← Назад
         </button>
       </p>
@@ -201,11 +202,12 @@ export default function TaskAssignmentPage() {
         <h2>{detail.title}</h2>
         <span className={`locked-badge${detail.status === "accepted" ? "" : " risk-badge"}`}>
           {TASK_STATUS_LABELS[detail.status] ?? detail.status}
+          {detail.status === "submitted" && detail.review_steps > 1 && ` (ступень ${detail.review_step} из ${detail.review_steps})`}
         </span>
         {detail.is_overdue && <span className="locked-badge risk-badge">просрочено</span>}
       </div>
       <p className="hint">
-        Группа {detail.group_code} · срок {detail.due_date.split("-").reverse().join(".")} ·{" "}
+        Группа {detail.group_code} · срок {formatDateRu(detail.due_date)} ·{" "}
         {COLLECT_MODE_LABELS[detail.collect_mode]} · проверяет: {REVIEWER_LABELS[detail.reviewer_rule]}
       </p>
       {detail.description && <p style={{ whiteSpace: "pre-wrap" }}>{detail.description}</p>}
@@ -237,7 +239,7 @@ export default function TaskAssignmentPage() {
           ))}
         </div>
       ) : (
-        <table className="dash-table">
+        <table className="dash-table roster-table">
           <thead>
             <tr>
               {detail.collect_mode === "selected" && <th>Касается</th>}
@@ -289,7 +291,7 @@ export default function TaskAssignmentPage() {
       )}
 
       {editable && (
-        <p>
+        <p className="actions-sticky-mobile">
           <button onClick={save} disabled={busy || !dirty}>
             Сохранить черновик
           </button>{" "}
@@ -327,13 +329,23 @@ export default function TaskAssignmentPage() {
         <ul className="hint" style={{ listStyle: "none", padding: 0 }}>
           {detail.comments.map((c) => (
             <li key={c.id} style={{ marginBottom: 6 }}>
-              <b>{c.author_name ?? "—"}</b> · {formatDateTime(c.created_at)}
+              <b>{c.author_name ?? "—"}</b> · {formatServerDateTimeFull(c.created_at)}
               {c.student_id && <> · {studentNames.get(c.student_id) ?? "студент"}</>}: {c.text}
             </li>
           ))}
         </ul>
       )}
       <form className="inline-form" onSubmit={addComment}>
+        {perStudent && (
+          <select value={commentStudent} onChange={(e) => setCommentStudent(e.target.value)} aria-label="К кому комментарий">
+            <option value="">Ко всему ответу</option>
+            {detail.rows.map((r) => (
+              <option key={r.student_id} value={r.student_id}>
+                {r.student_name}
+              </option>
+            ))}
+          </select>
+        )}
         <input
           placeholder="Написать комментарий"
           value={commentText}

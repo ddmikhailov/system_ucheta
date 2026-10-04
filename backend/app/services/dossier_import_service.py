@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import is_department_scoped
 from app.core import field_crypto
+from app.core.xlsx import append_row
 from app.models import Student, StudentGuardian, StudentProfile, StudyGroup, User
 from app.schemas.dossier import ProfileFields, SpecialData
 from app.services.audit_service import log_action
@@ -114,7 +115,7 @@ def build_template(db: Session, user: User) -> bytes:
         cell.font = Font(bold=True)
         cell.alignment = Alignment(wrap_text=True, vertical="top")
     for s in _students_in_scope(db, user):
-        ws.append([s.study_group.code, s.last_name, s.first_name, s.middle_name or ""])
+        append_row(ws, [s.study_group.code, s.last_name, s.first_name, s.middle_name or ""])
     for idx in range(1, len(headers) + 1):
         ws.column_dimensions[get_column_letter(idx)].width = 22
     ws.freeze_panes = "E2"

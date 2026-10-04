@@ -13,7 +13,6 @@ from app.models import (
     MarkCode,
     MarkSource,
     Student,
-    StudentStatus,
     StudyGroup,
     User,
 )

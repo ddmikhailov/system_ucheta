@@ -16,10 +16,11 @@ from typing import Any
 from fastapi import HTTPException, status
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import DEPARTMENT_SCOPED_ROLES, get_curator_group_ids
 from app.core.time import today_local, utcnow
+from app.core.xlsx import append_row
 from app.models import (
     CuratorAssignment, InAppNotification, RoleCode, Student, StudyGroup, Task, TaskAssignment, TaskComment, TaskRow, User,
 )
@@ -125,16 +126,20 @@ def _missing_required(fields: list[dict], values: dict[str, Any]) -> list[str]:
 
 # ---------- охват ----------
 
+def scope_matches(scope: ScopeDef, group: StudyGroup) -> bool:
+    if group.id in scope.exclude_group_ids:
+        return False
+    return (
+        scope.all_groups or group.department_id in scope.department_ids or group.course in scope.courses
+        or group.id in scope.group_ids
+    )
+
+
 def resolve_scope_groups(db: Session, scope: ScopeDef, creator: User) -> list[StudyGroup]:
     if not (scope.all_groups or scope.department_ids or scope.courses or scope.group_ids):
         raise _bad("Укажите охват: весь колледж, отделения, курсы или группы")
     groups = db.query(StudyGroup).filter(StudyGroup.is_active.is_(True)).all()
-    chosen = [
-        g for g in groups
-        if scope.all_groups or g.department_id in scope.department_ids or g.course in scope.courses
-        or g.id in scope.group_ids
-    ]
-    chosen = [g for g in chosen if g.id not in scope.exclude_group_ids]
+    chosen = [g for g in groups if scope_matches(scope, g)]
     if RoleCode(creator.role.code) in DEPARTMENT_SCOPED_ROLES:
         chosen = [g for g in chosen if g.department_id == creator.department_id]
     if not chosen:
@@ -190,6 +195,10 @@ def can_review(user: User, assignment: TaskAssignment) -> bool:
     if role == RoleCode.ADMIN:
         return True
     rule = task.reviewer_rule
+    if rule == "two_step":
+        if assignment.review_step == 1:
+            return role in DEPARTMENT_SCOPED_ROLES and user.department_id == assignment.study_group.department_id
+        return role == RoleCode.EDU_DEPARTMENT
     if rule == "dept_head":
         return role in DEPARTMENT_SCOPED_ROLES and user.department_id == assignment.study_group.department_id
     if rule == "edu_department":
@@ -296,6 +305,7 @@ def submit(db: Session, user: User, assignment: TaskAssignment) -> None:
 
     assignment.submitted_at = utcnow()
     assignment.review_comment = None
+    assignment.review_step = 1
     if task.reviewer_rule == "none":
         assignment.status = "accepted"
         assignment.reviewed_at = utcnow()
@@ -312,13 +322,13 @@ def submit(db: Session, user: User, assignment: TaskAssignment) -> None:
 
 def reviewers_to_notify(db: Session, assignment: TaskAssignment) -> list[User]:
     task = assignment.task
-    if task.reviewer_rule == "dept_head":
+    if task.reviewer_rule == "dept_head" or (task.reviewer_rule == "two_step" and assignment.review_step == 1):
         dept = assignment.study_group.department_id
         return db.query(User).join(User.role).filter(
             User.is_active.is_(True), User.department_id == dept,
             User.role.has(code=RoleCode.DEPT_HEAD.value) | User.role.has(code=RoleCode.TUTOR.value),
         ).all()
-    if task.reviewer_rule == "edu_department":
+    if task.reviewer_rule == "edu_department" or (task.reviewer_rule == "two_step" and assignment.review_step == 2):
         return db.query(User).join(User.role).filter(
             User.is_active.is_(True), User.role.has(code=RoleCode.EDU_DEPARTMENT.value)
         ).all()
@@ -335,6 +345,20 @@ def review(db: Session, user: User, assignment: TaskAssignment, action: str, com
     comment = (comment or "").strip() or None
     if action == "return" and not comment:
         raise _bad("Напишите, что нужно доработать")
+    if action == "accept" and assignment.task.reviewer_rule == "two_step" and assignment.review_step == 1:
+        # Первая ступень пройдена — дальше воспитательный отдел; куратору пока ничего не сообщаем.
+        assignment.review_step = 2
+        if comment:
+            db.add(TaskComment(assignment_id=assignment.id, author_id=user.id, text=comment))
+        for reviewer in reviewers_to_notify(db, assignment):
+            in_app_notification_service.notify(
+                db, reviewer, "task_submitted",
+                f"Задача «{assignment.task.title}», группа {assignment.study_group.code}: "
+                "зав. отделением принял(а), ждёт вашей проверки.",
+                entity_type="task_assignment", entity_id=str(assignment.id),
+            )
+        return
+    assignment.review_step = 1
     assignment.status = "accepted" if action == "accept" else "returned"
     assignment.reviewed_by = user.id
     assignment.reviewed_at = utcnow()
@@ -384,6 +408,8 @@ def progress(assignments: list[TaskAssignment], today: datetime.date | None = No
 def visible_assignments(db: Session, user: User, task: Task) -> list[TaskAssignment]:
     rows = (
         db.query(TaskAssignment).join(StudyGroup, StudyGroup.id == TaskAssignment.study_group_id)
+        .options(joinedload(TaskAssignment.study_group).joinedload(StudyGroup.department),
+                 joinedload(TaskAssignment.task))
         .filter(TaskAssignment.task_id == task.id).order_by(StudyGroup.course, StudyGroup.code).all()
     )
     return [a for a in rows if manager_sees(user, a)]
@@ -409,7 +435,7 @@ def export_workbook(db: Session, user: User, task: Task) -> bytes:
     per_student = task.collect_mode != "group"
     head = ["Отделение", "Группа", "Статус"] + (["Студент"] if per_student else []) + [f["label"] for f in fields]
     head.append("Комментарий проверяющего")
-    ws.append(head)
+    append_row(ws, head)
     for cell in ws[1]:
         cell.font = Font(bold=True)
         cell.alignment = Alignment(wrap_text=True, vertical="top")
@@ -427,14 +453,14 @@ def export_workbook(db: Session, user: User, task: Task) -> bytes:
         base = [a.study_group.department.name, a.study_group.code, status_ru[a.status]]
         if not per_student:
             values = json.loads(a.group_values_json or "{}")
-            ws.append(base + [fmt(values.get(f["key"])) for f in fields] + [a.review_comment or ""])
+            append_row(ws, base + [fmt(values.get(f["key"])) for f in fields] + [a.review_comment or ""])
             continue
         names = {s.id: s.full_name for s in attendance_service.get_active_students(db, a.study_group_id, today_local())}
         for row in sorted(a.rows, key=lambda r: names.get(r.student_id, "")):
             if not row.is_included or row.student_id not in names:
                 continue
             values = json.loads(row.values_json)
-            ws.append(base + [names[row.student_id]] + [fmt(values.get(f["key"])) for f in fields] + [a.review_comment or ""])
+            append_row(ws, base + [names[row.student_id]] + [fmt(values.get(f["key"])) for f in fields] + [a.review_comment or ""])
     for idx in range(1, len(head) + 1):
         ws.column_dimensions[chr(64 + idx) if idx <= 26 else "AA"].width = 22
     buf = io.BytesIO()
@@ -516,4 +542,34 @@ def generate_reminders(db: Session, user: User, today: datetime.date | None = No
             if can_review(user, a):
                 remind("task_review_waiting", a,
                        f"Ждёт проверки больше {REVIEW_WAIT_DAYS} дн.: «{a.task.title}», группа {a.study_group.code}.")
+    return created
+
+
+def assign_new_group(db: Session, group: StudyGroup) -> int:
+    """Новая (или вернувшаяся из архива) группа получает назначения по всем открытым задачам,
+    в охват которых попадает; задачи зав. отделением/тьютора — только если группа из их отделения.
+    Возвращает число созданных назначений (без commit)."""
+    if not group.is_active:
+        return 0
+    today = today_local()
+    created = 0
+    open_tasks = db.query(Task).filter(Task.is_closed.is_(False), Task.due_date >= today).all()
+    existing = {a.task_id for a in db.query(TaskAssignment).filter(TaskAssignment.study_group_id == group.id)}
+    for task in open_tasks:
+        if task.id in existing or not scope_matches(ScopeDef(**json.loads(task.scope_json)), group):
+            continue
+        author = task.author
+        if author is not None and RoleCode(author.role.code) in DEPARTMENT_SCOPED_ROLES \
+                and author.department_id != group.department_id:
+            continue
+        assignment = TaskAssignment(task_id=task.id, study_group_id=group.id, status="new")
+        db.add(assignment)
+        db.flush()
+        for curator in assignees(db, group.id, today):
+            in_app_notification_service.notify(
+                db, curator, "task_assigned",
+                f"Новая задача «{task.title}» для группы {group.code}, срок — {task.due_date.strftime('%d.%m.%Y')}.",
+                entity_type="task_assignment", entity_id=str(assignment.id),
+            )
+        created += 1
     return created

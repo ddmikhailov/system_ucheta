@@ -197,6 +197,7 @@ select:hover {
 
 .app-header__nav {
   display: flex;
+  flex-wrap: wrap; /* пунктов меню до 6 (задачи, витрины, студенты, паспорт, админка…) */
   gap: 6px;
   flex: 1;
 }
@@ -208,6 +209,7 @@ select:hover {
   font-size: 14px;
   padding: 8px 14px;
   border-radius: 8px;
+  white-space: nowrap; /* пункт меню не должен ломаться на две строки */
   transition: background 0.15s ease, color 0.15s ease;
 }
 
@@ -1006,6 +1008,13 @@ select:hover {
     margin-bottom: 6px;
   }
 
+  /* Флажки внутри карточки (ответы по задаче: «да/нет», множественный выбор) — не на всю ширину. */
+  .roster-table td input[type="checkbox"] {
+    width: auto;
+    min-height: 0;
+    margin: 0 6px 0 0;
+  }
+
   /* Touch-цели покрупнее — за пределами этого пункта размеры не трогаем,
      чтобы плотные таблицы на десктопе не "разъезжались". */
   button,
@@ -1350,4 +1359,26 @@ th.sortable-th {
 
 th.sortable-th:hover {
   color: var(--primary);
+}
+
+
+/* Поле формы с подписью над полем (досье и т. п.) */
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.form-field > input,
+.form-field > select,
+.form-field > textarea {
+  font-weight: 400;
+  color: var(--text);
+}
+
+.form-fields {
+  align-items: flex-end;
 }

@@ -29,6 +29,7 @@ from app.models import (
     StudentGroupMembership,
     StudentStatus,
     StudyGroup,
+    TaskAssignment,
     User,
 )
 from app.core.password_policy import validate_password_strength
@@ -58,7 +59,8 @@ from app.schemas.admin import (
     UserRead,
     UserUpdate,
 )
-from app.services import group_membership_service
+from app.services import group_membership_service, task_service
+from app.services.erasure_service import erase_student_personal_data
 from app.services.audit_service import log_action
 from app.services.password_service import generate_temporary_password
 
@@ -187,6 +189,7 @@ def create_group(
         raise HTTPException(status.HTTP_409_CONFLICT, "Группа с таким кодом уже существует")
     db.refresh(group)
     log_action(db, user, "group.create", "study_group", str(group.id), new_value=group.code)
+    task_service.assign_new_group(db, group)  # открытые задачи с подходящим охватом достаются и ей
     db.commit()
     return _group_read(group)
 
@@ -210,6 +213,8 @@ def update_group(
     for field, value in data.items():
         setattr(group, field, value)
     if group.is_active != old_active:
+        if group.is_active:
+            task_service.assign_new_group(db, group)
         log_action(
             db, user, "group.archive" if not group.is_active else "group.restore",
             "study_group", str(group.id),
@@ -268,6 +273,12 @@ def _delete_group_completely(db: Session, user: User, group: StudyGroup) -> Dele
         "marks": _count_rows(db, AttendanceMark, AttendanceMark.student_id, student_ids),
         "submissions": db.query(DaySubmission).filter(DaySubmission.study_group_id == group_id).count(),
     }
+
+    # Назначения задач группы вместе с ответами (каскадом) и личные данные её студентов.
+    for assignment in db.query(TaskAssignment).filter(TaskAssignment.study_group_id == group_id).all():
+        db.delete(assignment)
+    db.flush()
+    erase_student_personal_data(db, student_ids, include_access_log=True)
 
     if student_ids:
         db.query(AttendanceMark).filter(AttendanceMark.student_id.in_(student_ids)).delete(synchronize_session=False)
@@ -492,12 +503,16 @@ def delete_student(
     # student_group_memberships (она есть у каждого студента после раздела 3)
     # обезличивал бы вообще всех студентов вместо чистого удаления.
     db.query(StudentGroupMembership).filter(StudentGroupMembership.student_id == student_id).delete()
+    erase_student_personal_data(db, [student_id], include_access_log=True)
 
     try:
         db.delete(student)
         db.flush()
     except IntegrityError:
         db.rollback()
+        # Откат вернул и досье — но студента при этом не удаляют, а обезличивают: его телефоны,
+        # представители, заметки и особые данные должны исчезнуть так же, как ФИО.
+        erase_student_personal_data(db, [student_id])
         # Есть отметки посещаемости — вместо удаления обезличиваем, чтобы не
         # потерять статистику и историю группы (обновление 1.1: удаление не
         # должно ломать базу и терять уже собранные данные).

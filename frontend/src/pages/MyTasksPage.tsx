@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { COLLECT_MODE_LABELS, TASK_STATUS_LABELS } from "../constants/tasks";
+import { formatDateRu } from "../utils/date";
 import type { MyAssignmentRow } from "../api/types";
 
 const ORDER = ["returned", "in_progress", "new", "submitted", "accepted"];
@@ -29,7 +30,7 @@ export default function MyTasksPage() {
   );
 
   const table = (list: MyAssignmentRow[]) => (
-    <table className="dash-table">
+    <table className="dash-table roster-table">
       <thead>
         <tr>
           <th>Задача</th>
@@ -50,7 +51,7 @@ export default function MyTasksPage() {
             </td>
             <td data-label="Группа">{r.group_code}</td>
             <td data-label="Срок">
-              {r.due_date.split("-").reverse().join(".")} {r.is_overdue && <b>просрочено</b>}
+              {formatDateRu(r.due_date)} {r.is_overdue && <b>просрочено</b>}
             </td>
             <td data-label="Статус">{TASK_STATUS_LABELS[r.status] ?? r.status}</td>
           </tr>

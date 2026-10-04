@@ -45,6 +45,8 @@ class TaskAssignment(Base):
     reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     reviewed_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
     review_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Двухступенчатая проверка (reviewer_rule=two_step): 1 — зав. отделением, 2 — воспитательный отдел.
+    review_step: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
 
     task: Mapped["Task"] = relationship(back_populates="assignments")

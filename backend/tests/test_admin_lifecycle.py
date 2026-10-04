@@ -209,8 +209,11 @@ def test_cannot_delete_active_curator(client, admin_headers, imported, db):
     assert r.status_code == 400
 
 
-def test_end_curator_assignment_keeps_history(client, admin_headers, curator_group, curator_user, db, today):
+def test_end_curator_assignment_keeps_history(client, admin_headers, curator_group, curator_user, db):
+    from app.core.time import today_local
     from app.models import CuratorAssignment
+
+    today = today_local()  # назначение закрывается именно сегодняшним днём, даже в выходной
 
     assignment = (
         db.query(CuratorAssignment)

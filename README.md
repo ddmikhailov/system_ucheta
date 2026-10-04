@@ -41,7 +41,9 @@ docker-compose.yml   2 сервиса: app + db
 cp backend/.env.example backend/.env
 # отредактируйте backend/.env — обязательно задайте DB_PASSWORD, DB_ROOT_PASSWORD,
 # JWT_SECRET (случайная строка ≥32 символов, иначе приложение откажется стартовать
-# — python -c "import secrets; print(secrets.token_urlsafe(32))"), ADMIN_PASSWORD
+# — python -c "import secrets; print(secrets.token_urlsafe(32))"), ADMIN_PASSWORD,
+# DOSSIER_ENCRYPTION_KEY (ключ шифрования особых полей досье, команда — в .env.example;
+# хранить отдельно от БД и не менять: без него сохранённые особые данные не прочитать)
 
 docker compose up -d --build
 ```

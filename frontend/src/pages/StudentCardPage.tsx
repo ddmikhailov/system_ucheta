@@ -9,7 +9,7 @@ import StudentDossier from "../components/StudentDossier";
 import StudentMonthAttendanceView from "../components/StudentMonthAttendance";
 import { useScrollToTopOnChange } from "../hooks/useScrollToTopOnChange";
 import type { DeleteResult, StudentCard, StudyGroupAdmin } from "../api/types";
-import { todayIso } from "../utils/date";
+import { formatDateRu, todayIso } from "../utils/date";
 
 // Личная карточка студента: вся информация на одном экране и всё управление
 // им (правка ФИО, перевод в другую группу, статус обучения, удаление).
@@ -94,15 +94,15 @@ export default function StudentCardPage() {
         <Item label="Куратор" value={card.curator_name ?? "нет куратора"} />
         <Item label="Заместитель куратора" value={card.deputy_name ?? "нет"} />
         <Item label="Статус обучения" value={STUDENT_STATUS_LABELS[card.status] ?? card.status} />
-        <Item label="Дата зачисления" value={card.enrolled_at} />
-        <Item label="Дата выбытия" value={card.left_at ?? "—"} />
+        <Item label="Дата зачисления" value={formatDateRu(card.enrolled_at)} />
+        <Item label="Дата выбытия" value={card.left_at ? formatDateRu(card.left_at) : "—"} />
       </dl>
 
       <h3 className="student-card__section">Досье</h3>
       <StudentDossier studentId={card.id} isAdmin={user?.role === "admin" || user?.role === "tutor"} />
 
       <h3 className="student-card__section">
-        Посещаемость за 30 дней ({stats.date_from} — {stats.date_to})
+        Посещаемость за 30 дней ({formatDateRu(stats.date_from)} — {formatDateRu(stats.date_to)})
       </h3>
       {stats.in_list === 0 ? (
         <p className="hint">За этот период нет сданных дней по группе.</p>
@@ -148,7 +148,7 @@ export default function StudentCardPage() {
           <tbody>
             {card.recent_marks.map((m) => (
               <tr key={m.date}>
-                <td data-label="Дата">{m.date}</td>
+                <td data-label="Дата">{formatDateRu(m.date)}</td>
                 <td data-label="Отметка">
                   <b>{m.code.toUpperCase()}</b> — {m.name}
                 </td>
@@ -173,8 +173,8 @@ export default function StudentCardPage() {
           {card.group_history.map((h) => (
             <tr key={`${h.group_id}-${h.start_date}`}>
               <td data-label="Группа">{h.group_code}</td>
-              <td data-label="С">{h.start_date}</td>
-              <td data-label="По">{h.end_date ?? "по настоящее время"}</td>
+              <td data-label="С">{formatDateRu(h.start_date)}</td>
+              <td data-label="По">{h.end_date ? formatDateRu(h.end_date) : "по настоящее время"}</td>
             </tr>
           ))}
         </tbody>

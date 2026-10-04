@@ -14,6 +14,7 @@ import {
   defaultSummaryFilters,
 } from "../utils/summaryFilters";
 import type { SliceMode, SummaryFilters, SummaryView } from "../utils/summaryFilters";
+import { formatDateRu } from "../utils/date";
 
 
 const VIEW_LABELS: Record<SummaryView, string> = {
@@ -25,11 +26,6 @@ const VIEW_LABELS: Record<SummaryView, string> = {
 const ALL_SLICE = "Всего";
 const PAIR_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8];
 const COURSES = [1, 2, 3, 4];
-
-function formatDateRu(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  return `${d}.${m}.${y}`;
-}
 
 function percentText(value: number | null): string {
   return value === null ? "—" : `${value}%`;

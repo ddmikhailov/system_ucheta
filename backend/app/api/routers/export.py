@@ -5,7 +5,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
-    assert_can_access_group,
+    assert_can_view_group,
     get_current_user,
     require_management,
     scope_department_id,
@@ -51,7 +51,7 @@ def export_pdf(
     db: Session = Depends(get_db),
 ):
     validate_date_range(date_from, date_to)
-    assert_can_access_group(db, user, study_group_id, date_to)
+    assert_can_view_group(db, user, study_group_id, date_to)  # только чтение — как и сам журнал
     if db.get(StudyGroup, study_group_id) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Группа не найдена")
     content = export_service.build_signature_pdf(db, study_group_id, date_from, date_to)

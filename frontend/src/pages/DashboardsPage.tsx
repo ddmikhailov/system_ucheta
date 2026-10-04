@@ -24,19 +24,12 @@ import type {
   UserAdmin,
 } from "../api/types";
 import { CURATOR_CAPABLE_ROLES, DOSSIER_STAFF_ROLES } from "../constants/roles";
-import { toIso, todayIso } from "../utils/date";
+import { formatDateRu, toIso, todayIso } from "../utils/date";
 
 function daysAgoIso(n: number): string {
   const d = new Date();
   d.setDate(d.getDate() - n);
   return toIso(d);
-}
-
-// Даты в API приходят в ISO (YYYY-MM-DD) — на экране показываем в привычном
-// для колледжа виде ДД.ММ.ГГГГ (см. TODO.md 4).
-function formatDateRu(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  return `${d}.${m}.${y}`;
 }
 
 type Tab = "day" | "summary" | "dynamics" | "risk" | "discipline" | "vacant";

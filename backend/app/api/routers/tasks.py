@@ -4,7 +4,7 @@
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_user, get_curator_group_ids, require_roles
 from app.core.time import today_local
@@ -71,6 +71,7 @@ def my_assignments(user: User = Depends(get_current_user), db: Session = Depends
         return []
     rows = (
         db.query(TaskAssignment).join(Task, Task.id == TaskAssignment.task_id)
+        .options(joinedload(TaskAssignment.task), joinedload(TaskAssignment.study_group))
         .filter(TaskAssignment.study_group_id.in_(group_ids)).order_by(Task.due_date, Task.id).all()
     )
     return [
@@ -88,6 +89,7 @@ def review_queue(user: User = Depends(require_task_manager), db: Session = Depen
     today = today_local()
     rows = (
         db.query(TaskAssignment).filter(TaskAssignment.status == "submitted")
+        .options(joinedload(TaskAssignment.task), joinedload(TaskAssignment.study_group).joinedload(StudyGroup.department))
         .order_by(TaskAssignment.submitted_at).all()
     )
     return [
@@ -123,7 +125,8 @@ def _detail_assignment(db: Session, user: User, a: TaskAssignment) -> Assignment
         group_values=json.loads(a.group_values_json or "{}"), rows=rows,
         comments=[CommentRead(id=c.id, student_id=c.student_id, author_name=c.author.full_name if c.author else None,
                               text=c.text, created_at=c.created_at) for c in comments],
-        review_comment=a.review_comment, can_edit=editable, can_submit=editable,
+        review_comment=a.review_comment, review_step=a.review_step,
+        review_steps=2 if task.reviewer_rule == "two_step" else 1, can_edit=editable, can_submit=editable,
         can_review=svc.can_review(user, a) and a.status == "submitted",
     )
 

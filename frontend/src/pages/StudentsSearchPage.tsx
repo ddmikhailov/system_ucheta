@@ -82,7 +82,7 @@ export default function StudentsSearchPage() {
         <p className="hint">Никого не найдено.</p>
       ) : (
         <>
-          <table className="dash-table">
+          <table className="dash-table roster-table">
             <thead>
               <tr>
                 <th>Студент</th>

@@ -438,3 +438,99 @@ def test_reviewer_is_reminded_about_stale_submissions(client, admin_headers, dep
     # Кто не проверяет эту задачу, напоминания не получает.
     _open_platform(client, curator_headers)
     assert all(n["kind"] != "task_review_waiting" for n in _reminders(client, curator_headers))
+
+
+# ---------- двухступенчатая проверка и новые группы ----------
+
+def test_two_step_review_dept_head_then_edu_department(
+    client, admin_headers, dept_head_headers, edu_department_headers, curator_headers, curator_group, imported,
+):
+    _, aid, r = _submit_group_task(client, admin_headers, curator_headers, reviewer_rule="two_step")
+    assert r.json()["status"] == "submitted" and r.json()["review_step"] == 1 and r.json()["review_steps"] == 2
+    url = f"/tasks/assignments/{aid}/review"
+
+    # Сначала проверяет зав. отделением; воспитательный отдел пока не может.
+    assert client.post(url, headers=edu_department_headers, json={"action": "accept"}).status_code == 403
+    assert client.get("/tasks/review-queue", headers=edu_department_headers).json() == []
+    assert len(client.get("/tasks/review-queue", headers=dept_head_headers).json()) == 1
+
+    first = client.post(url, headers=dept_head_headers, json={"action": "accept"}).json()
+    assert first["status"] == "submitted" and first["review_step"] == 2 and first["can_review"] is False
+    assert any(n["kind"] == "task_submitted" for n in client.get("/notifications", headers=edu_department_headers).json())
+    assert client.get("/tasks/review-queue", headers=dept_head_headers).json() == []
+    assert client.post(url, headers=dept_head_headers, json={"action": "accept"}).status_code == 403
+    # Куратор об «принято» ещё не уведомлён и править не может.
+    assert not any(n["kind"] == "task_accepted" for n in client.get("/notifications", headers=curator_headers).json())
+    assert client.get(f"/tasks/assignments/{aid}", headers=curator_headers).json()["can_edit"] is False
+
+    final = client.post(url, headers=edu_department_headers, json={"action": "accept"}).json()
+    assert final["status"] == "accepted"
+    assert any(n["kind"] == "task_accepted" for n in client.get("/notifications", headers=curator_headers).json())
+
+
+def test_two_step_return_at_second_step_restarts_from_first(
+    client, admin_headers, dept_head_headers, edu_department_headers, curator_headers, curator_group, imported,
+):
+    task, aid, _ = _submit_group_task(client, admin_headers, curator_headers, reviewer_rule="two_step")
+    url = f"/tasks/assignments/{aid}/review"
+    client.post(url, headers=dept_head_headers, json={"action": "accept"})
+    r = client.post(url, headers=edu_department_headers, json={"action": "return", "comment": "Не хватает данных"})
+    assert r.json()["status"] == "returned" and r.json()["review_step"] == 1
+    client.put(f"/tasks/assignments/{aid}/answers", headers=curator_headers,
+               json={"group_values": {task["fields"][0]["key"]: True}})
+    assert client.post(f"/tasks/assignments/{aid}/submit", headers=curator_headers).json()["review_step"] == 1
+    assert len(client.get("/tasks/review-queue", headers=dept_head_headers).json()) == 1  # снова у зав. отделением
+
+
+def test_new_group_gets_open_tasks_in_scope(client, admin_headers, dept_head_headers, dept_head_user, imported, db):
+    everything = _create(client, admin_headers)
+    only_course_3 = _create(client, admin_headers, title="Для 3 курса", scope={"courses": [3]})
+    explicit = _create(client, admin_headers, title="Выбранные", scope={"group_ids": [db.query(StudyGroup).first().id]})
+    by_dept_head = _create(client, dept_head_headers, title="От зав. отделением")
+    closed = _create(client, admin_headers, title="Закрытая")
+    client.patch(f"/tasks/{closed['id']}", headers=admin_headers, json={"is_closed": True})
+    expired = _create(client, admin_headers, title="Истёкшая")
+    db.query(Task).filter(Task.id == expired["id"]).update({"due_date": datetime.date.today() - datetime.timedelta(days=1)})
+    db.commit()
+
+    r = client.post("/admin/groups", headers=admin_headers,
+                    json={"code": "NEW-1", "course": 1, "department_id": dept_head_user.department_id})
+    assert r.status_code == 201
+    new_id = r.json()["id"]
+    got = {a.task_id for a in db.query(TaskAssignment).filter(TaskAssignment.study_group_id == new_id)}
+    assert got == {everything["id"], by_dept_head["id"]}  # курс 3, явные группы, закрытая и истёкшая — нет
+
+    # Группа из чужого отделения не получает задачу зав. отделением.
+    other = Department(name="Другое")
+    db.add(other)
+    db.commit()
+    r = client.post("/admin/groups", headers=admin_headers, json={"code": "NEW-2", "course": 1, "department_id": other.id})
+    got = {a.task_id for a in db.query(TaskAssignment).filter(TaskAssignment.study_group_id == r.json()["id"])}
+    assert got == {everything["id"]}
+    assert only_course_3["id"] not in got and explicit["id"] not in got
+
+
+def test_restored_group_gets_missing_assignments(client, admin_headers, imported, db):
+    group = db.query(StudyGroup).filter(StudyGroup.is_active.is_(True)).first()
+    client.patch(f"/admin/groups/{group.id}", headers=admin_headers, json={"is_active": False})
+    task = _create(client, admin_headers)  # архивной группе назначения не создаются
+    assert db.query(TaskAssignment).filter(TaskAssignment.task_id == task["id"], TaskAssignment.study_group_id == group.id).count() == 0
+    client.patch(f"/admin/groups/{group.id}", headers=admin_headers, json={"is_active": True})
+    db.expire_all()
+    assert db.query(TaskAssignment).filter(TaskAssignment.task_id == task["id"], TaskAssignment.study_group_id == group.id).count() == 1
+    client.patch(f"/admin/groups/{group.id}", headers=admin_headers, json={"is_active": False})
+    client.patch(f"/admin/groups/{group.id}", headers=admin_headers, json={"is_active": True})  # повторно — без дублей
+    assert db.query(TaskAssignment).filter(TaskAssignment.task_id == task["id"], TaskAssignment.study_group_id == group.id).count() == 1
+
+
+def test_export_neutralizes_formulas_typed_into_answers(client, admin_headers, curator_headers, curator_group, imported, db):
+    """Ответ куратора «=…» не должен превратиться в формулу у того, кто откроет Excel."""
+    task = _create(client, admin_headers, collect_mode="group", title="=1+1",
+                   fields=[{"label": "=HYPERLINK(\"http://evil\")", "type": "text"}])
+    aid = _my_assignment_id(client, curator_headers, task["id"])
+    client.put(f"/tasks/assignments/{aid}/answers", headers=curator_headers,
+               json={"group_values": {task["fields"][0]["key"]: "=cmd|' /C calc'!A0"}})
+    ws = load_workbook(io.BytesIO(client.get(f"/tasks/{task['id']}/export", headers=admin_headers).content)).worksheets[0]
+    cells = [c for row in ws.iter_rows() for c in row if isinstance(c.value, str)]
+    assert any(c.value.startswith("=cmd") for c in cells)  # содержимое не искажено…
+    assert all(c.data_type != "f" for c in cells)  # …но формулой не становится

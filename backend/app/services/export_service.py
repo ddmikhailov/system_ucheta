@@ -14,6 +14,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.xlsx import safe_cell
 from app.models import AttendanceMark, MarkCode, StudyGroup
 from app.services import calendar_service, stats_service, summary_service
 from app.services.attendance_service import get_active_students
@@ -50,13 +51,7 @@ def _safe_sheet_name(name: str, used: set[str]) -> str:
     return candidate
 
 
-def _safe_cell(value):
-    """openpyxl запишет строку, начинающуюся с =, +, - или @, как формулу —
-    Excel её выполнит при открытии (см. TODO.md 3: ФИО/куратор — свободный
-    текст, вводимый людьми, никак не проверяется на это)."""
-    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@"):
-        return "'" + value
-    return value
+_safe_cell = safe_cell  # прежнее имя внутри модуля
 
 
 def build_summary_workbook(

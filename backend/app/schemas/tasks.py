@@ -4,7 +4,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 CollectMode = Literal["group", "student", "selected"]
-ReviewerRule = Literal["dept_head", "edu_department", "author", "none"]
+ReviewerRule = Literal["dept_head", "edu_department", "two_step", "author", "none"]
 FieldType = Literal["text", "number", "date", "bool", "select", "multiselect", "link"]
 
 
@@ -138,6 +138,8 @@ class AssignmentDetail(BaseModel):
     rows: list[RowRead]
     comments: list[CommentRead]
     review_comment: str | None
+    review_step: int  # текущая ступень проверки
+    review_steps: int  # всего ступеней: 2 для two_step, иначе 1
     can_edit: bool
     can_submit: bool
     can_review: bool

@@ -127,8 +127,12 @@ def update_profile(
     if changed:
         # Значения не пишем в журнал: там ПДн, а особые — тем более. Только какие поля менялись.
         log_action(db, user, "dossier.profile_update", "student", str(student.id), new_value=",".join(changed))
+    db.flush()  # autoflush выключен: без этого ответ собрался бы из старого состояния
+    result = _dossier(db, user, student)
+    # Ответ содержит особые поля (в том числе те, что не менялись) — это такой же просмотр, как GET.
+    db.add(DossierAccessLog(student_id=student.id, user_id=user.id, included_special=result.special is not None))
     db.commit()
-    return _dossier(db, user, student)
+    return result
 
 
 def _guardian(db: Session, student: Student, guardian_id: int) -> StudentGuardian:

@@ -15,6 +15,7 @@ export const COLLECT_MODE_LABELS: Record<string, string> = {
 export const REVIEWER_LABELS: Record<string, string> = {
   dept_head: "Зав. отделением группы",
   edu_department: "Воспитательный отдел",
+  two_step: "Две ступени: зав. отделением → воспитательный отдел",
   author: "Автор задачи",
   none: "Без проверки",
 };

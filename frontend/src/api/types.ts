@@ -529,6 +529,8 @@ export interface AssignmentDetail {
   rows: TaskRowRead[];
   comments: TaskCommentRead[];
   review_comment: string | null;
+  review_step: number;
+  review_steps: number;
   can_edit: boolean;
   can_submit: boolean;
   can_review: boolean;

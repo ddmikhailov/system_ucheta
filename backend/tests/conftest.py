@@ -265,4 +265,9 @@ def today() -> datetime.date:
     # понятием "сегодня", иначе изредка расходились бы около полуночи UTC.
     from app.core.time import today_local
 
-    return today_local()
+    # Отметки посещаемости ставят только в учебные дни, а набор тестов должен проходить в любой
+    # день недели: по выходным (в воскресенье падали 10 тестов) берём ближайший прошедший будний.
+    day = today_local()
+    while day.weekday() >= 5:
+        day -= datetime.timedelta(days=1)
+    return day

@@ -37,6 +37,10 @@ class ApplyResponse(BaseModel):
 
 
 async def _read_body(request: Request) -> bytes:
+    # Не читаем тело, если клиент сразу заявил слишком большой размер.
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > MAX_FILE_BYTES:
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "Файл больше 5 МБ")
     content = await request.body()
     if not content:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Файл не передан")

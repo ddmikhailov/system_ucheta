@@ -118,3 +118,10 @@ def test_staff_can_also_be_a_curator_of_own_groups(client, staff_headers, import
         f"/curator/groups/{other.id}/day/mark-all-present?date={today}", headers=staff_headers
     ).status_code == 403
     assert client.get(f"/curator/groups/{other.id}/day?date={today}", headers=staff_headers).status_code == 200
+
+
+def test_staff_can_download_group_pdf_but_curator_cannot_for_foreign_group(client, staff_headers, curator_headers, curator_group, imported, db, today):
+    other = db.query(StudyGroup).filter(StudyGroup.id != curator_group.id).first()
+    url = f"/export/pdf/{other.id}?date_from={today}&date_to={today}"
+    assert client.get(url, headers=staff_headers).status_code == 200
+    assert client.get(url, headers=curator_headers).status_code == 403
