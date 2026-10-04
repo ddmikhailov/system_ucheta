@@ -212,6 +212,8 @@ def update_task(
     if not _can_manage(user, task):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Править задачу может её автор или администратор")
     data = payload.model_dump(exclude_unset=True)
+    if data.get("due_date") is not None and data["due_date"] != task.due_date:
+        svc.reset_deadline_reminders(db, task)  # новый срок — напоминания о сроках начинаются заново
     for key in ("title", "description", "due_date", "is_closed"):
         if key in data and data[key] is not None:
             setattr(task, key, data[key].strip() if isinstance(data[key], str) else data[key])

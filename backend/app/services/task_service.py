@@ -503,7 +503,8 @@ def export_workbook(db: Session, user: User, task: Task) -> bytes:
 REMIND_DAYS_BEFORE = 3
 REVIEW_WAIT_DAYS = 2
 REMINDER_THROTTLE_SECONDS = 600
-REMINDER_KINDS = ("task_due_soon", "task_due_today", "task_overdue", "task_review_waiting")
+DEADLINE_REMINDER_KINDS = ("task_due_soon", "task_due_today", "task_overdue")
+REMINDER_KINDS = (*DEADLINE_REMINDER_KINDS, "task_review_waiting")
 _last_reminder_run: dict[int, float] = {}
 
 
@@ -513,6 +514,19 @@ def reset_reminder_throttle() -> None:
 
 def _fmt(d: datetime.date) -> str:
     return d.strftime("%d.%m.%Y")
+
+
+def reset_deadline_reminders(db: Session, task: Task) -> int:
+    """Срок задачи изменили — прежние напоминания о сроках устарели («срок был …») и, главное, мешают
+    выдать новые: каждое приходит один раз на назначение. Удаляем их, чтобы цикл начался заново
+    (без commit). «Ждёт проверки» от срока не зависит и остаётся."""
+    ids = [str(a.id) for a in task.assignments]
+    if not ids:
+        return 0
+    return db.query(InAppNotification).filter(
+        InAppNotification.entity_type == "task_assignment", InAppNotification.entity_id.in_(ids),
+        InAppNotification.kind.in_(DEADLINE_REMINDER_KINDS),
+    ).delete(synchronize_session=False)
 
 
 def generate_reminders(db: Session, user: User, today: datetime.date | None = None, force: bool = False) -> int:

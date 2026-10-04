@@ -424,6 +424,52 @@ def test_reminders_are_throttled_between_polls(client, admin_headers, curator_he
     assert [n["kind"] for n in _reminders(client, curator_headers)] == ["task_due_soon"]
 
 
+def _iso(days):
+    return (datetime.date.today() + datetime.timedelta(days=days)).isoformat()
+
+
+def test_extending_the_deadline_restarts_the_reminders(client, admin_headers, curator_headers, curator_group, imported, db):
+    """Срок продлили после напоминания — раньше новых напоминаний не приходило вообще (каждое шлётся один раз)."""
+    task = _create(client, admin_headers)
+    _set_due(db, task["id"], -1)
+    _open_platform(client, curator_headers)
+    assert [n["kind"] for n in _reminders(client, curator_headers)] == ["task_overdue"]
+
+    assert client.patch(f"/tasks/{task['id']}", headers=admin_headers, json={"due_date": _iso(10)}).status_code == 200
+    assert _reminders(client, curator_headers) == []  # устаревшее «срок был …» убрано
+    _open_platform(client, curator_headers)
+    assert _reminders(client, curator_headers) == []  # срок далеко — тихо
+
+    _set_due(db, task["id"], 2)  # подошёл новый срок
+    _open_platform(client, curator_headers)
+    assert [n["kind"] for n in _reminders(client, curator_headers)] == ["task_due_soon"]
+
+
+def test_shortening_the_deadline_also_restarts_and_same_date_does_not(client, admin_headers, curator_headers, curator_group, imported, db):
+    task = _create(client, admin_headers)
+    _set_due(db, task["id"], 2)
+    _open_platform(client, curator_headers)
+    assert [n["kind"] for n in _reminders(client, curator_headers)] == ["task_due_soon"]
+
+    # тот же срок (или правка названия) напоминания не трогает
+    client.patch(f"/tasks/{task['id']}", headers=admin_headers, json={"due_date": _iso(2), "title": "Новое имя"})
+    assert len(_reminders(client, curator_headers)) == 1
+
+    client.patch(f"/tasks/{task['id']}", headers=admin_headers, json={"due_date": _iso(0)})
+    _open_platform(client, curator_headers)
+    assert [n["kind"] for n in _reminders(client, curator_headers)] == ["task_due_today"]
+
+
+def test_changing_the_deadline_keeps_review_waiting_reminders(client, admin_headers, dept_head_headers, curator_headers, curator_group, imported, db):
+    task, aid, r = _submit_group_task(client, admin_headers, curator_headers)
+    db.query(TaskAssignment).filter(TaskAssignment.id == aid).update({"submitted_at": utcnow() - datetime.timedelta(days=3)})
+    db.commit()
+    _open_platform(client, dept_head_headers)
+    assert [n["kind"] for n in _reminders(client, dept_head_headers)] == ["task_review_waiting"]
+    client.patch(f"/tasks/{task['id']}", headers=admin_headers, json={"due_date": _iso(20)})
+    assert [n["kind"] for n in _reminders(client, dept_head_headers)] == ["task_review_waiting"]
+
+
 def test_reviewer_is_reminded_about_stale_submissions(client, admin_headers, dept_head_headers, curator_headers, curator_group, imported, db):
     task, aid, r = _submit_group_task(client, admin_headers, curator_headers)
     assert r.status_code == 200
