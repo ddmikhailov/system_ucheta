@@ -79,7 +79,6 @@ def _dossier(db: Session, user: User, student: Student) -> DossierRead:
         guardians=[GuardianRead(id=g.id, full_name=g.full_name, relation=g.relation, phone=g.phone,
                                 is_primary=g.is_primary) for g in guardians],
         notes=[_note_read(n, user) for n in notes],
-        can_edit=True,
     )
 
 

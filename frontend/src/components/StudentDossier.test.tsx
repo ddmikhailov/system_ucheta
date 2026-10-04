@@ -31,7 +31,6 @@ function dossier(over: Partial<Dossier> = {}): Dossier {
     special_available: true,
     guardians: [],
     notes: [],
-    can_edit: true,
     ...over,
   };
 }

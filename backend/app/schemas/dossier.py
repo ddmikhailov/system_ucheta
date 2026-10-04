@@ -70,7 +70,6 @@ class DossierRead(BaseModel):
     special_available: bool
     guardians: list[GuardianRead]
     notes: list[NoteRead]
-    can_edit: bool
 
 
 class AccessLogRead(BaseModel):

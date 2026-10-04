@@ -52,7 +52,6 @@ export interface Dossier {
   special_available: boolean;
   guardians: DossierGuardian[];
   notes: DossierNote[];
-  can_edit: boolean;
 }
 
 export interface DossierAccessEntry {
