@@ -39,6 +39,10 @@ function detail(overrides: Partial<AssignmentDetail> = {}): AssignmentDetail {
     ],
     comments: [],
     review_comment: null,
+    submitted_at: null,
+    reviewed_at: null,
+    reviewed_by_name: null,
+    history: [],
     review_step: 1,
     review_steps: 1,
     can_edit: true,
@@ -273,5 +277,49 @@ describe("TaskAssignmentPage — проверка и комментарии", ()
     get.mockRejectedValue(new ApiError(403, "Нет доступа к этой задаче"));
     renderPage(<TaskAssignmentPage />, { route: "/tasks/assignment/5", path: "/tasks/assignment/:assignmentId" });
     expect(await screen.findByText("Нет доступа к этой задаче")).toBeInTheDocument();
+  });
+});
+
+
+describe("TaskAssignmentPage — ход проверки", () => {
+  it("показывает, кто и когда отправил, вернул и принял, с номером ступени", async () => {
+    open(detail({
+      status: "accepted", can_edit: false, can_submit: false, review_steps: 2, review_step: 1,
+      reviewed_at: "2026-10-03T12:30:00", reviewed_by_name: "Петрова Н.",
+      history: [
+        { kind: "submitted", user_name: "Иванова А.", at: "2026-10-01T09:00:00", step: null },
+        { kind: "returned", user_name: "Сидоров С.", at: "2026-10-01T10:00:00", step: 1 },
+        { kind: "accepted", user_name: "Сидоров С.", at: "2026-10-02T11:00:00", step: 1 },
+        { kind: "accepted", user_name: "Петрова Н.", at: "2026-10-03T12:30:00", step: 2 },
+      ],
+    }));
+    expect(await screen.findByRole("heading", { name: "Ход проверки" })).toBeInTheDocument();
+    const items = screen.getAllByRole("listitem").filter((li) => /Отправлено|Принято|Возвращено/.test(li.textContent ?? ""));
+    expect(items.map((li) => li.textContent)).toEqual([
+      expect.stringMatching(/Отправлено на проверку · Иванова А\./),
+      expect.stringMatching(/Возвращено на доработку \(ступень 1 из 2\) · Сидоров С\./),
+      expect.stringMatching(/Принято \(ступень 1 из 2\) · Сидоров С\./),
+      expect.stringMatching(/Принято \(ступень 2 из 2\) · Петрова Н\./),
+    ]);
+    expect(screen.getByText(/проверил\(а\): Петрова Н\./)).toBeInTheDocument();
+  });
+
+  it("принятое без проверки помечено как автоматическое", async () => {
+    open(detail({
+      status: "accepted", can_edit: false, can_submit: false, reviewed_at: "2026-10-03T12:30:00", reviewed_by_name: null,
+      history: [
+        { kind: "submitted", user_name: "Иванова А.", at: "2026-10-03T12:30:00", step: null },
+        { kind: "auto_accepted", user_name: null, at: "2026-10-03T12:30:00", step: null },
+      ],
+    }));
+    expect(await screen.findByText(/Принято автоматически/)).toBeInTheDocument();
+    expect(screen.getByText(/без проверки/)).toBeInTheDocument();
+  });
+
+  it("пока истории нет — раздела нет, а «Принято…» не показывается у неотправленной", async () => {
+    open(detail());
+    await screen.findByRole("heading", { name: "Кружки доп. образования" });
+    expect(screen.queryByRole("heading", { name: "Ход проверки" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/проверил\(а\)/)).not.toBeInTheDocument();
   });
 });

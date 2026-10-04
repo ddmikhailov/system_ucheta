@@ -22,7 +22,7 @@ from app.core.roles import DEPARTMENT_SCOPED_ROLES
 from app.core.time import today_local, utcnow
 from app.core.xlsx import append_row
 from app.models import (
-    CuratorAssignment, InAppNotification, RoleCode, Student, StudyGroup, Task, TaskAssignment, TaskComment, TaskRow, User,
+    AuditLog, CuratorAssignment, InAppNotification, RoleCode, Student, StudyGroup, Task, TaskAssignment, TaskComment, TaskRow, User,
 )
 from app.schemas.tasks import FieldDef, Progress, ScopeDef, TaskCreate
 from app.services import attendance_service, in_app_notification_service
@@ -338,6 +338,32 @@ def reviewers_to_notify(db: Session, assignment: TaskAssignment) -> list[User]:
     return []
 
 
+def assignment_history(db: Session, assignment: TaskAssignment) -> list[dict]:
+    """Ход проверки по журналу аудита: кто и когда отправил, принял (на какой ступени) или вернул.
+    Отдельной таблицы не нужно — каждое действие уже пишется в audit_log."""
+    rows = (
+        db.query(AuditLog).options(joinedload(AuditLog.user))
+        .filter(
+            AuditLog.entity_type == "task_assignment", AuditLog.entity_id == str(assignment.id),
+            AuditLog.action.in_(("task.submit", "task.accept", "task.return")),
+        )
+        .order_by(AuditLog.created_at, AuditLog.id).all()
+    )
+    kinds = {"task.submit": "submitted", "task.accept": "accepted", "task.return": "returned"}
+    events = []
+    for r in rows:
+        step = None
+        if r.new_value and r.new_value.startswith("step:") and assignment.task.reviewer_rule == "two_step":
+            step = int(r.new_value.split(":", 1)[1])
+        events.append({
+            "kind": kinds[r.action], "user_name": r.user.full_name if r.user else None,
+            "at": r.created_at, "step": step,
+        })
+    if assignment.status == "accepted" and assignment.task.reviewer_rule == "none" and assignment.reviewed_at:
+        events.append({"kind": "auto_accepted", "user_name": None, "at": assignment.reviewed_at, "step": None})
+    return events
+
+
 def review(db: Session, user: User, assignment: TaskAssignment, action: str, comment: str | None) -> None:
     if not can_review(user, assignment):
         raise _bad("Вы не проверяете эту задачу", status.HTTP_403_FORBIDDEN)
@@ -410,7 +436,7 @@ def visible_assignments(db: Session, user: User, task: Task) -> list[TaskAssignm
     rows = (
         db.query(TaskAssignment).join(StudyGroup, StudyGroup.id == TaskAssignment.study_group_id)
         .options(joinedload(TaskAssignment.study_group).joinedload(StudyGroup.department),
-                 joinedload(TaskAssignment.task))
+                 joinedload(TaskAssignment.task), joinedload(TaskAssignment.reviewer))
         .filter(TaskAssignment.task_id == task.id).order_by(StudyGroup.course, StudyGroup.code).all()
     )
     return [a for a in rows if manager_sees(user, a)]

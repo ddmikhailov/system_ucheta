@@ -465,6 +465,7 @@ export interface TaskAssignmentSummary {
   is_overdue: boolean;
   submitted_at: string | null;
   reviewed_at: string | null;
+  reviewed_by_name: string | null;
 }
 
 export interface TaskDetail {
@@ -511,6 +512,13 @@ export interface TaskCommentRead {
   created_at: string;
 }
 
+export interface TaskHistoryEvent {
+  kind: "submitted" | "accepted" | "returned" | "auto_accepted";
+  user_name: string | null;
+  at: string;
+  step: number | null;
+}
+
 export interface AssignmentDetail {
   id: number;
   task_id: number;
@@ -529,6 +537,10 @@ export interface AssignmentDetail {
   rows: TaskRowRead[];
   comments: TaskCommentRead[];
   review_comment: string | null;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  reviewed_by_name: string | null;
+  history: TaskHistoryEvent[];
   review_step: number;
   review_steps: number;
   can_edit: boolean;

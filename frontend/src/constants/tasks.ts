@@ -6,6 +6,13 @@ export const TASK_STATUS_LABELS: Record<string, string> = {
   accepted: "Принято",
 };
 
+export const HISTORY_LABELS: Record<string, string> = {
+  submitted: "Отправлено на проверку",
+  accepted: "Принято",
+  returned: "Возвращено на доработку",
+  auto_accepted: "Принято автоматически (проверка не требуется)",
+};
+
 export const COLLECT_MODE_LABELS: Record<string, string> = {
   group: "Ответ по группе",
   student: "По каждому студенту",

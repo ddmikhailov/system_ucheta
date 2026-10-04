@@ -534,3 +534,68 @@ def test_export_neutralizes_formulas_typed_into_answers(client, admin_headers, c
     cells = [c for row in ws.iter_rows() for c in row if isinstance(c.value, str)]
     assert any(c.value.startswith("=cmd") for c in cells)  # содержимое не искажено…
     assert all(c.data_type != "f" for c in cells)  # …но формулой не становится
+
+
+# ---------- кто и когда проверил ----------
+
+def _history(client, headers, aid):
+    d = client.get(f"/tasks/assignments/{aid}", headers=headers).json()
+    return [(e["kind"], e["user_name"], e["step"]) for e in d["history"]], d
+
+
+def test_history_shows_who_submitted_returned_and_accepted(
+    client, admin_headers, dept_head_headers, dept_head_user, curator_headers, curator_user, curator_group, imported,
+):
+    task, aid, _ = _submit_group_task(client, admin_headers, curator_headers)
+    key = task["fields"][0]["key"]
+    events, d = _history(client, curator_headers, aid)
+    assert events == [("submitted", curator_user.full_name, None)]
+    assert d["submitted_at"] and d["reviewed_at"] is None and d["reviewed_by_name"] is None
+
+    client.post(f"/tasks/assignments/{aid}/review", headers=dept_head_headers, json={"action": "return", "comment": "Дополните"})
+    client.put(f"/tasks/assignments/{aid}/answers", headers=curator_headers, json={"group_values": {key: True}})
+    client.post(f"/tasks/assignments/{aid}/submit", headers=curator_headers)
+    client.post(f"/tasks/assignments/{aid}/review", headers=dept_head_headers, json={"action": "accept"})
+
+    events, d = _history(client, dept_head_headers, aid)
+    assert events == [
+        ("submitted", curator_user.full_name, None), ("returned", dept_head_user.full_name, None),
+        ("submitted", curator_user.full_name, None), ("accepted", dept_head_user.full_name, None),
+    ]
+    assert d["reviewed_by_name"] == dept_head_user.full_name and d["reviewed_at"] is not None
+
+
+def test_two_step_history_labels_each_step(
+    client, admin_headers, dept_head_headers, dept_head_user, edu_department_headers, edu_department_user,
+    curator_headers, curator_group, imported,
+):
+    _, aid, _ = _submit_group_task(client, admin_headers, curator_headers, reviewer_rule="two_step")
+    url = f"/tasks/assignments/{aid}/review"
+    client.post(url, headers=dept_head_headers, json={"action": "accept"})
+    client.post(url, headers=edu_department_headers, json={"action": "accept"})
+    events, d = _history(client, admin_headers, aid)
+    assert [(k, s) for k, _, s in events] == [("submitted", None), ("accepted", 1), ("accepted", 2)]
+    assert [n for _, n, _ in events][1:] == [dept_head_user.full_name, edu_department_user.full_name]
+    assert d["reviewed_by_name"] == edu_department_user.full_name  # итоговое решение — за второй ступенью
+
+
+def test_accepted_without_review_is_marked_as_automatic(client, admin_headers, curator_headers, curator_group, imported):
+    _, aid, _ = _submit_group_task(client, admin_headers, curator_headers, reviewer_rule="none")
+    events, d = _history(client, curator_headers, aid)
+    assert [(k, n) for k, n, _ in events][-1] == ("auto_accepted", None)
+    assert d["status"] == "accepted" and d["reviewed_by_name"] is None
+
+
+def test_matrix_shows_reviewer_names_and_history_is_per_assignment(
+    client, admin_headers, dept_head_headers, dept_head_user, curator_headers, curator_group, imported,
+):
+    task, aid, _ = _submit_group_task(client, admin_headers, curator_headers)
+    client.post(f"/tasks/assignments/{aid}/review", headers=dept_head_headers, json={"action": "accept"})
+    detail = client.get(f"/tasks/{task['id']}", headers=admin_headers).json()
+    mine = next(a for a in detail["assignments"] if a["id"] == aid)
+    others = [a for a in detail["assignments"] if a["id"] != aid]
+    assert mine["reviewed_by_name"] == dept_head_user.full_name and mine["reviewed_at"]
+    assert all(a["reviewed_by_name"] is None for a in others)
+    # история чужого назначения не подмешивается
+    other_events = client.get(f"/tasks/assignments/{others[0]['id']}", headers=admin_headers).json()["history"]
+    assert other_events == []

@@ -12,7 +12,7 @@ from app.db.session import get_db
 from app.models import RoleCode, StudyGroup, Task, TaskAssignment, TaskComment, User
 from app.schemas.tasks import (
     AnswersIn, AssignmentDetail, AssignmentSummary, CommentIn, CommentRead, FieldDef, MyAssignmentRow,
-    ReviewIn, ReviewQueueRow, RowRead, ScopeDef, TaskCreate, TaskDetail, TaskListRow, TaskUpdate,
+    HistoryEvent, ReviewIn, ReviewQueueRow, RowRead, ScopeDef, TaskCreate, TaskDetail, TaskListRow, TaskUpdate,
 )
 from app.services import attendance_service
 from app.services.access_service import get_curator_group_ids
@@ -40,6 +40,7 @@ def _summary(a: TaskAssignment, today) -> AssignmentSummary:
     return AssignmentSummary(
         id=a.id, study_group_id=g.id, group_code=g.code, course=g.course, department_name=g.department.name,
         status=a.status, is_overdue=svc.is_overdue(a, today), submitted_at=a.submitted_at, reviewed_at=a.reviewed_at,
+        reviewed_by_name=a.reviewer.full_name if a.reviewer else None,
     )
 
 
@@ -126,7 +127,9 @@ def _detail_assignment(db: Session, user: User, a: TaskAssignment) -> Assignment
         group_values=json.loads(a.group_values_json or "{}"), rows=rows,
         comments=[CommentRead(id=c.id, student_id=c.student_id, author_name=c.author.full_name if c.author else None,
                               text=c.text, created_at=c.created_at) for c in comments],
-        review_comment=a.review_comment, review_step=a.review_step,
+        review_comment=a.review_comment, submitted_at=a.submitted_at, reviewed_at=a.reviewed_at,
+        reviewed_by_name=a.reviewer.full_name if a.reviewer else None,
+        history=[HistoryEvent(**e) for e in svc.assignment_history(db, a)], review_step=a.review_step,
         review_steps=2 if task.reviewer_rule == "two_step" else 1, can_edit=editable, can_submit=editable,
         can_review=svc.can_review(user, a) and a.status == "submitted",
     )
@@ -161,8 +164,9 @@ def review_assignment(
     assignment_id: int, payload: ReviewIn, user: User = Depends(get_current_user), db: Session = Depends(get_db),
 ):
     a = svc.get_assignment_for(db, user, assignment_id)
+    step = a.review_step  # ступень, на которой принято решение (после принятия на первой она уже вторая)
     svc.review(db, user, a, payload.action, payload.comment)
-    log_action(db, user, f"task.{payload.action}", "task_assignment", str(a.id))
+    log_action(db, user, f"task.{payload.action}", "task_assignment", str(a.id), new_value=f"step:{step}")
     db.commit()
     return _detail_assignment(db, user, a)
 

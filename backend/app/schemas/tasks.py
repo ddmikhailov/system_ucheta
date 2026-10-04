@@ -74,6 +74,7 @@ class AssignmentSummary(BaseModel):
     is_overdue: bool
     submitted_at: datetime.datetime | None
     reviewed_at: datetime.datetime | None
+    reviewed_by_name: str | None
 
 
 class TaskDetail(BaseModel):
@@ -120,6 +121,15 @@ class CommentRead(BaseModel):
     created_at: datetime.datetime
 
 
+class HistoryEvent(BaseModel):
+    """Событие хода проверки: отправлено / принято / возвращено / принято без проверки."""
+
+    kind: str  # submitted / accepted / returned / auto_accepted
+    user_name: str | None
+    at: datetime.datetime
+    step: int | None = None  # ступень проверки (только при двухступенчатой)
+
+
 class AssignmentDetail(BaseModel):
     id: int
     task_id: int
@@ -138,6 +148,10 @@ class AssignmentDetail(BaseModel):
     rows: list[RowRead]
     comments: list[CommentRead]
     review_comment: str | None
+    submitted_at: datetime.datetime | None
+    reviewed_at: datetime.datetime | None
+    reviewed_by_name: str | None
+    history: list[HistoryEvent]
     review_step: int  # текущая ступень проверки
     review_steps: int  # всего ступеней: 2 для two_step, иначе 1
     can_edit: bool

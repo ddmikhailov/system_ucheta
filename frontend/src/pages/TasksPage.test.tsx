@@ -31,9 +31,9 @@ const DETAIL: TaskDetail = {
   scope: { all_groups: true, department_ids: [], courses: [], group_ids: [], exclude_group_ids: [] },
   can_manage: true, progress,
   assignments: [
-    { id: 10, study_group_id: 1, group_code: "СА172", course: 1, department_name: "Диджитал", status: "submitted", is_overdue: false, submitted_at: "2026-10-01T09:00:00", reviewed_at: null },
-    { id: 11, study_group_id: 2, group_code: "ИИ112", course: 1, department_name: "Диджитал", status: "new", is_overdue: true, submitted_at: null, reviewed_at: null },
-    { id: 12, study_group_id: 3, group_code: "ИТ201", course: 2, department_name: "Диджитал", status: "accepted", is_overdue: false, submitted_at: null, reviewed_at: null },
+    { id: 10, study_group_id: 1, group_code: "СА172", course: 1, department_name: "Диджитал", status: "submitted", is_overdue: false, submitted_at: "2026-10-01T09:00:00", reviewed_at: null, reviewed_by_name: null },
+    { id: 11, study_group_id: 2, group_code: "ИИ112", course: 1, department_name: "Диджитал", status: "new", is_overdue: true, submitted_at: null, reviewed_at: null, reviewed_by_name: null },
+    { id: 12, study_group_id: 3, group_code: "ИТ201", course: 2, department_name: "Диджитал", status: "accepted", is_overdue: false, submitted_at: null, reviewed_at: null, reviewed_by_name: null },
   ],
 };
 
@@ -111,6 +111,29 @@ describe("TasksPage — карточка задачи", () => {
     expect(within(screen.getByRole("link", { name: "СА172" }).closest("tr") as HTMLElement).getByText("На проверке")).toBeInTheDocument();
     const overdue = screen.getByRole("link", { name: "ИИ112" }).closest("tr") as HTMLElement;
     expect(overdue).toHaveTextContent("просрочено");
+  });
+
+  it("в матрице видно, кто принял группу и когда, и когда отправлено на проверку", async () => {
+    mockApi({
+      detail: {
+        ...DETAIL,
+        assignments: [
+          { ...DETAIL.assignments[2], status: "accepted", reviewed_at: "2026-10-03T12:30:00", reviewed_by_name: "Петрова Н." },
+          { ...DETAIL.assignments[0], status: "returned", reviewed_at: "2026-10-02T09:00:00", reviewed_by_name: "Сидоров С." },
+          { ...DETAIL.assignments[0], id: 20, group_code: "ИБ301", status: "submitted", submitted_at: "2026-10-01T09:00:00" },
+          { ...DETAIL.assignments[1], id: 21, group_code: "ИС401", status: "accepted", reviewed_at: "2026-10-04T08:00:00", reviewed_by_name: null },
+          DETAIL.assignments[1],
+        ],
+      },
+    });
+    openTask();
+    await screen.findByRole("columnheader", { name: "Проверка" });
+    const cell = (code: string) => (screen.getByRole("link", { name: code }).closest("tr") as HTMLElement);
+    expect(cell("ИТ201")).toHaveTextContent(/Принято 03\.10\.2026.*Петрова Н\./);
+    expect(cell("СА172")).toHaveTextContent(/Возвращено 02\.10\.2026.*Сидоров С\./);
+    expect(cell("ИБ301")).toHaveTextContent(/Отправлено 01\.10\.2026/);
+    expect(cell("ИС401")).toHaveTextContent(/Принято 04\.10\.2026.*без проверки/);
+    expect(within(cell("ИИ112")).getAllByRole("cell").at(-1)).toHaveTextContent("—"); // ещё не отправлено
   });
 
   it("фильтрует группы по статусу и по просрочке", async () => {

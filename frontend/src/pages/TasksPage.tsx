@@ -146,6 +146,16 @@ export default function TasksPage() {
   );
 }
 
+// Что видно в матрице о ходе проверки: кто принял и когда, либо когда отправлено на проверку.
+function reviewSummary(a: TaskDetail["assignments"][number]): string {
+  if (a.reviewed_at && (a.status === "accepted" || a.status === "returned")) {
+    const who = a.reviewed_by_name ?? "без проверки";
+    return `${a.status === "accepted" ? "Принято" : "Возвращено"} ${formatServerDateTimeFull(a.reviewed_at)} · ${who}`;
+  }
+  if (a.submitted_at && a.status === "submitted") return `Отправлено ${formatServerDateTimeFull(a.submitted_at)}`;
+  return "—";
+}
+
 function TaskView({ id, onBack, onDeleted }: { id: string; onBack: () => void; onDeleted: () => void }) {
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -254,6 +264,7 @@ function TaskView({ id, onBack, onDeleted }: { id: string; onBack: () => void; o
             <th>Группа</th>
             <th>Отделение</th>
             <th>Статус</th>
+            <th>Проверка</th>
           </tr>
         </thead>
         <tbody>
@@ -268,11 +279,12 @@ function TaskView({ id, onBack, onDeleted }: { id: string; onBack: () => void; o
               <td data-label="Статус">
                 {TASK_STATUS_LABELS[a.status] ?? a.status} {a.is_overdue && <b>просрочено</b>}
               </td>
+              <td data-label="Проверка">{reviewSummary(a)}</td>
             </tr>
           ))}
           {shown.length === 0 && (
             <tr>
-              <td colSpan={3}>Нет групп с таким статусом.</td>
+              <td colSpan={4}>Нет групп с таким статусом.</td>
             </tr>
           )}
         </tbody>

@@ -50,6 +50,7 @@ class TaskAssignment(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
 
     task: Mapped["Task"] = relationship(back_populates="assignments")
+    reviewer: Mapped["User | None"] = relationship(foreign_keys=[reviewed_by])
     study_group: Mapped["StudyGroup"] = relationship()
     rows: Mapped[list["TaskRow"]] = relationship(back_populates="assignment", cascade="all, delete-orphan")
     comments: Mapped[list["TaskComment"]] = relationship(back_populates="assignment", cascade="all, delete-orphan")

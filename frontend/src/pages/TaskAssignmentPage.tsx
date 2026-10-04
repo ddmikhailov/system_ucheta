@@ -3,7 +3,7 @@ import type { FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { useScrollToTopOnChange } from "../hooks/useScrollToTopOnChange";
-import { COLLECT_MODE_LABELS, REVIEWER_LABELS, TASK_STATUS_LABELS } from "../constants/tasks";
+import { COLLECT_MODE_LABELS, HISTORY_LABELS, REVIEWER_LABELS, TASK_STATUS_LABELS } from "../constants/tasks";
 import { formatDateRu, formatServerDateTimeFull } from "../utils/date";
 import type { AssignmentDetail } from "../api/types";
 
@@ -210,6 +210,12 @@ export default function TaskAssignmentPage() {
         Группа {detail.group_code} · срок {formatDateRu(detail.due_date)} ·{" "}
         {COLLECT_MODE_LABELS[detail.collect_mode]} · проверяет: {REVIEWER_LABELS[detail.reviewer_rule]}
       </p>
+      {detail.status === "accepted" && detail.reviewed_at && (
+        <p className="hint">
+          Принято {formatServerDateTimeFull(detail.reviewed_at)}
+          {detail.reviewed_by_name ? `, проверил(а): ${detail.reviewed_by_name}` : " без проверки"}
+        </p>
+      )}
       {detail.description && <p style={{ whiteSpace: "pre-wrap" }}>{detail.description}</p>}
       {detail.status === "returned" && detail.review_comment && (
         <div className="error-text">Возвращено на доработку: {detail.review_comment}</div>
@@ -320,6 +326,21 @@ export default function TaskAssignmentPage() {
             </button>
           </p>
         </div>
+      )}
+
+      {detail.history.length > 0 && (
+        <>
+          <h3 className="student-card__section">Ход проверки</h3>
+          <ul className="hint" style={{ listStyle: "none", padding: 0 }}>
+            {detail.history.map((e, i) => (
+              <li key={i} style={{ marginBottom: 4 }}>
+                {formatServerDateTimeFull(e.at)} — <b>{HISTORY_LABELS[e.kind] ?? e.kind}</b>
+                {e.step != null && detail.review_steps > 1 && ` (ступень ${e.step} из ${detail.review_steps})`}
+                {e.user_name && ` · ${e.user_name}`}
+              </li>
+            ))}
+          </ul>
+        </>
       )}
 
       <h3 className="student-card__section">Комментарии</h3>
