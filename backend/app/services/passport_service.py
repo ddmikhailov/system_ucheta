@@ -10,11 +10,12 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import DEPARTMENT_SCOPED_ROLES, DOSSIER_STAFF_ROLES, get_curator_group_ids
 from app.core import field_crypto
+from app.core.roles import COLLEGE_WIDE_ROLES, DEPARTMENT_SCOPED_ROLES
 from app.core.time import today_local
 from app.models import RoleCode, Student, StudentGroupMembership, StudentGuardian, StudentProfile, StudyGroup, User
 from app.schemas.dossier import SpecialData
+from app.services.access_service import get_curator_group_ids
 
 # (ключ, название, функция по SpecialData)
 CATEGORIES: list[tuple[str, str, callable]] = [
@@ -57,7 +58,7 @@ def accessible_groups(db: Session, user: User, department_id: int | None = None)
     q = db.query(StudyGroup).options(joinedload(StudyGroup.department)).filter(StudyGroup.is_active.is_(True))
     if role in DEPARTMENT_SCOPED_ROLES:
         q = q.filter(StudyGroup.department_id == user.department_id) if user.department_id is not None else q.filter(False)
-    elif role in (RoleCode.ADMIN, RoleCode.EDU_DEPARTMENT, *DOSSIER_STAFF_ROLES):
+    elif role in COLLEGE_WIDE_ROLES:
         pass
     else:
         ids = get_curator_group_ids(db, user, today)

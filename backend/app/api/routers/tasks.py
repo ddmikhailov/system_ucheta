@@ -6,7 +6,7 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import get_current_user, get_curator_group_ids, require_roles
+from app.api.deps import get_current_user, require_roles
 from app.core.time import today_local
 from app.db.session import get_db
 from app.models import RoleCode, StudyGroup, Task, TaskAssignment, TaskComment, User
@@ -15,6 +15,7 @@ from app.schemas.tasks import (
     ReviewIn, ReviewQueueRow, RowRead, ScopeDef, TaskCreate, TaskDetail, TaskListRow, TaskUpdate,
 )
 from app.services import attendance_service
+from app.services.access_service import get_curator_group_ids
 from app.services import task_service as svc
 from app.services.audit_service import log_action
 

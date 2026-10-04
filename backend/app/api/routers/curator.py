@@ -3,7 +3,7 @@ import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import assert_can_access_group, assert_can_view_group, get_current_user, get_curator_group_ids
+from app.api.deps import assert_can_access_group, assert_can_view_group, get_current_user
 from app.core.config import get_settings
 from app.core.time import today_local
 from app.db.session import get_db
@@ -16,6 +16,7 @@ from app.schemas.curator import (
     SubmitDayRequest,
 )
 from app.services import attendance_service, calendar_service
+from app.services.access_service import get_curator_group_ids
 
 router = APIRouter(prefix="/curator", tags=["curator"])
 settings = get_settings()

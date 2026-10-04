@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import DOSSIER_STAFF_ROLES, is_department_scoped, assert_can_access_group, get_current_user, scope_department_id
+from app.api.deps import assert_can_access_group, get_current_user, scope_department_id
+from app.core.roles import DOSSIER_STAFF_ROLES, is_department_scoped
 from app.core.time import today_local
 from app.db.session import get_db
 from app.models import (

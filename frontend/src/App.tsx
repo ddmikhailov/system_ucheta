@@ -9,7 +9,7 @@ import CuratorCabinetPage from "./pages/CuratorCabinetPage";
 import DashboardsPage from "./pages/DashboardsPage";
 import AdminPage from "./pages/AdminPage";
 import StudentCardPage from "./pages/StudentCardPage";
-import { DOSSIER_STAFF_ROLES, MANAGEMENT_ROLES } from "./constants/roles";
+import { DOSSIER_STAFF_ROLES, MANAGEMENT_ROLES, inRoles } from "./constants/roles";
 import StudentsSearchPage from "./pages/StudentsSearchPage";
 import PassportPage from "./pages/PassportPage";
 import TasksPage from "./pages/TasksPage";
@@ -39,7 +39,7 @@ function RequireAdminAccess({ children }: { children: ReactElement }) {
   // Зав. отделением тоже пускаем в админку — ему там доступна пока только
   // вкладка «Пользователи» (управление логинами/паролями кураторов своего
   // отделения), см. AdminPage.
-  if (!user || !["admin", "edu_department", "dept_head", "tutor"].includes(user.role)) return <Navigate to="/" replace />;
+  if (!user || !inRoles(user.role, MANAGEMENT_ROLES)) return <Navigate to="/" replace />;
   return children;
 }
 
@@ -49,8 +49,8 @@ function HomeRedirect() {
   // отправлялся бы на страницу входа при каждом открытии сайта по корневому адресу.
   if (loading) return <div className="loading-screen">Загрузка…</div>;
   if (!user) return <Navigate to="/login" replace />;
-  if (DOSSIER_STAFF_ROLES.includes(user.role)) return <Navigate to="/students" replace />;
-  if (MANAGEMENT_ROLES.includes(user.role)) return <Navigate to="/dashboards" replace />;
+  if (inRoles(user.role, DOSSIER_STAFF_ROLES)) return <Navigate to="/students" replace />;
+  if (inRoles(user.role, MANAGEMENT_ROLES)) return <Navigate to="/dashboards" replace />;
   return <Navigate to="/cabinet" replace />;
 }
 

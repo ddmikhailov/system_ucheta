@@ -8,6 +8,7 @@ import MarkCodesTab from "./admin/MarkCodesTab";
 import UsersTab from "./admin/UsersTab";
 import CalendarTab from "./admin/CalendarTab";
 import GroupJournalTab from "./admin/GroupJournalTab";
+import { DEPARTMENT_SCOPED_ROLES, REFERENCE_EDITOR_ROLES, ROLE, inRoles } from "../constants/roles";
 
 type Tab = "departments" | "groups" | "students" | "mark-codes" | "users" | "calendar" | "journal";
 
@@ -16,7 +17,7 @@ const VALID_TABS: Tab[] = ["departments", "groups", "students", "mark-codes", "u
 export default function AdminPage() {
   const { user } = useAuth();
   // Зав. отделением и тьютор работают в границах своего отделения.
-  const isDeptHead = user?.role === "dept_head" || user?.role === "tutor";
+  const isDeptHead = inRoles(user?.role, DEPARTMENT_SCOPED_ROLES);
   const [searchParams, setSearchParams] = useSearchParams();
   // Вкладка теперь живёт в URL (?tab=...) — раньше сбрасывалась при
   // обновлении страницы, и на неё нельзя было дать прямую ссылку (см.
@@ -39,9 +40,9 @@ export default function AdminPage() {
 
   // Тьютор — второй полноценный администратор по всему колледжу (обновление
   // 1.2): везде, где раньше был только admin, теперь и он.
-  const isAdmin = user?.role === "admin";
+  const isAdmin = user?.role === ROLE.ADMIN;
   const canCreate = isAdmin || isDeptHead;
-  const isReferenceEditor = isAdmin || user?.role === "edu_department";
+  const isReferenceEditor = inRoles(user?.role, REFERENCE_EDITOR_ROLES);
   // Группы/студенты/пользователи — администратор по колледжу и зав.
   // отделением в своём отделении (бэкенд сам ограничивает область видимости).
   const canManageStructure = isAdmin || isDeptHead;

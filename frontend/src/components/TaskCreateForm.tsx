@@ -5,6 +5,7 @@ import { useAuth } from "../auth/useAuth";
 import { COLLECT_MODE_LABELS, FIELD_TYPE_LABELS, REVIEWER_LABELS } from "../constants/tasks";
 import { todayIso } from "../utils/date";
 import type { DepartmentAdmin, StudyGroupAdmin, TaskDetail, TaskField, TaskFieldType } from "../api/types";
+import { DEPARTMENT_SCOPED_ROLES, inRoles } from "../constants/roles";
 
 type ScopeKind = "all" | "departments" | "courses" | "groups";
 
@@ -20,7 +21,7 @@ const EMPTY_FIELD: FieldDraft = { label: "", type: "text", required: false, opti
 // Создание задачи: описание → охват → режим сбора → форма ответа → срок и проверка.
 export default function TaskCreateForm({ onCreated }: { onCreated: (task: TaskDetail) => void }) {
   const { user } = useAuth();
-  const scopedToDepartment = user?.role === "dept_head" || user?.role === "tutor";
+  const scopedToDepartment = inRoles(user?.role, DEPARTMENT_SCOPED_ROLES);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [mode, setMode] = useState("student");

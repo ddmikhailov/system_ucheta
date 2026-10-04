@@ -5,10 +5,11 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.core.roles import DEPARTMENT_SCOPED_ROLES, DOSSIER_STAFF_ROLES, is_department_scoped
 from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models import RoleCode, StudyGroup, User
-from app.models.people import CuratorAssignment
+from app.services.access_service import get_curator_group_ids
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -63,9 +64,6 @@ require_reference_editor = require_roles(RoleCode.EDU_DEPARTMENT, RoleCode.ADMIN
 # теперь и он. Название отражает это явно (было require_admin — вводило в
 # заблуждение, будто пускает только администратора, см. TODO.md 5).
 require_full_access = require_roles(RoleCode.ADMIN)
-# Роли, ограниченные своим отделением: зав. отделением и тьютор. Тьютор — полный
-# доступ, но только к своему отделению (группы, студенты, досье, кураторы).
-DEPARTMENT_SCOPED_ROLES = (RoleCode.DEPT_HEAD, RoleCode.TUTOR)
 # Создавать группы/студентов/пользователей: администратор по колледжу, зав. отделением и тьютор — в своём отделении.
 require_dept_editor = require_roles(RoleCode.ADMIN, RoleCode.TUTOR, RoleCode.DEPT_HEAD)
 # Исключения календаря для конкретной группы: воспитательный отдел и администратор — для любой,
@@ -74,18 +72,12 @@ require_group_calendar_editor = require_roles(
     RoleCode.EDU_DEPARTMENT, RoleCode.ADMIN, RoleCode.TUTOR, RoleCode.DEPT_HEAD
 )
 
-
-def is_department_scoped(user: User) -> bool:
-    return RoleCode(user.role.code) in DEPARTMENT_SCOPED_ROLES
 # Правка/удаление групп и студентов — админ/тьютор по колледжу и зав.
 # отделением в своём отделении. Воспитательный отдел структуру не правит
 # (в интерфейсе у него эти вкладки только для чтения), раньше бэкенд
 # пускал его через require_management.
 require_structure_editor = require_roles(RoleCode.ADMIN, RoleCode.TUTOR, RoleCode.DEPT_HEAD)
 
-# Соц. педагог и психолог: досье и карточка любого студента колледжа, но не
-# посещаемость/структура (assert_can_access_group их по-прежнему не пускает).
-DOSSIER_STAFF_ROLES = (RoleCode.SOCIAL_PEDAGOGUE, RoleCode.PSYCHOLOGIST)
 # Просмотр групп, витрин и списка групп: управленческие роли + соц. педагог и
 # психолог (по всему колледжу, только чтение). Всё, что меняет данные, остаётся
 # за require_management / require_structure_editor.
@@ -121,20 +113,6 @@ def validate_date_range(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "date_from не может быть позже date_to")
     if (date_to - date_from).days > max_days:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Диапазон дат не может превышать {max_days} дней")
-
-
-def get_curator_group_ids(db: Session, user: User, on_date: datetime.date) -> list[int]:
-    """Группы, которые ведёт пользователь (сам или как заместитель) на указанную дату."""
-    assignments = (
-        db.query(CuratorAssignment)
-        .join(StudyGroup, StudyGroup.id == CuratorAssignment.study_group_id)
-        # Архивная группа не должна оставаться в "Моих группах" куратора —
-        # она снята с работы, отмечать в ней посещаемость больше не нужно
-        # (см. TODO.md 3).
-        .filter(CuratorAssignment.user_id == user.id, StudyGroup.is_active.is_(True))
-        .all()
-    )
-    return [a.study_group_id for a in assignments if a.is_active_on(on_date)]
 
 
 def assert_can_view_group(db: Session, user: User, study_group_id: int, on_date: datetime.date) -> None:

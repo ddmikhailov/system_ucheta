@@ -4,7 +4,7 @@ import { api, ApiError } from "../../api/client";
 import { useAuth } from "../../auth/useAuth";
 import AssignCuratorModal from "../../components/AssignCuratorModal";
 import DeleteGroupForeverModal from "../../components/DeleteGroupForeverModal";
-import { CURATOR_CAPABLE_ROLES } from "../../constants/roles";
+import { CURATOR_CAPABLE_ROLES, DEPARTMENT_SCOPED_ROLES, inRoles } from "../../constants/roles";
 import { useEscapeKey } from "../../hooks/useEscapeKey";
 import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { DeleteResult, DepartmentAdmin, StudyGroupAdmin, UserAdmin } from "../../api/types";
@@ -38,7 +38,7 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
     api.get<StudyGroupAdmin[]>("/admin/groups").then(setRows).catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка"));
     api.get<DepartmentAdmin[]>("/admin/departments").then((all) => {
       // Зав. отделением и тьютор создают только в своём отделении.
-      const ds = myRole === "dept_head" || myRole === "tutor" ? all.filter((d) => d.name === myDepartmentName) : all;
+      const ds = inRoles(myRole, DEPARTMENT_SCOPED_ROLES) ? all.filter((d) => d.name === myDepartmentName) : all;
       setDepartments(ds);
       if (ds.length > 0 && departmentId === null) setDepartmentId(ds[0].id);
     });

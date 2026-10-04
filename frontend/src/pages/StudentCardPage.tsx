@@ -3,7 +3,7 @@ import type { FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/useAuth";
-import { DOSSIER_STAFF_ROLES } from "../constants/roles";
+import { DOSSIER_AUDIT_ROLES, DOSSIER_STAFF_ROLES, STRUCTURE_EDITOR_ROLES, TEACHER_ROLES, inRoles } from "../constants/roles";
 import { STUDENT_STATUS_LABELS } from "../constants/studentStatus";
 import StudentDossier from "../components/StudentDossier";
 import StudentMonthAttendanceView from "../components/StudentMonthAttendance";
@@ -19,7 +19,7 @@ export default function StudentCardPage() {
   const { studentId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const canManage = user?.role === "admin" || user?.role === "tutor" || user?.role === "dept_head";
+  const canManage = inRoles(user?.role, STRUCTURE_EDITOR_ROLES);
 
   const [card, setCard] = useState<StudentCard | null>(null);
   const [groups, setGroups] = useState<StudyGroupAdmin[]>([]);
@@ -48,8 +48,8 @@ export default function StudentCardPage() {
   }, [canManage]);
 
   // Администрация возвращается в список студентов, куратор — в свой кабинет.
-  const isTeacher = user?.role === "curator" || user?.role === "deputy_curator";
-  const isStaff = !!user && DOSSIER_STAFF_ROLES.includes(user.role);
+  const isTeacher = inRoles(user?.role, TEACHER_ROLES);
+  const isStaff = inRoles(user?.role, DOSSIER_STAFF_ROLES);
   const back = (
     <p>
       <Link to={isTeacher ? "/cabinet" : isStaff ? "/students" : "/admin?tab=students"} className="link-btn">
@@ -99,7 +99,7 @@ export default function StudentCardPage() {
       </dl>
 
       <h3 className="student-card__section">Досье</h3>
-      <StudentDossier studentId={card.id} isAdmin={user?.role === "admin" || user?.role === "tutor"} />
+      <StudentDossier studentId={card.id} isAdmin={inRoles(user?.role, DOSSIER_AUDIT_ROLES)} />
 
       <h3 className="student-card__section">
         Посещаемость за 30 дней ({formatDateRu(stats.date_from)} — {formatDateRu(stats.date_to)})

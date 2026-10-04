@@ -23,7 +23,7 @@ import type {
   StudyGroupAdmin,
   UserAdmin,
 } from "../api/types";
-import { CURATOR_CAPABLE_ROLES, DOSSIER_STAFF_ROLES } from "../constants/roles";
+import { COLLEGE_WIDE_ROLES, CURATOR_CAPABLE_ROLES, DEPARTMENT_SCOPED_ROLES, DOSSIER_STAFF_ROLES, inRoles } from "../constants/roles";
 import { formatDateRu, toIso, todayIso } from "../utils/date";
 
 function daysAgoIso(n: number): string {
@@ -39,11 +39,11 @@ export default function DashboardsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   // Зав. отделением и тьютор видят только своё отделение.
-  const isDeptHead = user?.role === "dept_head" || user?.role === "tutor";
+  const isDeptHead = inRoles(user?.role, DEPARTMENT_SCOPED_ROLES);
   // Админ/тьютор/учебный отдел видят весь колледж и могут сузить экспорт до
   // одного отделения; зав. отделением и так видит только своё (см. TODO.md 4).
-  const isStaff = !!user && DOSSIER_STAFF_ROLES.includes(user.role);
-  const canFilterDepartment = user?.role === "admin" || user?.role === "edu_department" || isStaff;
+  const isStaff = inRoles(user?.role, DOSSIER_STAFF_ROLES);
+  const canFilterDepartment = inRoles(user?.role, COLLEGE_WIDE_ROLES);
 
   // Вкладка и фильтры «Свода» живут в адресной строке — ссылкой можно поделиться,
   // а при обычном заходе подставляется последний сохранённый выбор.

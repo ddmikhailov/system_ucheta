@@ -1,6 +1,3 @@
-import datetime
-
-
 def test_create_department(client, admin_headers):
     r = client.post("/admin/departments", headers=admin_headers, json={"name": "Экономика"})
     assert r.status_code == 201

@@ -20,8 +20,8 @@ from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 from sqlalchemy.orm import Session
 
-from app.api.deps import is_department_scoped
 from app.core import field_crypto
+from app.core.roles import is_department_scoped
 from app.core.xlsx import append_row
 from app.models import Student, StudentGuardian, StudentProfile, StudyGroup, User
 from app.schemas.dossier import ProfileFields, SpecialData

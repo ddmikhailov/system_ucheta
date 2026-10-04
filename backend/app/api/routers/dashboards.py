@@ -3,9 +3,10 @@ import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import is_department_scoped, require_management, require_roles, require_viewer, scope_department_id, validate_date_range
+from app.api.deps import require_management, require_roles, require_viewer, scope_department_id, validate_date_range
 from app.core import policies
 from app.core.config import get_settings
+from app.core.roles import is_department_scoped
 from app.db.session import get_db
 from app.models import AttendanceMark, RoleCode, Student, StudyGroup, User
 from app.schemas.dashboards import (

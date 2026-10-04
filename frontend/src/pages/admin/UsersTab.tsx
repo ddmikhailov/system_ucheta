@@ -5,30 +5,10 @@ import { useAuth } from "../../auth/useAuth";
 import { useEscapeKey } from "../../hooks/useEscapeKey";
 import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { DeleteResult, DepartmentAdmin, SetPasswordResult, UserAdmin } from "../../api/types";
-
-const ROLE_LABELS: Record<string, string> = {
-  curator: "Куратор",
-  deputy_curator: "Заместитель куратора",
-  dept_head: "Зав. отделением",
-  edu_department: "Воспитательный отдел",
-  admin: "Администратор",
-  tutor: "Тьютор",
-  social_pedagogue: "Социальный педагог",
-  psychologist: "Педагог-психолог",
-};
+import { DEPARTMENT_REQUIRED_ROLES, DEPARTMENT_SCOPED_ROLES, ROLE, ROLE_LABELS, assignableRoles, inRoles, type RoleCode } from "../../constants/roles";
 
 function roleDisplay(u: UserAdmin): string {
-  return ROLE_LABELS[u.role] || u.role;
-}
-
-// Менять роль могут только администратор и зав. отделением (обновление
-// 1.3) — зеркалит ограничение на бэкенде (_assert_can_assign_role в
-// admin.py). Зав. отделением не может назначить роль выше своей.
-function assignableRoles(myRole: string | undefined): string[] {
-  if (myRole === "admin") return Object.keys(ROLE_LABELS);
-  if (myRole === "dept_head") return ["curator", "deputy_curator", "social_pedagogue", "psychologist", "dept_head"];
-  if (myRole === "tutor") return ["curator", "deputy_curator", "social_pedagogue", "psychologist"];
-  return [];
+  return ROLE_LABELS[u.role as RoleCode] || u.role;
 }
 
 function statusLabel(u: UserAdmin): string {
@@ -38,11 +18,6 @@ function statusLabel(u: UserAdmin): string {
   if (u.must_change_password) return "ждёт смены пароля";
   return "активен";
 }
-
-// Отделение обязательно только для ролей, привязанных к конкретному отделению
-// (зеркалит _resolve_department_for_role в admin.py) — остальным полю в форме
-// создания делать нечего (см. TODO.md 4).
-const ROLES_NEEDING_DEPARTMENT = new Set(["dept_head", "tutor", "curator", "deputy_curator", "social_pedagogue", "psychologist"]);
 
 const PAGE_SIZE = 15;
 
@@ -56,7 +31,7 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
 
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
-  const [role, setRole] = useState("curator");
+  const [role, setRole] = useState<string>(ROLE.CURATOR);
   const [departmentId, setDepartmentId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -77,7 +52,7 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
     api.get<UserAdmin[]>("/admin/users").then(setRows).catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка"));
     api.get<DepartmentAdmin[]>("/admin/departments").then((all) => {
       // Зав. отделением и тьютор создают только в своём отделении.
-      const ds = me?.role === "dept_head" || me?.role === "tutor" ? all.filter((d) => d.name === me?.department_name) : all;
+      const ds = inRoles(me?.role, DEPARTMENT_SCOPED_ROLES) ? all.filter((d) => d.name === me?.department_name) : all;
       setDepartments(ds);
       if (ds.length > 0 && departmentId === null) setDepartmentId(ds[0].id);
     });
@@ -86,7 +61,7 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(load, []);
 
-  const roleNeedsDepartment = ROLES_NEEDING_DEPARTMENT.has(role);
+  const roleNeedsDepartment = DEPARTMENT_REQUIRED_ROLES.includes(role);
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
@@ -152,7 +127,7 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
             <input placeholder="ФИО" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
             <input placeholder="Логин" value={username} onChange={(e) => setUsername(e.target.value)} required />
             <select value={role} onChange={(e) => setRole(e.target.value)}>
-              {Object.entries(ROLE_LABELS)
+              {(Object.entries(ROLE_LABELS) as [RoleCode, string][])
                 .filter(([value]) => assignableRoles(me?.role).includes(value))
                 .map(([value, label]) => (
                   <option key={value} value={value}>
@@ -180,7 +155,7 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
         <input placeholder="Поиск по ФИО" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
         <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
           <option value="all">Все роли</option>
-          {Object.entries(ROLE_LABELS).map(([value, label]) => (
+          {(Object.entries(ROLE_LABELS) as [RoleCode, string][]).map(([value, label]) => (
             <option key={value} value={value}>
               {label}
             </option>
@@ -415,19 +390,19 @@ function UserProfileModal({
         <label>
           Роль
           {isSelf || roleOptions.length <= 1 ? (
-            <input value={ROLE_LABELS[user.role] ?? user.role} disabled />
+            <input value={ROLE_LABELS[user.role as RoleCode] ?? user.role} disabled />
           ) : (
             <select value={editRole} onChange={(e) => setEditRole(e.target.value)}>
               {roleOptions.map((r) => (
                 <option key={r} value={r}>
-                  {ROLE_LABELS[r] ?? r}
+                  {ROLE_LABELS[r as RoleCode] ?? r}
                 </option>
               ))}
             </select>
           )}
         </label>
 
-        {!isSelf && ROLES_NEEDING_DEPARTMENT.has(editRole) && me?.role !== "dept_head" && (
+        {!isSelf && DEPARTMENT_REQUIRED_ROLES.includes(editRole) && !inRoles(me?.role, DEPARTMENT_SCOPED_ROLES) && (
           <label>
             Отделение
             <select value={editDepartmentId ?? ""} onChange={(e) => setEditDepartmentId(Number(e.target.value))}>

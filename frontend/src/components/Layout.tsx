@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
-import { MANAGEMENT_ROLES, TASK_MANAGER_ROLES, VIEWER_ROLES } from "../constants/roles";
+import { MANAGEMENT_ROLES, TASK_MANAGER_ROLES, VIEWER_ROLES, inRoles, leadsGroups } from "../constants/roles";
 import NotificationBell from "./NotificationBell";
 
 export default function Layout({ children }: { children: ReactNode }) {
@@ -15,37 +15,37 @@ export default function Layout({ children }: { children: ReactNode }) {
           <img src="/kait20-logo.webp" alt="КАИТ №20" />
         </div>
         <nav className="app-header__nav">
-          {user && (user.role === "curator" || user.role === "deputy_curator" || user.groups.length > 0) ? (
+          {leadsGroups(user) ? (
             <NavLink to="/cabinet" className={({ isActive }) => (isActive ? "active" : "")}>
               Мои группы
             </NavLink>
           ) : null}
-          {user && (user.role === "curator" || user.role === "deputy_curator" || user.groups.length > 0) ? (
+          {leadsGroups(user) ? (
             <NavLink to="/my-tasks" className={({ isActive }) => (isActive ? "active" : "")}>
               Мои задачи
             </NavLink>
           ) : null}
-          {user && TASK_MANAGER_ROLES.includes(user.role) && (
+          {inRoles(user?.role, TASK_MANAGER_ROLES) && (
             <NavLink to="/tasks" end className={({ isActive }) => (isActive ? "active" : "")}>
               Задачи
             </NavLink>
           )}
-          {user && VIEWER_ROLES.includes(user.role) && (
+          {inRoles(user?.role, VIEWER_ROLES) && (
             <NavLink to="/dashboards" className={({ isActive }) => (isActive ? "active" : "")}>
               Витрины
             </NavLink>
           )}
-          {user && VIEWER_ROLES.includes(user.role) && (
+          {inRoles(user?.role, VIEWER_ROLES) && (
             <NavLink to="/students" className={({ isActive }) => (isActive ? "active" : "")}>
               Студенты
             </NavLink>
           )}
-          {user && (VIEWER_ROLES.includes(user.role) || user.groups.length > 0 || user.role === "curator" || user.role === "deputy_curator") && (
+          {(inRoles(user?.role, VIEWER_ROLES) || leadsGroups(user)) && (
             <NavLink to="/passport" className={({ isActive }) => (isActive ? "active" : "")}>
               Соц. паспорт
             </NavLink>
           )}
-          {user && MANAGEMENT_ROLES.includes(user.role) && (
+          {inRoles(user?.role, MANAGEMENT_ROLES) && (
             <NavLink to="/admin" className={({ isActive }) => (isActive ? "active" : "")}>
               Админка
             </NavLink>

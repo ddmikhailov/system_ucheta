@@ -19,6 +19,7 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.roles import DEPARTMENT_SCOPED_ROLES
 from app.models import RoleCode, Student, StudyGroup, User
 
 ELEVATED_ROLES = {RoleCode.ADMIN.value, RoleCode.TUTOR.value}
@@ -37,7 +38,6 @@ DEPT_HEAD_MANAGEABLE_ROLES = {
 }
 DEPT_HEAD_ASSIGNABLE_ROLES = DEPT_HEAD_MANAGEABLE_ROLES | {RoleCode.DEPT_HEAD.value}
 TUTOR_ASSIGNABLE_ROLES = DEPT_HEAD_MANAGEABLE_ROLES
-DEPARTMENT_SCOPED = (RoleCode.DEPT_HEAD, RoleCode.TUTOR)
 # Роли, которым обязательно нужно отделение, и роли, которым оно не нужно
 # (см. TODO.md 1.4: без этого зав. отделением/куратор без отделения получает
 # фактически доступ ко всему колледжу, т.к. фильтры по department_id=None
@@ -55,7 +55,7 @@ def assert_can_manage_user(admin: User, target: User) -> None:
     admin_role = RoleCode(admin.role.code)
     if admin_role == RoleCode.ADMIN:
         return
-    if admin_role in DEPARTMENT_SCOPED:
+    if admin_role in DEPARTMENT_SCOPED_ROLES:
         if admin.department_id is None:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "У вас не задано отделение — обратитесь к администратору")
         if target.department_id != admin.department_id:
@@ -91,12 +91,12 @@ def resolve_department_for_role(role_code: str, requested_department_id: int | N
 
 
 def assert_can_manage_group(user: User, group: StudyGroup) -> None:
-    if RoleCode(user.role.code) in DEPARTMENT_SCOPED and group.department_id != user.department_id:
+    if RoleCode(user.role.code) in DEPARTMENT_SCOPED_ROLES and group.department_id != user.department_id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Группа не относится к вашему отделению")
 
 
 def assert_can_manage_student(db: Session, user: User, student: Student) -> None:
-    if RoleCode(user.role.code) not in DEPARTMENT_SCOPED:
+    if RoleCode(user.role.code) not in DEPARTMENT_SCOPED_ROLES:
         return
     group = db.get(StudyGroup, student.study_group_id)
     if group is None or group.department_id != user.department_id:

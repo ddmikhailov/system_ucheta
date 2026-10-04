@@ -5,10 +5,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
-    is_department_scoped, require_dept_editor, require_full_access, require_group_calendar_editor, require_management,
+    require_dept_editor, require_full_access, require_group_calendar_editor, require_management,
     require_reference_editor, require_structure_editor, require_viewer, scope_department_id,
 )
 from app.core import policies
+from app.core.roles import is_department_scoped
 from app.core.time import today_local
 from app.db.session import get_db
 from app.models import (

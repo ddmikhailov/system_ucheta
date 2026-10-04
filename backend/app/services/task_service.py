@@ -18,7 +18,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import DEPARTMENT_SCOPED_ROLES, get_curator_group_ids
+from app.core.roles import DEPARTMENT_SCOPED_ROLES
 from app.core.time import today_local, utcnow
 from app.core.xlsx import append_row
 from app.models import (
@@ -26,6 +26,7 @@ from app.models import (
 )
 from app.schemas.tasks import FieldDef, Progress, ScopeDef, TaskCreate
 from app.services import attendance_service, in_app_notification_service
+from app.services.access_service import get_curator_group_ids
 
 TASK_MANAGER_ROLES = (RoleCode.ADMIN, RoleCode.EDU_DEPARTMENT, RoleCode.TUTOR, RoleCode.DEPT_HEAD)
 EDITABLE_STATUSES = ("new", "in_progress", "returned")

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, ApiError, downloadFile } from "../api/client";
 import { useAuth } from "../auth/useAuth";
-import { VIEWER_ROLES } from "../constants/roles";
+import { COLLEGE_WIDE_ROLES, inRoles } from "../constants/roles";
 import type { DepartmentAdmin } from "../api/types";
 
 interface SummaryRow {
@@ -66,10 +66,10 @@ export default function PassportPage() {
   const [passport, setPassport] = useState<GroupPassport | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const canFilterDepartment = !!user && ["admin", "edu_department", "social_pedagogue", "psychologist"].includes(user.role);
+  const canFilterDepartment = inRoles(user?.role, COLLEGE_WIDE_ROLES);
 
   useEffect(() => {
-    if (!canFilterDepartment || !user || !VIEWER_ROLES.includes(user.role)) return;
+    if (!canFilterDepartment) return;
     api.get<DepartmentAdmin[]>("/admin/departments").then(setDepartments).catch(() => setDepartments([]));
   }, [canFilterDepartment, user]);
 
