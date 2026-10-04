@@ -49,12 +49,24 @@ describe("Layout — меню по ролям", () => {
     for (const hidden of ["Задачи", "Витрины", "Студенты", "Админка"]) expect(items).not.toContain(hidden);
   });
 
-  it("показывает имя пользователя и выход", () => {
+  it("имя пользователя — кнопка меню, а «Сменить пароль» и «Выйти» внутри него", async () => {
+    const user = userEvent.setup();
     renderPage(<Layout><div>содержимое</div></Layout>, { role: "admin", user: { full_name: "Иванова Анна" } });
-    expect(screen.getByText("Иванова Анна")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Выйти" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Сменить пароль" })).toBeInTheDocument();
+    const toggle = screen.getByRole("button", { name: /Иванова Анна/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("menuitem", { name: "Выйти" })).not.toBeInTheDocument();
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("menuitem", { name: "Сменить пароль" })).toHaveAttribute("href", "/change-password");
+    expect(screen.getByRole("menuitem", { name: "Выйти" })).toBeInTheDocument();
     expect(screen.getByText("содержимое")).toBeInTheDocument();
+  });
+
+  it("основное меню подписано для скринридеров и не содержит пунктов пользователя", () => {
+    renderPage(<Layout><div /></Layout>, { role: "admin" });
+    const nav = screen.getByRole("navigation", { name: "Разделы" });
+    expect(within(nav).queryByText("Выйти")).not.toBeInTheDocument();
+    expect(within(nav).queryByText("Сменить пароль")).not.toBeInTheDocument();
   });
 });
 

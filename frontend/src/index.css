@@ -230,8 +230,72 @@ select:hover {
   font-size: 14px;
 }
 
-.app-header__user > span {
+.user-menu {
+  position: relative;
+}
+
+.user-menu__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 14px;
   font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.user-menu__toggle:hover,
+.user-menu__toggle[aria-expanded="true"] {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.user-menu__name {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-menu__panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md, 0 8px 24px rgba(28, 25, 48, 0.14));
+}
+
+.user-menu__panel a,
+.user-menu__panel button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.user-menu__panel a:hover,
+.user-menu__panel button:hover {
+  background: var(--primary-light);
+  color: var(--primary);
 }
 
 .notification-bell {
@@ -917,21 +981,42 @@ select:hover {
     padding: 14px;
   }
 
+  /* Первая строка — логотип, колокольчик и меню пользователя; вторая — разделы одной
+     прокручиваемой строкой (раньше всё это занимало около трети экрана). */
   .app-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-    padding: 10px 14px;
-  }
-
-  .app-header__nav {
-    width: 100%;
+    gap: 6px 12px;
+    padding: 8px 14px;
+    justify-content: space-between;
   }
 
   .app-header__user {
-    width: 100%;
-    justify-content: space-between;
-    flex-wrap: wrap;
+    order: 2;
+    margin-left: auto;
+    gap: 4px;
+  }
+
+  .app-header__nav {
+    order: 3;
+    flex: 1 1 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    margin: 0 -14px;
+    padding: 0 14px 2px;
+  }
+
+  .app-header__nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .app-header__nav a {
+    flex-shrink: 0;
+    padding: 8px 12px;
+  }
+
+  .user-menu__name {
+    max-width: 150px;
   }
 
   /* Код отметки в конце горизонтального скролла было не видно и легко было

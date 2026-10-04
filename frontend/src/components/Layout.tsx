@@ -1,11 +1,20 @@
+import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { MANAGEMENT_ROLES, TASK_MANAGER_ROLES, VIEWER_ROLES, inRoles, leadsGroups } from "../constants/roles";
 import NotificationBell from "./NotificationBell";
+import UserMenu from "./UserMenu";
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
+  const navRef = useRef<HTMLElement>(null);
+  const { pathname } = useLocation();
+
+  // На телефоне меню — прокручиваемая строка: активный раздел подводим в видимую часть.
+  useEffect(() => {
+    (navRef.current?.querySelector("a.active") as HTMLElement | null)?.scrollIntoView?.({ inline: "center", block: "nearest" });
+  }, [pathname]);
 
   return (
     <div className="app-shell">
@@ -14,7 +23,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         <div className="app-header__logo">
           <img src="/kait20-logo.webp" alt="КАИТ №20" />
         </div>
-        <nav className="app-header__nav">
+        <nav className="app-header__nav" ref={navRef} aria-label="Разделы">
           {leadsGroups(user) ? (
             <NavLink to="/cabinet" className={({ isActive }) => (isActive ? "active" : "")}>
               Мои группы
@@ -55,9 +64,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           {user && (
             <>
               <NotificationBell />
-              <span>{user.full_name}</span>
-              <NavLink to="/change-password">Сменить пароль</NavLink>
-              <button onClick={logout}>Выйти</button>
+              <UserMenu name={user.full_name} onLogout={logout} />
             </>
           )}
         </div>
