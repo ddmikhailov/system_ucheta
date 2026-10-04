@@ -103,3 +103,16 @@ def test_access_groups_follow_the_backend_dependencies(ts):
     assert allowed(deps.require_viewer) == ts["VIEWER_ROLES"]
     assert allowed(deps.require_structure_editor) == ts["STRUCTURE_EDITOR_ROLES"]
     assert allowed(deps.require_reference_editor) == ts["REFERENCE_EDITOR_ROLES"]
+
+
+def test_force_delete_group_roles_match_the_backend(ts):
+    """Кому интерфейс показывает «Удалить группу навсегда…» — те же, кого пускает бэкенд."""
+    assert ts["FORCE_DELETE_GROUP_ROLES"] == _values(policies.ELEVATED_ROLES)
+
+
+def test_min_password_length_matches_the_frontend():
+    """Форма смены пароля и форма «Задать свой пароль» проверяют ту же длину, что бэкенд (раньше вторая — 8 вместо 10)."""
+    from app.core.password_policy import MIN_PASSWORD_LENGTH
+
+    text = (ROLES_TS.parent / "password.ts").read_text(encoding="utf-8")
+    assert int(re.search(r"MIN_PASSWORD_LENGTH = (\d+)", text).group(1)) == MIN_PASSWORD_LENGTH

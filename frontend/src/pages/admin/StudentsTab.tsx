@@ -5,7 +5,7 @@ import { api, ApiError } from "../../api/client";
 import { STUDENT_STATUS_LABELS } from "../../constants/studentStatus";
 import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { StudentAdmin, StudyGroupAdmin } from "../../api/types";
-import { todayIso } from "../../utils/date";
+import { formatDateRu, todayIso } from "../../utils/date";
 
 // Здесь только список, поиск и добавление. Всё управление конкретным
 // студентом (ФИО, перевод, статус, удаление) — на его личной карточке.
@@ -145,13 +145,13 @@ export default function StudentsTab({ canCreate }: { canEdit?: boolean; canCreat
               </td>
               <td data-label="Группа">{groupCode(s.study_group_id)}</td>
               <td data-label="Статус">{STUDENT_STATUS_LABELS[s.status] ?? s.status}</td>
-              <td data-label="Зачислен">{s.enrolled_at}</td>
-              <td data-label="Выбыл">{s.left_at ?? "—"}</td>
+              <td data-label="Зачислен">{formatDateRu(s.enrolled_at)}</td>
+              <td data-label="Выбыл">{s.left_at ? formatDateRu(s.left_at) : "—"}</td>
             </tr>
           ))}
           {visibleStudents.length === 0 && (
             <tr>
-              <td colSpan={5}>В группе нет студентов.</td>
+              <td colSpan={5}>{isSearching ? "Никого не найдено." : "В группе нет студентов."}</td>
             </tr>
           )}
         </tbody>

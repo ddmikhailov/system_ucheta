@@ -61,6 +61,9 @@ export const REFERENCE_EDITOR_ROLES: Roles = [ROLE.ADMIN, ROLE.EDU_DEPARTMENT];
 /** Кто видит все отделения колледжа (фильтр по отделению в витринах и паспорте). */
 export const COLLEGE_WIDE_ROLES: Roles = [ROLE.ADMIN, ROLE.EDU_DEPARTMENT, ...DOSSIER_STAFF_ROLES];
 
+/** Кто может удалить группу насовсем вместе с историей (backend: ELEVATED_ROLES); тьютор — только в своём отделении. */
+export const FORCE_DELETE_GROUP_ROLES: Roles = [ROLE.ADMIN, ROLE.TUTOR];
+
 /** Кто видит журнал просмотров досье (по студентам своей области доступа). */
 export const DOSSIER_AUDIT_ROLES: Roles = [ROLE.ADMIN, ROLE.TUTOR];
 

@@ -7,16 +7,19 @@ import { todayIso } from "../utils/date";
 export default function AssignCuratorModal({
   groupId,
   curators,
+  initialRole = "curator",
   onClose,
   onSaved,
 }: {
   groupId: number;
   curators: UserAdmin[];
+  /** С какой роли открыть окно (кнопка «заместитель» должна открывать его на заместителе). */
+  initialRole?: "curator" | "deputy";
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [userId, setUserId] = useState<number | null>(curators[0]?.id ?? null);
-  const [roleType, setRoleType] = useState("curator");
+  const [roleType, setRoleType] = useState<string>(initialRole);
   const [startDate, setStartDate] = useState(todayIso());
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

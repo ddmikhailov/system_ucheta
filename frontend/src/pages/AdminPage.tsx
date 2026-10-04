@@ -38,8 +38,8 @@ export default function AdminPage() {
     setSearchParams(params, { replace: true });
   }
 
-  // Тьютор — второй полноценный администратор по всему колледжу (обновление
-  // 1.2): везде, где раньше был только admin, теперь и он.
+  // Администратор — по всему колледжу; зав. отделением и тьютор — те же возможности
+  // (создание, правка), но только в своём отделении, остальное ограничивает бэкенд.
   const isAdmin = user?.role === ROLE.ADMIN;
   const canCreate = isAdmin || isDeptHead;
   const isReferenceEditor = inRoles(user?.role, REFERENCE_EDITOR_ROLES);

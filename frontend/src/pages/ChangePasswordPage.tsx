@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ApiError, setToken } from "../api/client";
 import { useAuth } from "../auth/useAuth";
+import { MIN_PASSWORD_LENGTH } from "../constants/password";
 import type { MeResponse } from "../api/types";
 
 export default function ChangePasswordPage() {
@@ -82,7 +83,7 @@ export default function ChangePasswordPage() {
               onChange={(e) => setNewPassword(e.target.value)}
               autoFocus={forced}
               required
-              minLength={10}
+              minLength={MIN_PASSWORD_LENGTH}
             />
           </label>
 
@@ -93,7 +94,7 @@ export default function ChangePasswordPage() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
-              minLength={10}
+              minLength={MIN_PASSWORD_LENGTH}
             />
           </label>
 

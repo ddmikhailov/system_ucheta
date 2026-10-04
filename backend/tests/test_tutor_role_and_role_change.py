@@ -180,3 +180,22 @@ def test_tutor_cannot_change_roles(client, imported, db):
 
     r = client.patch(f"/admin/users/{curator.id}", headers=tutor_headers, json={"role": "dept_head"})
     assert r.status_code == 403
+
+
+def test_tutor_can_delete_a_group_forever_only_in_own_department(client, imported, db):
+    """Тьютор — полный доступ к своему отделению, включая удаление группы с историей (с кодом подтверждения);
+    чужую группу удалить нельзя. Зав. отделением удалить группу насовсем не может (см. отдельный тест)."""
+    from app.models import StudyGroup
+
+    tutor_headers = _make_tutor(db, client)
+    other, other_group = _other_department_group(db)
+    own_group = db.query(StudyGroup).filter(StudyGroup.id != other_group.id).first()
+    own_id, own_code = own_group.id, own_group.code
+    client.patch(f"/admin/groups/{own_id}", headers=tutor_headers, json={"is_active": False})
+
+    r = client.delete(f"/admin/groups/{other_group.id}?force=true&confirm_code={other_group.code}", headers=tutor_headers)
+    assert r.status_code == 403
+    r = client.delete(f"/admin/groups/{own_id}?force=true&confirm_code={own_code}", headers=tutor_headers)
+    assert r.status_code == 200, r.text
+    db.expire_all()
+    assert db.get(StudyGroup, own_id) is None and db.get(StudyGroup, other_group.id) is not None

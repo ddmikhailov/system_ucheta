@@ -4,7 +4,7 @@ import { api, ApiError } from "../../api/client";
 import { useAuth } from "../../auth/useAuth";
 import AssignCuratorModal from "../../components/AssignCuratorModal";
 import DeleteGroupForeverModal from "../../components/DeleteGroupForeverModal";
-import { CURATOR_CAPABLE_ROLES, DEPARTMENT_SCOPED_ROLES, inRoles } from "../../constants/roles";
+import { CURATOR_CAPABLE_ROLES, DEPARTMENT_SCOPED_ROLES, FORCE_DELETE_GROUP_ROLES, inRoles } from "../../constants/roles";
 import { useEscapeKey } from "../../hooks/useEscapeKey";
 import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { DeleteResult, DepartmentAdmin, StudyGroupAdmin, UserAdmin } from "../../api/types";
@@ -142,7 +142,7 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
         <GroupDetailModal
           group={detailGroup}
           curators={curators}
-          canDeleteForever={canCreate}
+          canDeleteForever={inRoles(myRole, FORCE_DELETE_GROUP_ROLES)}
           onClose={() => setDetailId(null)}
           onChanged={load}
           setNotice={setNotice}
@@ -181,7 +181,8 @@ function GroupDetailModal({
   const [editCode, setEditCode] = useState(group.code);
   const [editCourse, setEditCourse] = useState(group.course);
   const [editStudyForm, setEditStudyForm] = useState(group.study_form ?? "");
-  const [assigning, setAssigning] = useState(false);
+  // Какое назначение открыто: куратор или заместитель (окно выбора роли должно открываться на нужной).
+  const [assigning, setAssigning] = useState<"curator" | "deputy" | null>(null);
   const [deletingForever, setDeletingForever] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   useEscapeKey(onClose);
@@ -278,7 +279,7 @@ function GroupDetailModal({
 
         <p className="hint">Куратор: {group.curator_name ?? "нет куратора"}</p>
         <div className="admin-row-actions">
-          <button className="link-btn" onClick={() => setAssigning(true)}>
+          <button className="link-btn" onClick={() => setAssigning("curator")}>
             {group.curator_name ? "Сменить куратора" : "Назначить куратора"}
           </button>
           {group.curator_assignment_id !== null && (
@@ -290,7 +291,7 @@ function GroupDetailModal({
 
         <p className="hint">Заместитель: {group.deputy_name ?? "нет заместителя"}</p>
         <div className="admin-row-actions">
-          <button className="link-btn" onClick={() => setAssigning(true)}>
+          <button className="link-btn" onClick={() => setAssigning("deputy")}>
             {group.deputy_name ? "Сменить заместителя" : "Назначить заместителя"}
           </button>
           {group.deputy_assignment_id !== null && (
@@ -342,9 +343,10 @@ function GroupDetailModal({
           <AssignCuratorModal
             groupId={group.id}
             curators={curators}
-            onClose={() => setAssigning(false)}
+            initialRole={assigning}
+            onClose={() => setAssigning(null)}
             onSaved={() => {
-              setAssigning(false);
+              setAssigning(null);
               onChanged();
             }}
           />
