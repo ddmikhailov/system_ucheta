@@ -434,6 +434,17 @@ describe("TasksPage — создание задачи", () => {
     expect(screen.queryByRole("button", { name: "Удалить шаблон" })).not.toBeInTheDocument();
   });
 
+  it("вкладка «Шаблоны» показывает шаблоны и их расписание", async () => {
+    templates = [{ ...TEMPLATE, repeat: "monthly", repeat_day: 1, due_offset_days: 14, next_run: "2026-11-01", last_run_date: null, last_error: null }];
+    const user = userEvent.setup();
+    mockApi();
+    renderPage(<TasksPage />, { role: "admin" });
+    await user.click(await screen.findByRole("button", { name: "Шаблоны" }));
+    expect(await screen.findByText("Ежегодная сверка")).toBeInTheDocument();
+    expect(screen.getByText(/Каждый месяц, 1-го числа/)).toBeInTheDocument();
+    expect(screen.getByText("01.11.2026")).toBeInTheDocument();
+  });
+
   it("после создания открывается карточка задачи", async () => {
     const user = await openForm();
     post.mockResolvedValue({ ...DETAIL, id: 1 });

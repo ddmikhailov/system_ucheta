@@ -2,11 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, ApiError, downloadFile } from "../api/client";
 import TaskCreateForm from "../components/TaskCreateForm";
+import TaskTemplatesTab from "../components/TaskTemplatesTab";
 import { COLLECT_MODE_LABELS, REVIEWER_LABELS, TASK_STATUS_LABELS } from "../constants/tasks";
 import { formatDateRu, formatServerDateTimeFull } from "../utils/date";
 import type { ReviewQueueRow, TaskDetail, TaskListRow, TaskProgress } from "../api/types";
 
-type Tab = "list" | "review" | "create";
+type Tab = "list" | "review" | "templates" | "create";
 
 function ProgressText({ p }: { p: TaskProgress }) {
   return (
@@ -56,11 +57,16 @@ export default function TasksPage() {
         <button className={tab === "review" ? "active" : ""} onClick={() => setTab("review")}>
           На проверке{queue.length > 0 ? ` (${queue.length})` : ""}
         </button>
+        <button className={tab === "templates" ? "active" : ""} onClick={() => setTab("templates")}>
+          Шаблоны
+        </button>
         <button className={tab === "create" ? "active" : ""} onClick={() => setTab("create")}>
           + Новая задача
         </button>
       </div>
       {error && <div className="error-text">{error}</div>}
+
+      {tab === "templates" && <TaskTemplatesTab />}
 
       {tab === "create" && (
         <TaskCreateForm

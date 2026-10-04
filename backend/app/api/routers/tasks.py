@@ -12,11 +12,11 @@ from app.db.session import get_db
 from app.models import RoleCode, StudyGroup, Task, TaskAssignment, TaskComment, TaskTemplate, User
 from app.schemas.tasks import (
     AnswersIn, AssignmentDetail, AssignmentSummary, CommentIn, CommentRead, FieldDef, MyAssignmentRow,
-    HistoryEvent, ReviewIn, ReviewQueueRow, RowRead, ScopeDef, TaskCreate, TaskDetail, TaskListRow, TaskUpdate, TemplateCreate, TemplateRead,
+    HistoryEvent, ReviewIn, ReviewQueueRow, RowRead, ScheduleIn, ScopeDef, TaskCreate, TaskDetail, TaskListRow, TaskUpdate, TemplateCreate, TemplateRead,
 )
 from app.services import attendance_service
 from app.services.access_service import get_curator_group_ids
-from app.services import task_dossier
+from app.services import task_dossier, task_schedule
 from app.services import task_service as svc
 from app.services.audit_service import log_action
 
@@ -66,7 +66,8 @@ def _template_read(t: TaskTemplate, user: User) -> TemplateRead:
         can_manage=RoleCode(user.role.code) == RoleCode.ADMIN or t.created_by == user.id,
         title=data["title"], description=data.get("description"), collect_mode=data["collect_mode"],
         reviewer_rule=data["reviewer_rule"], fields=[FieldDef(**f) for f in data["fields"]],
-        scope=ScopeDef(**data["scope"]),
+        scope=ScopeDef(**data["scope"]), repeat=t.repeat, repeat_day=t.repeat_day, due_offset_days=t.due_offset_days,
+        next_run=t.next_run, last_run_date=t.last_run_date, last_error=t.last_error,
     )
 
 
@@ -90,6 +91,24 @@ def create_template(payload: TemplateCreate, user: User = Depends(require_task_m
     return _template_read(template, user)
 
 
+@router.put("/templates/{template_id}/schedule", response_model=TemplateRead)
+def set_template_schedule(
+    template_id: int, payload: ScheduleIn, user: User = Depends(require_task_manager), db: Session = Depends(get_db),
+):
+    """Расписание периодического запуска. Меняет автор шаблона или администратор; запуск идёт от имени автора."""
+    template = db.get(TaskTemplate, template_id)
+    if template is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Шаблон не найден")
+    if not _template_read(template, user).can_manage:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Расписание меняет автор шаблона или администратор")
+    task_schedule.set_schedule(template, payload.repeat, payload.repeat_day, payload.due_offset_days)
+    log_action(db, user, "task.template_schedule", "task_template", str(template.id),
+               new_value=f"{payload.repeat or 'off'}:{payload.repeat_day}:{payload.due_offset_days}")
+    db.commit()
+    db.refresh(template)
+    return _template_read(template, user)
+
+
 @router.delete("/templates/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_template(template_id: int, user: User = Depends(require_task_manager), db: Session = Depends(get_db)):
     template = db.get(TaskTemplate, template_id)
@@ -98,6 +117,8 @@ def delete_template(template_id: int, user: User = Depends(require_task_manager)
     if not _template_read(template, user).can_manage:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Удалить шаблон может его автор или администратор")
     log_action(db, user, "task.template_delete", "task_template", str(template.id), old_value=template.name)
+    # Созданные по шаблону задачи остаются, просто теряют связь с ним.
+    db.query(Task).filter(Task.template_id == template.id).update({"template_id": None, "period_key": None})
     db.delete(template)
     db.commit()
 

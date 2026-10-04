@@ -36,3 +36,16 @@ export const FIELD_TYPE_LABELS: Record<string, string> = {
   multiselect: "Множественный выбор",
   link: "Ссылка",
 };
+
+// Повторный запуск задач по шаблону.
+export const REPEAT_LABELS: Record<string, string> = {
+  "": "Не повторять",
+  monthly: "Каждый месяц",
+  semester: "Каждый семестр (сентябрь и февраль)",
+};
+
+export function scheduleText(t: { repeat: string; repeat_day: number; due_offset_days: number }): string {
+  if (t.repeat === "monthly") return `Каждый месяц, ${t.repeat_day}-го числа; срок — через ${t.due_offset_days} дн.`;
+  if (t.repeat === "semester") return `Каждый семестр (сентябрь, февраль), ${t.repeat_day}-го числа; срок — через ${t.due_offset_days} дн.`;
+  return "Не повторяется";
+}

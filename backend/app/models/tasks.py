@@ -12,6 +12,7 @@ class Task(Base):
     JSON-ом в самой задаче: разные задачи = разные формы без миграций БД."""
 
     __tablename__ = "tasks"
+    __table_args__ = (UniqueConstraint("template_id", "period_key", name="uq_task_template_period"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -24,6 +25,9 @@ class Task(Base):
     fields_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     scope_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    # Периодические задачи: из какого шаблона и за какой период («2026-10») создана; на пару стоит уникальность.
+    template_id: Mapped[int | None] = mapped_column(ForeignKey("task_templates.id"), nullable=True)
+    period_key: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     author: Mapped["User"] = relationship()
     assignments: Mapped[list["TaskAssignment"]] = relationship(back_populates="task", cascade="all, delete-orphan")
@@ -41,6 +45,13 @@ class TaskTemplate(Base):
     # title, description, collect_mode, reviewer_rule, fields, scope — как в TaskCreate, без due_date
     payload_json: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    # Расписание (см. services/task_schedule.py): "" — не повторять, monthly, semester.
+    repeat: Mapped[str] = mapped_column(String(16), nullable=False, default="", server_default="")
+    repeat_day: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    due_offset_days: Mapped[int] = mapped_column(Integer, nullable=False, default=14, server_default="14")
+    next_run: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
+    last_run_date: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     author: Mapped["User | None"] = relationship()
 

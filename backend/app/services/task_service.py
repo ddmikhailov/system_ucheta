@@ -528,6 +528,9 @@ _last_reminder_run: dict[int, float] = {}
 
 
 def reset_reminder_throttle() -> None:
+    from app.services import task_schedule
+
+    task_schedule.reset_throttle()
     _last_reminder_run.clear()
 
 

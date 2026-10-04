@@ -43,6 +43,12 @@ class TemplateCreate(BaseModel):
     name: str | None = Field(default=None, max_length=255)
 
 
+class ScheduleIn(BaseModel):
+    repeat: Literal["", "monthly", "semester"]
+    repeat_day: int = Field(default=1, ge=1, le=28)
+    due_offset_days: int = Field(default=14, ge=1, le=120)
+
+
 class TemplateRead(BaseModel):
     id: int
     name: str
@@ -55,6 +61,12 @@ class TemplateRead(BaseModel):
     reviewer_rule: str
     fields: list[FieldDef]
     scope: ScopeDef
+    repeat: str
+    repeat_day: int
+    due_offset_days: int
+    next_run: datetime.date | None
+    last_run_date: datetime.date | None
+    last_error: str | None
 
 
 class TaskUpdate(BaseModel):

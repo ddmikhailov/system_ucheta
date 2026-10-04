@@ -440,6 +440,12 @@ export interface TaskTemplate {
   reviewer_rule: string;
   fields: TaskField[];
   scope: TaskScope;
+  repeat: "" | "monthly" | "semester";
+  repeat_day: number;
+  due_offset_days: number;
+  next_run: string | null;
+  last_run_date: string | null;
+  last_error: string | null;
 }
 
 export interface DossierTarget {
