@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { ApiError } from "../api/client";
 
@@ -10,7 +10,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const { login } = useAuth();
+  const { login, user, loading } = useAuth();
   const navigate = useNavigate();
 
   async function handleSubmit(e: FormEvent) {
@@ -26,6 +26,9 @@ export default function LoginPage() {
       setBusy(false);
     }
   }
+
+  // Уже вошедшему форма входа не нужна — отправляем на стартовую страницу его роли.
+  if (!loading && user) return <Navigate to="/" replace />;
 
   return (
     <div className="auth-screen">

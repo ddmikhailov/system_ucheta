@@ -1,0 +1,103 @@
+import { screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { api } from "../api/client";
+import { renderPage } from "../test/utils";
+import Layout from "./Layout";
+
+vi.mock("../api/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../api/client")>();
+  return { ...actual, api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn() } };
+});
+
+const get = vi.mocked(api.get);
+
+beforeEach(() => {
+  get.mockReset();
+  get.mockImplementation(async (path: string) => (path === "/notifications/unread-count" ? { unread: 0 } : []));
+});
+
+/** Названия пунктов основного меню в порядке показа. */
+function menu(role: string, groups: { id: number; code: string; course: number }[] = []) {
+  renderPage(<Layout><div>содержимое</div></Layout>, { role, user: { groups } });
+  const nav = document.querySelector(".app-header__nav") as HTMLElement;
+  return within(nav).queryAllByRole("link").map((a) => a.textContent);
+}
+
+describe("Layout — меню по ролям", () => {
+  it.each([
+    ["curator", ["Мои группы", "Мои задачи", "Соц. паспорт"]],
+    ["deputy_curator", ["Мои группы", "Мои задачи", "Соц. паспорт"]],
+    ["dept_head", ["Задачи", "Витрины", "Студенты", "Соц. паспорт", "Админка"]],
+    ["tutor", ["Задачи", "Витрины", "Студенты", "Соц. паспорт", "Админка"]],
+    ["edu_department", ["Задачи", "Витрины", "Студенты", "Соц. паспорт", "Админка"]],
+    ["admin", ["Задачи", "Витрины", "Студенты", "Соц. паспорт", "Админка"]],
+    ["social_pedagogue", ["Витрины", "Студенты", "Соц. паспорт"]],
+    ["psychologist", ["Витрины", "Студенты", "Соц. паспорт"]],
+  ])("роль %s видит свои разделы", (role, expected) => {
+    expect(menu(role)).toEqual(expected);
+  });
+
+  it("специалист, который ведёт группы, получает «Мои группы» и «Мои задачи»", () => {
+    expect(menu("psychologist", [{ id: 1, code: "СА172", course: 1 }])).toEqual([
+      "Мои группы", "Мои задачи", "Витрины", "Студенты", "Соц. паспорт",
+    ]);
+  });
+
+  it("куратору не показываются управленческие разделы", () => {
+    const items = menu("curator");
+    for (const hidden of ["Задачи", "Витрины", "Студенты", "Админка"]) expect(items).not.toContain(hidden);
+  });
+
+  it("показывает имя пользователя и выход", () => {
+    renderPage(<Layout><div>содержимое</div></Layout>, { role: "admin", user: { full_name: "Иванова Анна" } });
+    expect(screen.getByText("Иванова Анна")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Выйти" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Сменить пароль" })).toBeInTheDocument();
+    expect(screen.getByText("содержимое")).toBeInTheDocument();
+  });
+});
+
+describe("Уведомления (колокольчик)", () => {
+  it("показывает число непрочитанных", async () => {
+    get.mockImplementation(async (path: string) => (path === "/notifications/unread-count" ? { unread: 3 } : []));
+    renderPage(<Layout><div /></Layout>, { role: "curator" });
+    expect(await screen.findByText("3")).toBeInTheDocument();
+  });
+
+  it("клик по уведомлению о задаче открывает назначение и помечает прочитанным", async () => {
+    const user = userEvent.setup();
+    const post = vi.mocked(api.post);
+    post.mockReset();
+    post.mockResolvedValue({});
+    get.mockImplementation(async (path: string) => {
+      if (path === "/notifications/unread-count") return { unread: 1 };
+      return [{ id: 7, kind: "task_assigned", message: "Новая задача «Кружки»", entity_type: "task_assignment", entity_id: "12", created_at: "2026-10-01T09:00:00", read_at: null }];
+    });
+    renderPage(<Layout><div /></Layout>, { role: "curator" });
+    await user.click(await screen.findByRole("button", { name: "Уведомления" }));
+    await user.click(await screen.findByText("Новая задача «Кружки»"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/notifications/7/read"));
+    // Переход произошёл: панель закрылась.
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Уведомления" })).not.toBeInTheDocument());
+  });
+
+  it("«Прочитать все» сбрасывает счётчик", async () => {
+    const user = userEvent.setup();
+    const post = vi.mocked(api.post);
+    post.mockReset();
+    post.mockResolvedValue({ ok: true });
+    get.mockImplementation(async (path: string) => {
+      if (path === "/notifications/unread-count") return { unread: 2 };
+      return [
+        { id: 1, kind: "task_due_soon", message: "Скоро срок", entity_type: "task_assignment", entity_id: "1", created_at: "2026-10-01T09:00:00", read_at: null },
+        { id: 2, kind: "task_overdue", message: "Просрочена", entity_type: "task_assignment", entity_id: "2", created_at: "2026-10-01T10:00:00", read_at: null },
+      ];
+    });
+    renderPage(<Layout><div /></Layout>, { role: "curator" });
+    await user.click(await screen.findByRole("button", { name: "Уведомления" }));
+    await user.click(await screen.findByRole("button", { name: "Прочитать все" }));
+    expect(post).toHaveBeenCalledWith("/notifications/read-all");
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Прочитать все" })).not.toBeInTheDocument());
+  });
+});

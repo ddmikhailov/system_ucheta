@@ -222,10 +222,10 @@ export default function TaskCreateForm({ onCreated }: { onCreated: (task: TaskDe
           <label>
             <input type="checkbox" checked={f.required} onChange={(e) => updateField(i, { required: e.target.checked })} /> Обязательное
           </label>
-          <button type="button" className="link-btn" onClick={() => move(i, -1)} disabled={i === 0} title="Выше">
+          <button type="button" className="link-btn" onClick={() => move(i, -1)} disabled={i === 0} title="Выше" aria-label="Выше">
             ↑
           </button>
-          <button type="button" className="link-btn" onClick={() => move(i, 1)} disabled={i === fields.length - 1} title="Ниже">
+          <button type="button" className="link-btn" onClick={() => move(i, 1)} disabled={i === fields.length - 1} title="Ниже" aria-label="Ниже">
             ↓
           </button>
           <button type="button" className="link-btn" onClick={() => setFields((p) => p.filter((_, idx) => idx !== i))} disabled={fields.length === 1}>

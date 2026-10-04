@@ -44,7 +44,10 @@ function RequireAdminAccess({ children }: { children: ReactElement }) {
 }
 
 function HomeRedirect() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+  // Пока /auth/me не ответил, user == null: без ожидания человек с действующим входом
+  // отправлялся бы на страницу входа при каждом открытии сайта по корневому адресу.
+  if (loading) return <div className="loading-screen">Загрузка…</div>;
   if (!user) return <Navigate to="/login" replace />;
   if (DOSSIER_STAFF_ROLES.includes(user.role)) return <Navigate to="/students" replace />;
   if (MANAGEMENT_ROLES.includes(user.role)) return <Navigate to="/dashboards" replace />;

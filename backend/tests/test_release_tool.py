@@ -36,6 +36,18 @@ def test_select_files_keeps_only_backend_and_frontend_code(tool):
     ])
 
 
+def test_select_files_drops_frontend_tests_but_keeps_similarly_named_code(tool):
+    paths = [
+        "frontend/src/App.tsx", "frontend/src/utils/date.ts", "frontend/src/pages/latest.tsx",
+        # тесты и помощники тестов:
+        "frontend/src/App.test.tsx", "frontend/src/api/client.test.ts", "frontend/src/test/setup.ts",
+        "frontend/src/test/utils.tsx", "frontend/src/utils/date.test.ts",
+    ]
+    assert tool.select_files(paths) == [
+        "frontend/src/App.tsx", "frontend/src/pages/latest.tsx", "frontend/src/utils/date.ts",
+    ]
+
+
 def test_select_files_drops_docker_and_amvera_files_even_inside_backend_or_frontend(tool):
     paths = ["backend/Dockerfile", "backend/docker-compose.override.yml", "frontend/amvera.yml", "frontend/.dockerignore",
              "backend/app/ok.py"]
