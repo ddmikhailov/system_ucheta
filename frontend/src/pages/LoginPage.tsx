@@ -60,6 +60,8 @@ export default function LoginPage() {
             Пароль
             <div className="password-field">
               <input
+                id="login-password"
+                aria-label="Пароль"
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -69,8 +71,8 @@ export default function LoginPage() {
               <button
                 type="button"
                 className="password-field__toggle"
+                aria-controls="login-password"
                 onClick={() => setShowPassword((v) => !v)}
-                tabIndex={-1}
               >
                 {showPassword ? "Скрыть" : "Показать"}
               </button>

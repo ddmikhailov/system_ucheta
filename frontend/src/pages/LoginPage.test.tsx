@@ -75,6 +75,22 @@ describe("LoginPage", () => {
     expect(password.type).toBe("text");
   });
 
+  it("поле пароля называется «Пароль» (без текста кнопки «Показать»), а кнопка доступна с клавиатуры", async () => {
+    const user = userEvent.setup();
+    renderLogin();
+    const password = screen.getByLabelText("Пароль") as HTMLInputElement;
+    expect(password.tagName).toBe("INPUT");
+    const toggle = screen.getByRole("button", { name: "Показать" });
+    expect(toggle).not.toHaveAttribute("tabindex", "-1");
+    expect(toggle).toHaveAttribute("aria-controls", password.id);
+    password.focus();
+    await user.tab();
+    expect(toggle).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(password.type).toBe("text");
+    expect(screen.getByRole("button", { name: "Скрыть" })).toBeInTheDocument();
+  });
+
   it("уже вошедшего пользователя форма входа не задерживает", async () => {
     renderLogin({ user: makeUser("curator") });
     await waitFor(() => expect(screen.getByText("главная")).toBeInTheDocument());

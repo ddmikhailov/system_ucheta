@@ -1311,6 +1311,12 @@ a.link-btn:hover {
   text-decoration: underline;
 }
 
+/* Ссылка-кнопка первой в ячейке: боковой padding не сдвигает текст относительно заголовка столбца и соседних строк. */
+td > .link-btn:first-child,
+th > .link-btn:first-child {
+  margin-left: -4px;
+}
+
 /* --- Свод «всего / к 1 паре» --- */
 
 .table-scroll {
