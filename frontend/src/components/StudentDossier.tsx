@@ -160,6 +160,15 @@ function ProfileForm({
           <input value={profile.residence_address ?? ""} onChange={(e) => set("residence_address", e.target.value)} />
         </Field>
       </div>
+      <div className="inline-form form-fields">
+        <Field label="Дополнительное образование (кружки, секции)">
+          <input
+            value={profile.additional_education ?? ""}
+            maxLength={1000}
+            onChange={(e) => set("additional_education", e.target.value)}
+          />
+        </Field>
+      </div>
 
       <p className="add-block__title">Социальный статус и здоровье</p>
       {!dossier.special_available ? (

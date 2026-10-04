@@ -16,6 +16,7 @@ from app.schemas.tasks import (
 )
 from app.services import attendance_service
 from app.services.access_service import get_curator_group_ids
+from app.services import task_dossier
 from app.services import task_service as svc
 from app.services.audit_service import log_action
 
@@ -50,6 +51,12 @@ def create_task(payload: TaskCreate, user: User = Depends(require_task_manager),
     log_action(db, user, "task.create", "task", str(task.id), new_value=task.title)
     db.commit()
     return _detail(db, user, task)
+
+
+@router.get("/dossier-fields")
+def dossier_fields(user: User = Depends(require_task_manager)):
+    """Поля досье, к которым можно привязать поле формы (для конструктора)."""
+    return task_dossier.targets_list()
 
 
 @router.get("", response_model=list[TaskListRow])
@@ -111,12 +118,16 @@ def _detail_assignment(db: Session, user: User, a: TaskAssignment) -> Assignment
     rows_by_student = {r.student_id: r for r in a.rows}
     rows: list[RowRead] = []
     if task.collect_mode != "group":
-        for s in attendance_service.get_active_students(db, a.study_group_id, today):
+        students = attendance_service.get_active_students(db, a.study_group_id, today)
+        # Куратору форма открывается заполненной из досье (только строки, которые он ещё не сохранял);
+        # другим просматривающим данные досье по задаче не раскрываем.
+        prefilled = task_dossier.prefill(db, svc.task_fields(task), [s.id for s in students]) if editable else {}
+        for s in students:
             r = rows_by_student.get(s.id)
             rows.append(RowRead(
                 student_id=s.id, student_name=s.full_name,
                 is_included=r.is_included if r else task.collect_mode == "student",
-                values=json.loads(r.values_json) if r else {},
+                values=json.loads(r.values_json) if r else prefilled.get(s.id, {}),
             ))
     comments = sorted(a.comments, key=lambda c: (c.created_at, c.id))
     return AssignmentDetail(

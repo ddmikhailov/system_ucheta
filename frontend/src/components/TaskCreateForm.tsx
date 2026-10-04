@@ -4,7 +4,7 @@ import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/useAuth";
 import { COLLECT_MODE_LABELS, FIELD_TYPE_LABELS, REVIEWER_LABELS } from "../constants/tasks";
 import { todayIso } from "../utils/date";
-import type { DepartmentAdmin, StudyGroupAdmin, TaskDetail, TaskField, TaskFieldType } from "../api/types";
+import type { DepartmentAdmin, DossierTarget, StudyGroupAdmin, TaskDetail, TaskField, TaskFieldType } from "../api/types";
 import { DEPARTMENT_SCOPED_ROLES, inRoles } from "../constants/roles";
 
 type ScopeKind = "all" | "departments" | "courses" | "groups";
@@ -14,9 +14,11 @@ interface FieldDraft {
   type: TaskFieldType;
   required: boolean;
   optionsText: string;
+  dossierField: string;
 }
 
-const EMPTY_FIELD: FieldDraft = { label: "", type: "text", required: false, optionsText: "" };
+const EMPTY_FIELD: FieldDraft = { label: "", type: "text", required: false, optionsText: "", dossierField: "" };
+const FUNDING_OPTIONS = "бюджет, договор";
 
 // Создание задачи: описание → охват → режим сбора → форма ответа → срок и проверка.
 export default function TaskCreateForm({ onCreated }: { onCreated: (task: TaskDetail) => void }) {
@@ -35,6 +37,7 @@ export default function TaskCreateForm({ onCreated }: { onCreated: (task: TaskDe
   const [excludeIds, setExcludeIds] = useState<number[]>([]);
   const [departments, setDepartments] = useState<DepartmentAdmin[]>([]);
   const [groups, setGroups] = useState<StudyGroupAdmin[]>([]);
+  const [targets, setTargets] = useState<DossierTarget[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -44,6 +47,7 @@ export default function TaskCreateForm({ onCreated }: { onCreated: (task: TaskDe
       .get<StudyGroupAdmin[]>("/admin/groups")
       .then((all) => setGroups(all.filter((g) => g.is_active)))
       .catch(() => setGroups([]));
+    api.get<DossierTarget[]>("/tasks/dossier-fields").then(setTargets).catch(() => setTargets([]));
   }, []);
 
   const toggle = (list: number[], set: (v: number[]) => void, id: number) =>
@@ -51,6 +55,33 @@ export default function TaskCreateForm({ onCreated }: { onCreated: (task: TaskDe
 
   const updateField = (i: number, patch: Partial<FieldDraft>) =>
     setFields((prev) => prev.map((f, idx) => (idx === i ? { ...f, ...patch } : f)));
+
+  // Выбор поля досье подстраивает поле формы (тип, название, варианты), а смена типа на несовместимый снимает связь.
+  const linkField = (i: number, key: string) => {
+    const target = targets.find((t) => t.key === key);
+    setFields((prev) =>
+      prev.map((f, idx) => {
+        if (idx !== i) return f;
+        if (!target) return { ...f, dossierField: "" };
+        return {
+          ...f,
+          dossierField: key,
+          type: target.types.includes(f.type) ? f.type : target.types[0],
+          label: f.label || target.label,
+          optionsText: key === "funding" && !f.optionsText ? FUNDING_OPTIONS : f.optionsText,
+        };
+      })
+    );
+  };
+
+  const changeType = (i: number, type: TaskFieldType) =>
+    setFields((prev) =>
+      prev.map((f, idx) => {
+        if (idx !== i) return f;
+        const target = targets.find((t) => t.key === f.dossierField);
+        return { ...f, type, dossierField: target && !target.types.includes(type) ? "" : f.dossierField };
+      })
+    );
 
   const move = (i: number, delta: number) =>
     setFields((prev) => {
@@ -70,6 +101,8 @@ export default function TaskCreateForm({ onCreated }: { onCreated: (task: TaskDe
       type: f.type,
       required: f.required,
       options: f.type === "select" || f.type === "multiselect" ? f.optionsText.split(",").map((o) => o.trim()).filter(Boolean) : [],
+      // В задаче «по группе» ответ не относится к студенту — связать с досье нельзя.
+      ...(f.dossierField && mode !== "group" ? { dossier_field: f.dossierField } : {}),
     }));
     try {
       const task = await api.post<TaskDetail>("/tasks", {
@@ -197,7 +230,7 @@ export default function TaskCreateForm({ onCreated }: { onCreated: (task: TaskDe
       </div>
       <p className="hint">
         {mode === "group" && "Один ответ от группы (видеовизитка, план работы)."}
-        {mode === "student" && "Строка на каждого студента группы (кружки, согласия, справки)."}
+        {mode === "student" && "Строка на каждого студента группы (кружки, согласия, справки). Поля можно связать с досье: форма откроется заполненной, а принятые ответы запишутся в карточки студентов."}
         {mode === "selected" && "Куратор сам отмечает, кого задача касается, и заполняет только их."}
       </p>
 
@@ -205,7 +238,7 @@ export default function TaskCreateForm({ onCreated }: { onCreated: (task: TaskDe
       {fields.map((f, i) => (
         <div className="inline-form" key={i}>
           <input placeholder="Название поля" value={f.label} onChange={(e) => updateField(i, { label: e.target.value })} required />
-          <select value={f.type} onChange={(e) => updateField(i, { type: e.target.value as TaskFieldType })}>
+          <select value={f.type} onChange={(e) => changeType(i, e.target.value as TaskFieldType)}>
             {Object.entries(FIELD_TYPE_LABELS).map(([v, l]) => (
               <option key={v} value={v}>
                 {l}
@@ -219,6 +252,21 @@ export default function TaskCreateForm({ onCreated }: { onCreated: (task: TaskDe
               onChange={(e) => updateField(i, { optionsText: e.target.value })}
               required
             />
+          )}
+          {mode !== "group" && targets.length > 0 && (
+            <select
+              value={f.dossierField}
+              onChange={(e) => linkField(i, e.target.value)}
+              aria-label="Записать в досье"
+              title="После приёмки ответ запишется в это поле досье студента"
+            >
+              <option value="">В досье не записывать</option>
+              {targets.map((t) => (
+                <option key={t.key} value={t.key}>
+                  В досье: {t.label}
+                </option>
+              ))}
+            </select>
           )}
           <label>
             <input type="checkbox" checked={f.required} onChange={(e) => updateField(i, { required: e.target.checked })} /> Обязательное

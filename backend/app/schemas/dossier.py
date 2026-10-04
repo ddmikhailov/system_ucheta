@@ -14,6 +14,7 @@ class ProfileFields(BaseModel):
     messenger: str | None = Field(default=None, max_length=128)
     registration_address: str | None = Field(default=None, max_length=512)
     residence_address: str | None = Field(default=None, max_length=512)
+    additional_education: str | None = Field(default=None, max_length=1000)
 
 
 class SpecialData(BaseModel):

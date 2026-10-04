@@ -14,6 +14,8 @@ class FieldDef(BaseModel):
     type: FieldType
     required: bool = False
     options: list[str] = Field(default_factory=list, max_length=100)
+    # Поле досье, которое наполняется принятыми ответами (см. services/task_dossier.py).
+    dossier_field: str | None = Field(default=None, max_length=40)
 
 
 class ScopeDef(BaseModel):

@@ -254,6 +254,12 @@ export default function TaskAssignmentPage() {
                 <th key={f.key}>
                   {f.label}
                   {f.required && " *"}
+                  {f.dossier_field && (
+                    <span className="hint" title="Из досье подставлено текущее значение; после приёмки ответ запишется в досье">
+                      {" "}
+                      (досье)
+                    </span>
+                  )}
                 </th>
               ))}
             </tr>

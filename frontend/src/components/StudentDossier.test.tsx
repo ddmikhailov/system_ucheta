@@ -25,7 +25,7 @@ function dossier(over: Partial<Dossier> = {}): Dossier {
     student_id: 10,
     profile: {
       birth_date: null, funding: null, phone: null, email: null, messenger: null,
-      registration_address: null, residence_address: null,
+      registration_address: null, residence_address: null, additional_education: null,
     },
     special: { ...SPECIAL },
     special_available: true,
@@ -67,12 +67,14 @@ describe("StudentDossier — профиль", () => {
     await user.click(screen.getByLabelText("Сирота"));
     await user.type(screen.getByLabelText("Группа инвалидности"), "3");
     await user.type(screen.getByLabelText("Здоровье: что важно знать куратору"), "астма");
+    await user.type(screen.getByLabelText(/Дополнительное образование/), "Футбол, шахматы");
 
     put.mockResolvedValue(dossier());
     await user.click(screen.getByRole("button", { name: "Сохранить досье" }));
     expect(put).toHaveBeenCalledWith("/students/10/dossier/profile", expect.objectContaining({
       phone: "+7 911",
       funding: "budget",
+      additional_education: "Футбол, шахматы",
       special: expect.objectContaining({ is_orphan: true, disability_group: "3", health_note: "астма" }),
     }));
     expect(await screen.findByText("Досье сохранено")).toBeInTheDocument();

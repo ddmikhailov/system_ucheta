@@ -25,7 +25,7 @@ from app.models import (
     AuditLog, CuratorAssignment, InAppNotification, RoleCode, Student, StudyGroup, Task, TaskAssignment, TaskComment, TaskRow, User,
 )
 from app.schemas.tasks import FieldDef, Progress, ScopeDef, TaskCreate
-from app.services import attendance_service, in_app_notification_service
+from app.services import attendance_service, in_app_notification_service, task_dossier
 from app.services.access_service import get_curator_group_ids
 
 TASK_MANAGER_ROLES = (RoleCode.ADMIN, RoleCode.EDU_DEPARTMENT, RoleCode.TUTOR, RoleCode.DEPT_HEAD)
@@ -58,6 +58,7 @@ def normalize_fields(fields: list[FieldDef]) -> list[dict]:
         result.append({
             "key": key, "label": f.label.strip(), "type": f.type, "required": f.required,
             "options": options if f.type in ("select", "multiselect") else [],
+            "dossier_field": f.dossier_field or None,
         })
     return result
 
@@ -116,6 +117,7 @@ def _clean_values(fields: list[dict], values: dict[str, Any]) -> dict[str, Any]:
             raise _bad(f"Неизвестное поле «{key}»")
         try:
             cleaned[key] = validate_value(field, value)
+            task_dossier.check_value(field, cleaned[key])
         except ValueError as exc:
             raise _bad(f"«{field['label']}»: {exc}")
     return {k: v for k, v in cleaned.items() if v is not None}
@@ -152,6 +154,9 @@ def create_task(db: Session, creator: User, payload: TaskCreate) -> Task:
     if payload.due_date < today_local():
         raise _bad("Срок не может быть в прошлом")
     fields = normalize_fields(payload.fields)
+    link_error = task_dossier.validate_links(fields, payload.collect_mode)
+    if link_error:
+        raise _bad(link_error)
     groups = resolve_scope_groups(db, payload.scope, creator)
     task = Task(
         title=payload.title.strip(), description=(payload.description or "").strip() or None,
@@ -311,6 +316,7 @@ def submit(db: Session, user: User, assignment: TaskAssignment) -> None:
         assignment.status = "accepted"
         assignment.reviewed_at = utcnow()
         assignment.reviewed_by = None
+        task_dossier.apply_accepted(db, user, assignment, fields)
         return
     assignment.status = "submitted"
     for reviewer in reviewers_to_notify(db, assignment):
@@ -392,6 +398,8 @@ def review(db: Session, user: User, assignment: TaskAssignment, action: str, com
     assignment.review_comment = comment
     if comment:
         db.add(TaskComment(assignment_id=assignment.id, author_id=user.id, text=comment))
+    if action == "accept":
+        task_dossier.apply_accepted(db, user, assignment, task_fields(assignment.task))
     title = assignment.task.title
     verb = "принята" if action == "accept" else "возвращена на доработку"
     for curator in assignees(db, assignment.study_group_id, today_local()):

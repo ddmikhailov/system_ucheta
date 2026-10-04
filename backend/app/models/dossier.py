@@ -22,6 +22,7 @@ class StudentProfile(Base):
     messenger: Mapped[str | None] = mapped_column(String(128), nullable=True)
     registration_address: Mapped[str | None] = mapped_column(String(512), nullable=True)
     residence_address: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    additional_education: Mapped[str | None] = mapped_column(String(1000), nullable=True)  # заполняют задачи
     special_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
 

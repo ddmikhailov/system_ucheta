@@ -12,6 +12,7 @@ export interface DossierProfile {
   messenger: string | null;
   registration_address: string | null;
   residence_address: string | null;
+  additional_education: string | null;
 }
 
 export interface DossierSpecial {
@@ -423,6 +424,14 @@ export interface TaskField {
   type: TaskFieldType;
   required: boolean;
   options: string[];
+  // Поле досье, которое наполняется принятыми ответами.
+  dossier_field?: string | null;
+}
+
+export interface DossierTarget {
+  key: string;
+  label: string;
+  types: TaskFieldType[];
 }
 
 export interface TaskScope {

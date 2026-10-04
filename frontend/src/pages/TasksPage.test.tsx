@@ -37,10 +37,17 @@ const DETAIL: TaskDetail = {
   ],
 };
 
+const DOSSIER_TARGETS = [
+  { key: "phone", label: "Телефон студента", types: ["text"] },
+  { key: "funding", label: "Финансирование (бюджет/договор)", types: ["select"] },
+  { key: "additional_education", label: "Дополнительное образование", types: ["text", "multiselect"] },
+];
+
 function mockApi(over: { list?: TaskListRow[]; queue?: object[]; detail?: TaskDetail } = {}) {
   get.mockImplementation(async (path: string) => {
     if (path === "/tasks") return over.list ?? LIST;
     if (path === "/tasks/review-queue") return over.queue ?? [];
+    if (path === "/tasks/dossier-fields") return DOSSIER_TARGETS;
     if (path.startsWith("/tasks/")) return over.detail ?? DETAIL;
     if (path === "/admin/departments") return [{ id: 1, name: "Диджитал", is_active: true }, { id: 2, name: "Моссовет", is_active: true }];
     if (path === "/admin/groups") return [{ id: 1, code: "СА172", course: 1, is_active: true }, { id: 2, code: "ИИ112", course: 1, is_active: true }];
@@ -287,6 +294,50 @@ describe("TasksPage — создание задачи", () => {
     await user.click(screen.getByRole("button", { name: "Создать и разослать" }));
     expect(await screen.findByText("В охват не попала ни одна группа")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Название")).toHaveValue("Опрос");
+  });
+
+  it("поле формы можно связать с досье: подставляются тип и название, в запрос уходит dossier_field", async () => {
+    const user = await openForm();
+    post.mockResolvedValue(DETAIL);
+    await user.type(screen.getByPlaceholderText("Название"), "Контакты");
+    await user.selectOptions(screen.getByLabelText("Записать в досье"), "phone");
+    expect(screen.getByPlaceholderText("Название поля")).toHaveValue("Телефон студента");
+    await user.click(screen.getByRole("button", { name: "Создать и разослать" }));
+    expect(post).toHaveBeenCalledWith("/tasks", expect.objectContaining({
+      fields: [expect.objectContaining({ label: "Телефон студента", type: "text", dossier_field: "phone" })],
+    }));
+  });
+
+  it("связь с «Финансированием» ставит тип «Выбор» и варианты бюджет/договор; с «Кружками» допускает текст и множественный выбор", async () => {
+    const user = await openForm();
+    await user.selectOptions(screen.getByLabelText("Записать в досье"), "funding");
+    expect(screen.getByDisplayValue("Выбор из списка")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Варианты через запятую")).toHaveValue("бюджет, договор");
+
+    await user.selectOptions(screen.getByLabelText("Записать в досье"), "additional_education");
+    // тип «Выбор из списка» для кружков не подходит — переключился на первый допустимый
+    expect(screen.getByDisplayValue("Текст")).toBeInTheDocument();
+    await user.selectOptions(screen.getByDisplayValue("Текст"), "multiselect");
+    expect(screen.getByLabelText("Записать в досье")).toHaveValue("additional_education");
+  });
+
+  it("смена типа на несовместимый снимает связь", async () => {
+    const user = await openForm();
+    await user.selectOptions(screen.getByLabelText("Записать в досье"), "phone");
+    await user.selectOptions(screen.getByDisplayValue("Текст"), "number");
+    expect(screen.getByLabelText("Записать в досье")).toHaveValue("");
+  });
+
+  it("в задаче «по группе» связи с досье нет: выбор скрыт, а в запрос поле не попадает", async () => {
+    const user = await openForm();
+    post.mockResolvedValue(DETAIL);
+    await user.type(screen.getByPlaceholderText("Название"), "Видео");
+    await user.selectOptions(screen.getByLabelText("Записать в досье"), "phone");
+    await user.selectOptions(screen.getByDisplayValue("По каждому студенту"), "group");
+    expect(screen.queryByLabelText("Записать в досье")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Создать и разослать" }));
+    const sent = post.mock.calls[0][1] as { fields: Array<Record<string, unknown>> };
+    expect(sent.fields[0]).not.toHaveProperty("dossier_field");
   });
 
   it("после создания открывается карточка задачи", async () => {

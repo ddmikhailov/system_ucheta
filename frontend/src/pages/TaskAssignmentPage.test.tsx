@@ -65,6 +65,22 @@ beforeEach(() => {
   for (const fn of [get, put, post]) fn.mockReset();
 });
 
+describe("TaskAssignmentPage — связь с досье", () => {
+  it("связанный столбец помечен «(досье)», подставленные из досье значения видны в строках", async () => {
+    const fields = [
+      { key: "f3", label: "Телефон", type: "text" as const, required: false, options: [], dossier_field: "phone" },
+      { key: "f4", label: "Заметка", type: "text" as const, required: false, options: [] },
+    ];
+    open(detail({
+      fields,
+      rows: [{ student_id: 11, student_name: "Алексеев Пётр", is_included: true, values: { f3: "+7 900 111-22-33" } }],
+    }));
+    expect(await screen.findByRole("columnheader", { name: /Телефон.*\(досье\)/ })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Заметка" })).toBeInTheDocument();
+    expect(screen.getByDisplayValue("+7 900 111-22-33")).toBeInTheDocument();
+  });
+});
+
 describe("TaskAssignmentPage — заполнение", () => {
   it("показывает задачу, срок, режим и студентов", async () => {
     open(detail());
