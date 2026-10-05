@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ApiError, downloadFile, uploadFile } from "../api/client";
+import { dialogs } from "../utils/feedback";
 
 interface PreviewRow {
   row: number;
@@ -126,10 +127,12 @@ export default function DossierImport() {
             <p>
               <button
                 disabled={busy || !file}
-                onClick={() => {
+                onClick={async () => {
                   if (
                     preview.with_errors > 0 &&
-                    !window.confirm(`Строк с ошибками: ${preview.with_errors} — они будут пропущены. Записать остальные?`)
+                    !(await dialogs.confirm(`Строк с ошибками: ${preview.with_errors} — они будут пропущены. Записать остальные?`, {
+                      confirmLabel: "Записать остальные",
+                    }))
                   )
                     return;
                   if (file) run(() => uploadFile<ApplyResult>("/dossier-import/apply", file), setResult);

@@ -5,7 +5,7 @@ import json
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import func
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.api.deps import get_current_user, require_roles
 from app.core.time import today_local
@@ -13,7 +13,7 @@ from app.db.session import get_db
 from app.models import RoleCode, StudyGroup, Task, TaskAssignment, TaskComment, TaskTemplate, User
 from app.schemas.tasks import (
     AnswersIn, AssignmentDetail, AssignmentSummary, CommentIn, CommentRead, FieldDef, MyAssignmentRow,
-    HistoryEvent, ReviewIn, ReviewQueueRow, RowRead, ScheduleIn, ScopeDef, StepRef, TaskCreate, TaskDetail, TaskListRow, TaskUpdate, TemplateCreate, TemplateRead,
+    HistoryEvent, RemindResult, ReviewIn, ReviewQueueRow, RowRead, ScheduleIn, ScopeDef, ScopePreview, StepRef, TaskCreate, TaskDetail, TaskListRow, TaskSummary, TaskUpdate, TemplateCreate, TemplateRead,
 )
 from app.services import attendance_service
 from app.services.access_service import get_curator_group_ids
@@ -42,7 +42,7 @@ def _summary(a: TaskAssignment, today) -> AssignmentSummary:
     return AssignmentSummary(
         id=a.id, study_group_id=g.id, group_code=g.code, course=g.course, department_name=g.department.name,
         status=a.status, is_overdue=svc.is_overdue(a, today), submitted_at=a.submitted_at, reviewed_at=a.reviewed_at,
-        reviewed_by_name=a.reviewer.full_name if a.reviewer else None,
+        reviewed_by_name=a.reviewer.full_name if a.reviewer else None, is_locked=a.locked,
     )
 
 
@@ -52,6 +52,12 @@ def create_task(payload: TaskCreate, user: User = Depends(require_task_manager),
     log_action(db, user, "task.create", "task", str(task.id), new_value=task.title)
     db.commit()
     return _detail(db, user, task)
+
+
+@router.post("/scope-preview", response_model=ScopePreview)
+def scope_preview(scope: ScopeDef, user: User = Depends(require_task_manager), db: Session = Depends(get_db)):
+    """Сколько групп, студентов и кураторов получат задачу — мастер показывает это до создания."""
+    return svc.scope_preview(db, user, scope)
 
 
 @router.get("/dossier-fields")
@@ -137,7 +143,7 @@ def list_tasks(user: User = Depends(require_task_manager), db: Session = Depends
     return [
         TaskListRow(
             id=t.id, title=t.title, collect_mode=t.collect_mode, reviewer_rule=t.reviewer_rule, due_date=t.due_date,
-            is_closed=t.is_closed, author_name=t.author.full_name if t.author else None,
+            is_closed=t.is_closed, author_id=t.created_by, author_name=t.author.full_name if t.author else None,
             progress=svc.progress(visible, today), step_no=t.step_no, step_total=totals.get(t.series_id),
         )
         for t, visible in svc.manager_tasks(db, user)
@@ -152,19 +158,24 @@ def my_assignments(user: User = Depends(get_current_user), db: Session = Depends
         return []
     rows = (
         db.query(TaskAssignment).join(Task, Task.id == TaskAssignment.task_id)
-        .options(joinedload(TaskAssignment.task), joinedload(TaskAssignment.study_group))
+        .options(
+            joinedload(TaskAssignment.task), joinedload(TaskAssignment.study_group), selectinload(TaskAssignment.rows),
+        )
         .filter(TaskAssignment.study_group_id.in_(group_ids)).order_by(Task.due_date, Task.id).all()
     )
     totals = _step_totals(db)
-    return [
-        MyAssignmentRow(
+    rosters: dict[int, set[int]] = {}
+    result = []
+    for a in rows:
+        filled, total = svc.fill_progress(db, a, today, rosters)
+        result.append(MyAssignmentRow(
             id=a.id, task_id=a.task_id, title=a.task.title, collect_mode=a.task.collect_mode,
             group_code=a.study_group.code, due_date=a.task.due_date, status=a.status,
             is_overdue=svc.is_overdue(a, today), is_closed=a.task.is_closed, is_locked=a.locked,
-            step_no=a.task.step_no, step_total=totals.get(a.task.series_id),
-        )
-        for a in rows
-    ]
+            step_no=a.task.step_no, step_total=totals.get(a.task.series_id), filled=filled, total=total,
+            review_comment=a.review_comment if a.status == "returned" else None,
+        ))
+    return result
 
 
 @router.get("/review-queue", response_model=list[ReviewQueueRow])
@@ -202,6 +213,7 @@ def _detail_assignment(db: Session, user: User, a: TaskAssignment) -> Assignment
                 student_id=s.id, student_name=s.full_name,
                 is_included=r.is_included if r else task.collect_mode == "student",
                 values=json.loads(r.values_json) if r else prefilled.get(s.id, {}),
+                from_dossier=r is None and bool(prefilled.get(s.id)),
             ))
     comments = sorted(a.comments, key=lambda c: (c.created_at, c.id))
     return AssignmentDetail(
@@ -290,6 +302,31 @@ def get_task(task_id: int, user: User = Depends(require_task_manager), db: Sessi
     if not svc.visible_assignments(db, user, task) and task.created_by != user.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Нет доступа к этой задаче")
     return _detail(db, user, task)
+
+
+def _visible_task_or_403(db: Session, user: User, task_id: int) -> Task:
+    task = _task_or_404(db, task_id)
+    if not svc.visible_assignments(db, user, task) and task.created_by != user.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Нет доступа к этой задаче")
+    return task
+
+
+@router.post("/{task_id}/remind", response_model=RemindResult)
+def remind_lagging(task_id: int, user: User = Depends(require_task_manager), db: Session = Depends(get_db)):
+    """Напомнить кураторам групп, которые ещё не отправили ответ, — в пределах видимых пользователю групп."""
+    task = _visible_task_or_403(db, user, task_id)
+    if task.is_closed:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Задача закрыта — напоминать не о чем")
+    sent, skipped = svc.remind_lagging(db, user, task)
+    if sent:
+        log_action(db, user, "task.remind", "task", str(task.id), new_value=f"groups:{sent}")
+    db.commit()
+    return RemindResult(sent=sent, skipped=skipped)
+
+
+@router.get("/{task_id}/summary", response_model=TaskSummary)
+def task_summary(task_id: int, user: User = Depends(require_task_manager), db: Session = Depends(get_db)):
+    return svc.answers_summary(db, user, _visible_task_or_403(db, user, task_id))
 
 
 @router.patch("/{task_id}", response_model=TaskDetail)

@@ -8,6 +8,7 @@ import { CURATOR_CAPABLE_ROLES, DEPARTMENT_SCOPED_ROLES, FORCE_DELETE_GROUP_ROLE
 import { useEscapeKey } from "../../hooks/useEscapeKey";
 import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { DeleteResult, DepartmentAdmin, StudyGroupAdmin, UserAdmin } from "../../api/types";
+import { dialogs } from "../../utils/feedback";
 
 export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; canCreate: boolean }) {
   const { user: me } = useAuth();
@@ -249,7 +250,7 @@ function GroupDetailModal({
   }
 
   async function removeGroup() {
-    if (!window.confirm(`Удалить группу «${group.code}» насовсем? Это необратимо.`)) return;
+    if (!(await dialogs.confirm(`Удалить группу «${group.code}» насовсем? Это необратимо.`, { confirmLabel: "Удалить", danger: true }))) return;
     setLocalError(null);
     setNotice(null);
     try {
@@ -264,7 +265,7 @@ function GroupDetailModal({
 
   async function endCuratorAssignment() {
     if (group.curator_assignment_id === null) return;
-    if (!window.confirm(`Снять ${group.curator_name} с группы «${group.code}»? История назначения сохранится.`)) return;
+    if (!(await dialogs.confirm(`Снять ${group.curator_name} с группы «${group.code}»? История назначения сохранится.`, { confirmLabel: "Снять" }))) return;
     setLocalError(null);
     try {
       await api.post(`/admin/curator-assignments/${group.curator_assignment_id}/end`);
@@ -280,7 +281,7 @@ function GroupDetailModal({
   // TODO.md 3).
   async function endDeputyAssignment() {
     if (group.deputy_assignment_id === null) return;
-    if (!window.confirm(`Снять ${group.deputy_name} с замещения в группе «${group.code}»?`)) return;
+    if (!(await dialogs.confirm(`Снять ${group.deputy_name} с замещения в группе «${group.code}»?`, { confirmLabel: "Снять" }))) return;
     setLocalError(null);
     try {
       await api.post(`/admin/curator-assignments/${group.deputy_assignment_id}/end`);

@@ -160,4 +160,18 @@ describe("StudentMonthAttendanceView", () => {
     render(<StudentMonthAttendanceView studentId={5} />);
     expect(await screen.findByText("Ошибка загрузки")).toBeInTheDocument();
   });
+
+  it("ритм месяца: присутствие, пропуск без причины, уважительная причина, не сдано, выходной", async () => {
+    get.mockResolvedValue(month({
+      days: [
+        ...month().days,
+        day("2026-10-06", { status: "mark", mark_code: "б", mark_name: "Больничный", counts_as_present: false, is_excused: true }),
+      ],
+    }));
+    render(<StudentMonthAttendanceView studentId={5} />);
+    const rhythm = await screen.findByRole("img", { name: /Ритм за октябрь 2026 г\.: присутствовал 1, без причины отсутствовал 1, по уважительной 1/ });
+    const kinds = [...rhythm.querySelectorAll("i")].map((i) => i.className.replace("rhythm__day rhythm__day--", ""));
+    expect(kinds).toEqual(["ok", "absent", "ok", "off", "missing", "excused"]);
+    expect(rhythm.querySelector('[title="02.10: Н — Неуважительная"]')).not.toBeNull();
+  });
 });

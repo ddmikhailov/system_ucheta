@@ -5,6 +5,7 @@ import { NOTE_KINDS } from "../constants/noteKinds";
 import { formatDateRu, formatServerDateTimeFull, todayIso } from "../utils/date";
 import { telHref } from "../utils/phone";
 import type { Dossier, DossierAccessEntry, DossierProfile, DossierSpecial } from "../api/types";
+import { dialogs } from "../utils/feedback";
 
 const EMPTY_SPECIAL: DossierSpecial = {
   is_orphan: false,
@@ -300,8 +301,8 @@ function Guardians({
                 <td>
                   <button
                     className="link-btn"
-                    onClick={() => {
-                      if (window.confirm(`Удалить представителя «${g.full_name}»?`))
+                    onClick={async () => {
+                      if (await dialogs.confirm(`Удалить представителя «${g.full_name}»?`, { confirmLabel: "Удалить", danger: true }))
                         run(() => api.delete(`${base}/${g.id}`), "Не удалось удалить");
                     }}
                   >
@@ -375,7 +376,7 @@ function Notes({
   }
 
   async function remove(id: number) {
-    if (!window.confirm("Удалить заметку?")) return;
+    if (!(await dialogs.confirm("Удалить заметку?", { confirmLabel: "Удалить", danger: true }))) return;
     onError(null);
     try {
       await api.delete(`${base}/${id}`);

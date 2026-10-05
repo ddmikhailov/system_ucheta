@@ -16,6 +16,7 @@ import {
 import type { SliceMode, SummaryFilters, SummaryView } from "../utils/summaryFilters";
 import SearchSelect from "./SearchSelect";
 import { formatDateRu } from "../utils/date";
+import { dialogs } from "../utils/feedback";
 
 
 const VIEW_LABELS: Record<SummaryView, string> = {
@@ -275,7 +276,7 @@ export default function AttendanceSummaryView({
     } catch {
       // Без доступа к буферу обмена ссылку можно взять из адресной строки —
       // она всегда совпадает с выбранными фильтрами.
-      window.prompt("Скопируйте ссылку:", buildSummaryLink(filters));
+      void dialogs.prompt("Скопируйте ссылку:", buildSummaryLink(filters), { readOnly: true });
     }
   }
 

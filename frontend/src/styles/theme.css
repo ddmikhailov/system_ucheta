@@ -1,0 +1,44 @@
+/* Тёмная тема (логотип) и переключатель темы в меню пользователя.
+   Вынесено из index.css (этап 13); подключается в main.tsx после index.css — порядок файлов = порядок правил. */
+
+/* Логотип рассчитан на светлый фон — в тёмной теме кладём его на светлую плашку. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .app-sidebar__logo img,
+  :root:not([data-theme="light"]) .app-topbar__logo img,
+  :root:not([data-theme="light"]) .auth-card__logo {
+    background: #fff;
+    border-radius: 8px;
+    padding: 4px 8px;
+  }
+}
+
+:root[data-theme="dark"] .app-sidebar__logo img,
+:root[data-theme="dark"] .app-topbar__logo img,
+:root[data-theme="dark"] .auth-card__logo {
+  background: #fff;
+  border-radius: 8px;
+  padding: 4px 8px;
+}
+
+.user-menu__group {
+  display: grid;
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.user-menu__caption {
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.user-menu__panel button.is-checked {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.user-menu__panel button.is-checked::after {
+  content: " ✓";
+}

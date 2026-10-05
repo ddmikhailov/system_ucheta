@@ -1,0 +1,254 @@
+/* «Мой день» и «ритм группы».
+   Вынесено из index.css (этап 13); подключается в main.tsx после index.css — порядок файлов = порядок правил. */
+
+/* --- «Мой день» 2.0 (этап 13) --- */
+
+.my-day__hello {
+  margin-bottom: 14px;
+}
+
+.my-day__date {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.my-day__hello h2 {
+  margin: 2px 0 4px;
+  font-size: clamp(22px, 4vw, 28px);
+  text-wrap: balance;
+}
+
+.my-day__summary {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.my-day__cta {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+
+.big-cta {
+  display: block;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: var(--brand-gradient);
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+  text-decoration: none;
+  text-align: center;
+  box-shadow: var(--shadow-md);
+}
+
+.big-cta:hover {
+  filter: brightness(1.05);
+}
+
+.my-day__card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+
+.done-state {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  background: var(--ok-bg);
+  color: var(--ok);
+  font-weight: 700;
+}
+
+.done-state__circle {
+  fill: var(--ok);
+}
+
+.done-state__check {
+  fill: none;
+  stroke: var(--on-fill);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 16;
+  stroke-dashoffset: 0;
+  animation: check-draw 0.45s ease-out 0.1s both;
+}
+
+@keyframes check-draw {
+  from {
+    stroke-dashoffset: 16;
+  }
+}
+
+.todo-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.todo-item {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+}
+
+.todo-item + .todo-item {
+  border-top: 1px solid var(--border);
+}
+
+.todo-item > .status-mark {
+  justify-content: center;
+}
+
+.todo-item__main {
+  min-width: 0;
+}
+
+.todo-item__title {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.todo-item__title:hover {
+  color: var(--primary);
+}
+
+.todo-item__note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  align-items: center;
+  margin-top: 3px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.todo-item__note.is-hot {
+  color: var(--hot);
+  font-weight: 600;
+}
+
+.todo-item__reason + .todo-item__reason::before {
+  content: "; ";
+}
+
+.group-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+}
+
+.group-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.group-card__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.group-card__head .hint {
+  margin: 0;
+}
+
+.group-card__code {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 18px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.group-card__today {
+  margin-left: auto;
+}
+
+.rhythm {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 36px;
+}
+
+.rhythm__day {
+  flex: 1 1 0;
+  min-width: 3px;
+  border-radius: 2px;
+  height: 100%;
+  background: var(--primary-fill);
+}
+
+.rhythm__day--absent {
+  background: var(--hot);
+  height: 62%;
+}
+
+.rhythm__day--missing {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--idle);
+  height: 62%;
+}
+
+.rhythm__day--off {
+  background: var(--border);
+  height: 14%;
+}
+
+.rhythm-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin-top: 8px;
+  max-width: none;
+}
+
+.rhythm-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-right: 10px;
+  white-space: nowrap;
+}
+
+.rhythm-legend .rhythm__day {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 12px;
+}
+
+@media (max-width: 640px) {
+  .todo-item {
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+
+  .todo-item > button {
+    grid-column: 2;
+    justify-self: start;
+  }
+}

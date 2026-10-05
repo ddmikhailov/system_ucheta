@@ -1,6 +1,6 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "../api/client";
 import type { MyAssignmentRow } from "../api/types";
 import { renderPage } from "../test/utils";
@@ -14,64 +14,101 @@ vi.mock("../api/client", async (importOriginal) => {
 const get = vi.mocked(api.get);
 
 function task(id: number, title: string, status: string, due: string, over: Partial<MyAssignmentRow> = {}): MyAssignmentRow {
-  return { id, task_id: id, title, collect_mode: "student", group_code: "СА172", due_date: due, status, is_overdue: false, is_closed: false, is_locked: false, step_no: 1, step_total: null, ...over };
+  return {
+    id, task_id: id, title, collect_mode: "student", group_code: "СА172", due_date: due, status, is_overdue: false,
+    is_closed: false, is_locked: false, step_no: 1, step_total: null, filled: 0, total: 25, review_comment: null, ...over,
+  };
 }
 
-beforeEach(() => get.mockReset());
-
-const titlesInOrder = () =>
-  screen.getAllByRole("link").map((a) => a.textContent);
-
-describe("MyTasksPage — шаги", () => {
-  it("закрытый шаг: «Ждёт предыдущий шаг», номер шага, в конце списка даже при раннем сроке", async () => {
-    get.mockResolvedValue([
-      task(1, "Видеовизитка", "new", "2026-10-02", { is_locked: true, step_no: 2, step_total: 2 }),
-      task(2, "Сценарий", "new", "2026-10-20", { step_no: 1, step_total: 2 }),
-    ]);
-    renderPage(<MyTasksPage />, { role: "curator" });
-    await screen.findByText("Сценарий");
-    expect(titlesInOrder()).toEqual(["Сценарий", "Видеовизитка"]);
-    expect(screen.getByText("Ждёт предыдущий шаг")).toBeInTheDocument();
-    expect(screen.getByText(/Шаг 2 из 2/)).toBeInTheDocument();
-    expect(screen.getByText(/Шаг 1 из 2/)).toBeInTheDocument();
-  });
+beforeEach(() => {
+  get.mockReset();
+  // «Сегодня» — воскресенье 4 октября 2026: от него считаются горизонты и «через N дней».
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(2026, 9, 4, 10, 0));
 });
 
+afterEach(() => vi.useRealTimers());
+
+function section(name: string) {
+  return screen.getByRole("region", { name });
+}
+
+const titles = (el: HTMLElement) =>
+  within(el)
+    .getAllByRole("listitem")
+    .map((li) => li.querySelector(".inbox-row__title")?.textContent);
+
 describe("MyTasksPage", () => {
-  it("сначала то, что требует действий: возвращённые, потом в работе, не начатые, на проверке; внутри — по сроку", async () => {
+  it("раскладывает по горизонтам: горит, на этой неделе, позже, ждёт проверки", async () => {
     get.mockResolvedValue([
       task(1, "На проверке", "submitted", "2026-10-01"),
-      task(2, "Не начата поздняя", "new", "2026-10-20"),
-      task(3, "Возвращена", "returned", "2026-10-30"),
-      task(4, "Не начата ранняя", "new", "2026-10-05"),
-      task(5, "В работе", "in_progress", "2026-10-25"),
+      task(2, "Через месяц", "new", "2026-11-04"),
+      task(3, "Возвращена", "returned", "2026-10-30", { review_comment: "Добавьте фото" }),
+      task(4, "Через пять дней", "in_progress", "2026-10-09"),
+      task(5, "Просрочена", "in_progress", "2026-10-02", { is_overdue: true }),
+      task(6, "Сегодня", "new", "2026-10-04"),
     ]);
     renderPage(<MyTasksPage />, { role: "curator" });
     await screen.findByText("Возвращена");
-    expect(titlesInOrder()).toEqual(["Возвращена", "В работе", "Не начата ранняя", "Не начата поздняя", "На проверке"]);
+    expect(titles(section("Горит"))).toEqual(["Просрочена", "Сегодня", "Возвращена"]);
+    expect(titles(section("На этой неделе"))).toEqual(["Через пять дней"]);
+    expect(titles(section("Позже"))).toEqual(["Через месяц"]);
+    expect(titles(section("Ждёт проверки"))).toEqual(["На проверке"]);
   });
 
-  it("принятые спрятаны под кнопкой и раскрываются по клику", async () => {
+  it("замечание проверяющего, относительный срок и заполненность видны в строке", async () => {
+    get.mockResolvedValue([
+      task(3, "План работы", "returned", "2026-10-04", { collect_mode: "group", review_comment: "Добавьте дату собрания", filled: 2, total: 3 }),
+      task(4, "Кружки", "in_progress", "2026-10-09", { filled: 18, total: 25, group_code: "ИИ112" }),
+    ]);
+    renderPage(<MyTasksPage />, { role: "curator" });
+    const plan = (await screen.findByRole("link", { name: "План работы" })).closest("li") as HTMLElement;
+    expect(within(plan).getByText("Вернули: «Добавьте дату собрания»")).toBeInTheDocument();
+    expect(within(plan).getByText("сегодня")).toBeInTheDocument();
+    expect(within(plan).getByText("2 из 3 полей")).toBeInTheDocument();
+    expect(within(plan).getByRole("img", { name: "Возвращено" })).toBeInTheDocument();
+
+    const circles = screen.getByRole("link", { name: "Кружки" }).closest("li") as HTMLElement;
+    expect(within(circles).getByText("через 5 дней")).toBeInTheDocument();
+    expect(within(circles).getByText("пт 09.10")).toBeInTheDocument();
+    expect(within(circles).getByText("18 из 25 студентов")).toBeInTheDocument();
+    expect(within(circles).getByText("ИИ112")).toBeInTheDocument();
+    expect(within(circles).getByText("По каждому студенту")).toBeInTheDocument();
+  });
+
+  it("просрочка: красный значок и «просрочено на N дней»", async () => {
+    get.mockResolvedValue([task(1, "Флюорография", "in_progress", "2026-10-02", { is_overdue: true, filled: 10 })]);
+    renderPage(<MyTasksPage />, { role: "curator" });
+    const row = (await screen.findByRole("link", { name: "Флюорография" })).closest("li") as HTMLElement;
+    expect(within(row).getByText("просрочено на 2 дня")).toBeInTheDocument();
+    expect(within(row).getByRole("img", { name: "Просрочено" })).toBeInTheDocument();
+  });
+
+  it("закрытый шаг — в «Позже», без ссылки и с объяснением", async () => {
+    get.mockResolvedValue([
+      task(1, "Видеовизитка: видео", "new", "2026-10-05", { is_locked: true, step_no: 2, step_total: 2 }),
+      task(2, "Видеовизитка: сценарий", "new", "2026-10-20", { step_no: 1, step_total: 2 }),
+    ]);
+    renderPage(<MyTasksPage />, { role: "curator" });
+    await screen.findByText("Видеовизитка: сценарий");
+    expect(titles(section("Позже"))).toEqual(["Видеовизитка: сценарий", "Видеовизитка: видео"]);
+    expect(screen.queryByRole("link", { name: "Видеовизитка: видео" })).not.toBeInTheDocument();
+    expect(screen.getByText("откроется после предыдущего шага")).toBeInTheDocument();
+    expect(screen.getByText("шаг 2 из 2")).toBeInTheDocument();
+  });
+
+  it("принятые — во вкладке «Готово»", async () => {
     const user = userEvent.setup();
-    get.mockResolvedValue([task(1, "Открытая", "new", "2026-10-05"), task(2, "Готовая", "accepted", "2026-09-30")]);
+    get.mockResolvedValue([task(1, "Открытая", "new", "2026-10-05"), task(2, "Готовая", "accepted", "2026-09-30", { filled: 25 })]);
     renderPage(<MyTasksPage />, { role: "curator" });
     await screen.findByText("Открытая");
     expect(screen.queryByText("Готовая")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Принятые (1)" }));
+    await user.click(screen.getByRole("button", { name: "Готово 1" }));
     expect(screen.getByText("Готовая")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Скрыть принятые" }));
-    expect(screen.queryByText("Готовая")).not.toBeInTheDocument();
-  });
-
-  it("помечает просрочку и показывает срок в формате ДД.ММ.ГГГГ, режим и группу", async () => {
-    get.mockResolvedValue([task(1, "Кружки", "in_progress", "2026-10-02", { is_overdue: true, collect_mode: "group", group_code: "ИИ112" })]);
-    renderPage(<MyTasksPage />, { role: "curator" });
-    const row = (await screen.findByRole("link", { name: "Кружки" })).closest("tr") as HTMLElement;
-    expect(within(row).getByText(/02\.10\.2026/)).toBeInTheDocument();
-    expect(within(row).getByText("просрочено")).toBeInTheDocument();
-    expect(within(row).getByText("Ответ по группе")).toBeInTheDocument();
-    expect(within(row).getByText("ИИ112")).toBeInTheDocument();
-    expect(within(row).getByText("В работе")).toBeInTheDocument();
+    expect(screen.getByText("принято")).toBeInTheDocument();
+    expect(screen.queryByText("Открытая")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Активные 1" }));
+    expect(screen.getByText("Открытая")).toBeInTheDocument();
   });
 
   it("ссылка ведёт на страницу назначения", async () => {
@@ -80,18 +117,16 @@ describe("MyTasksPage", () => {
     expect(await screen.findByRole("link", { name: "Опрос" })).toHaveAttribute("href", "/tasks/assignment/42");
   });
 
-  it("нет открытых задач — сообщение, а принятые остаются доступны", async () => {
-    get.mockResolvedValue([task(1, "Готовая", "accepted", "2026-09-30")]);
+  it("выборочный режим без отмеченных студентов", async () => {
+    get.mockResolvedValue([task(1, "Согласия", "new", "2026-10-10", { collect_mode: "selected", total: 0 })]);
     renderPage(<MyTasksPage />, { role: "curator" });
-    expect(await screen.findByText("Активных задач нет.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Принятые (1)" })).toBeInTheDocument();
+    expect(await screen.findByText("никто не отмечен")).toBeInTheDocument();
   });
 
-  it("совсем пусто и ошибка загрузки", async () => {
-    get.mockResolvedValueOnce([]);
+  it("пусто и ошибка загрузки", async () => {
+    get.mockResolvedValueOnce([task(1, "Готовая", "accepted", "2026-09-30")]);
     const { unmount } = renderPage(<MyTasksPage />, { role: "curator" });
-    expect(await screen.findByText("Активных задач нет.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Принятые/ })).not.toBeInTheDocument();
+    expect(await screen.findByText(/Активных задач нет/)).toBeInTheDocument();
     unmount();
 
     get.mockRejectedValueOnce(new ApiError(500, "Сервер недоступен"));

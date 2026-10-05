@@ -8,7 +8,11 @@
 */
 :root {
   color-scheme: light;
-  font-family: "Montserrat", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Две роли шрифта: Montserrat (бренд) — заголовки и крупные цифры; Golos Text — текст, таблицы
+     и формы (уже Montserrat, кириллица сделана под интерфейсы). Оба шрифта лежат локально (fonts.css). */
+  --font-display: "Montserrat", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-text: "Golos Text", "Montserrat", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-text);
 
   --brand-blue: #2b2c7c;
   --brand-violet: #533d8f;
@@ -33,9 +37,105 @@
   --danger: #cb3334;
   --danger-bg: #fdecec;
 
+  /* Поверхности и заливки: в тёмной теме меняются вместе с остальными токенами. */
+  --input-bg: #ffffff;
+  --border-strong: #c9c3e0;
+  --primary-fill: var(--brand-violet);
+  --warn-bg-hover: #ffe9c2;
+  --danger-bg-hover: #fbd9d9;
+  --seg-progress: #b79ad0;
+  --seg-new: #d6d2e3;
+  --tile-progress: #e6dcf0;
+  --toast-bg: #1c1930;
+  --toast-ok: #12503a;
+  --inverse-bg: #1c1930;
+  --inverse-fg: #ffffff;
+  /* Текст и значки на семантических заливках (зелёной, красной): белые на светлой теме, тёмные на тёмной. */
+  --on-fill: #ffffff;
+
+  /* Язык статусов (StatusMark): красный — только просрочка и возврат, серый — «ещё не начато». */
+  --hot: var(--danger);
+  --hot-bg: var(--danger-bg);
+  --idle: #8b86a0;
+  --sunken: #efedf6;
+
   --shadow-sm: 0 1px 2px rgba(28, 25, 48, 0.06);
   --shadow-md: 0 8px 24px rgba(43, 44, 124, 0.1);
   --radius: 10px;
+}
+
+/* Тёмная тема (этап 13): по настройке системы, если пользователь не выбрал тему сам
+   (data-theme на <html> ставит меню пользователя), и явно по выбору «Тёмная». Меняются только токены. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #14121c;
+    --card-bg: #1d1a29;
+    --border: #322c46;
+    --text: #ece9f5;
+    --muted: #a59fba;
+    --primary: #b3a1ee;
+    --primary-dark: #d2c7f6;
+    --primary-light: #2b2443;
+    --primary-fill: #6c55b8;
+    --ok: #5fd0a0;
+    --ok-bg: #163126;
+    --warn-ink: #f0b45a;
+    --warn-bg: #3a2c15;
+    --danger: #ff7d7d;
+    --danger-bg: #3b1d24;
+    --idle: #8c86a3;
+    --sunken: #25213a;
+    --input-bg: #17141f;
+    --border-strong: #4a4166;
+    --warn-bg-hover: #4a3818;
+    --danger-bg-hover: #4d2430;
+    --seg-progress: #7d63a8;
+    --seg-new: #3a3452;
+    --tile-progress: #3a2f5c;
+    --toast-bg: #2e2843;
+    --toast-ok: #1d5a43;
+    --inverse-bg: #ece9f5;
+    --inverse-fg: #14121c;
+  --on-fill: #14121c;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #14121c;
+  --card-bg: #1d1a29;
+  --border: #322c46;
+  --text: #ece9f5;
+  --muted: #a59fba;
+  --primary: #b3a1ee;
+  --primary-dark: #d2c7f6;
+  --primary-light: #2b2443;
+  --primary-fill: #6c55b8;
+  --ok: #5fd0a0;
+  --ok-bg: #163126;
+  --warn-ink: #f0b45a;
+  --warn-bg: #3a2c15;
+  --danger: #ff7d7d;
+  --danger-bg: #3b1d24;
+  --idle: #8c86a3;
+  --sunken: #25213a;
+  --input-bg: #17141f;
+  --border-strong: #4a4166;
+  --warn-bg-hover: #4a3818;
+  --danger-bg-hover: #4d2430;
+  --seg-progress: #7d63a8;
+  --seg-new: #3a3452;
+  --tile-progress: #3a2f5c;
+  --toast-bg: #2e2843;
+  --toast-ok: #1d5a43;
+  --inverse-bg: #ece9f5;
+  --inverse-fg: #14121c;
+  --on-fill: #14121c;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
 * {
@@ -53,8 +153,26 @@ body {
 h1,
 h2,
 h3 {
+  font-family: var(--font-display);
   font-weight: 700;
   letter-spacing: -0.01em;
+}
+
+textarea {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text);
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+textarea:focus-visible {
+  outline: 2px solid var(--brand-purple);
+  outline-offset: 2px;
 }
 
 label,
@@ -97,17 +215,17 @@ a:focus-visible {
 /* Один доминирующий акцент на группу действий (см. брендбук) — фирменный
    градиент только на завершающей, основной кнопке ("Сдать день",
    "Сохранить"), остальные — нейтральные. */
-.actions button:last-child,
-.inline-form button:last-child,
-form button[type="submit"] {
+.actions button:last-child:not(.link-btn),
+.inline-form button:last-child:not(.link-btn):not(.danger-btn),
+form button[type="submit"]:not(.link-btn):not(.btn-danger) {
   background: var(--brand-gradient);
   color: #fff;
   border-color: transparent;
 }
 
-.actions button:last-child:hover:not(:disabled),
-.inline-form button:last-child:hover:not(:disabled),
-form button[type="submit"]:hover:not(:disabled) {
+.actions button:last-child:not(.link-btn):hover:not(:disabled),
+.inline-form button:last-child:not(.link-btn):not(.danger-btn):hover:not(:disabled),
+form button[type="submit"]:not(.link-btn):not(.btn-danger):hover:not(:disabled) {
   box-shadow: var(--shadow-md);
   filter: brightness(1.05);
 }
@@ -151,12 +269,12 @@ select {
   font-size: 14px;
   font-family: inherit;
   color: var(--text);
-  background: #fff;
+  background: var(--input-bg);
 }
 
 input:hover,
 select:hover {
-  border-color: #c9c3e0;
+  border-color: var(--border-strong);
 }
 
 /* --- Фирменный акцент: тонкая градиентная линия, отсылка к диагонали в
@@ -167,61 +285,6 @@ select:hover {
 }
 
 /* --- Layout --- */
-
-.app-shell {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.app-header {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  padding: 10px 24px;
-  background: var(--card-bg);
-  border-bottom: 1px solid var(--border);
-  flex-wrap: wrap;
-}
-
-.app-header__logo {
-  display: flex;
-  align-items: center;
-}
-
-.app-header__logo img {
-  height: 34px;
-  width: auto;
-  display: block;
-}
-
-.app-header__nav {
-  display: flex;
-  flex-wrap: wrap; /* пунктов меню до 6 (задачи, витрины, студенты, паспорт, админка…) */
-  gap: 6px;
-  flex: 1;
-}
-
-.app-header__nav a {
-  text-decoration: none;
-  color: var(--muted);
-  font-weight: 600;
-  font-size: 14px;
-  padding: 8px 14px;
-  border-radius: 8px;
-  white-space: nowrap; /* пункт меню не должен ломаться на две строки */
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.app-header__nav a:hover {
-  background: var(--primary-light);
-  color: var(--primary);
-}
-
-.app-header__nav a.active {
-  background: var(--brand-gradient);
-  color: white;
-}
 
 .app-header__user {
   display: flex;
@@ -316,8 +379,8 @@ select:hover {
   position: absolute;
   top: -4px;
   right: -6px;
-  background: #c62828;
-  color: white;
+  background: var(--danger);
+  color: var(--on-fill);
   border-radius: 999px;
   font-size: 11px;
   font-weight: 700;
@@ -627,7 +690,7 @@ select:hover {
 }
 
 .legend-dot.weekend {
-  background: #eae7f3;
+  background: var(--sunken);
 }
 
 .mark-code-legend {
@@ -657,7 +720,7 @@ select:hover {
 }
 
 .month-dot.weekend {
-  background: #eae7f3;
+  background: var(--sunken);
   cursor: default;
 }
 
@@ -679,7 +742,7 @@ select:hover {
   padding: 0 8px;
   border-radius: var(--radius);
   border: 1px solid var(--border);
-  background: #fff;
+  background: var(--input-bg);
   color: var(--muted);
   font-weight: 700;
   font-size: 13px;
@@ -692,8 +755,8 @@ select:hover {
 }
 
 .mark-code-btn.active {
-  background: var(--primary);
-  border-color: var(--primary);
+  background: var(--primary-fill);
+  border-color: var(--primary-fill);
   color: #fff;
 }
 
@@ -702,7 +765,7 @@ select:hover {
   padding: 0 10px;
   border-radius: var(--radius);
   border: 1px solid var(--border);
-  background: #fff;
+  background: var(--input-bg);
   color: var(--muted);
   font-size: 12px;
   cursor: pointer;
@@ -823,7 +886,7 @@ select:hover {
 
 .roster-table tr.risk-row:hover,
 .dash-table tr.risk-row:hover {
-  background: #ffe9c2;
+  background: var(--warn-bg-hover);
 }
 
 .dash-table tr.not-submitted-row {
@@ -831,7 +894,7 @@ select:hover {
 }
 
 .dash-table tr.not-submitted-row:hover {
-  background: #fbd9d9;
+  background: var(--danger-bg-hover);
 }
 
 /* Клик по строке "День по колледжу" открывает журнал этой группы на эту дату
@@ -979,40 +1042,6 @@ select:hover {
 @media (max-width: 640px) {
   .app-main {
     padding: 14px;
-  }
-
-  /* Первая строка — логотип, колокольчик и меню пользователя; вторая — разделы одной
-     прокручиваемой строкой (раньше всё это занимало около трети экрана). */
-  .app-header {
-    gap: 6px 12px;
-    padding: 8px 14px;
-    justify-content: space-between;
-  }
-
-  .app-header__user {
-    order: 2;
-    margin-left: auto;
-    gap: 4px;
-  }
-
-  .app-header__nav {
-    order: 3;
-    flex: 1 1 100%;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    margin: 0 -14px;
-    padding: 0 14px 2px;
-  }
-
-  .app-header__nav::-webkit-scrollbar {
-    display: none;
-  }
-
-  .app-header__nav a {
-    flex-shrink: 0;
-    padding: 8px 12px;
   }
 
   .user-menu__name {
@@ -1169,6 +1198,38 @@ select:hover {
   margin-top: 0;
 }
 
+/* Подписи в строках формы — одного размера с полями, а не 16 px жирным (так было «Срок»,
+   «Проверяет», «Обязательное» в форме задачи). */
+.inline-form > label,
+.add-block details > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.add-block details {
+  margin: 8px 0;
+}
+
+.add-block details > summary {
+  cursor: pointer;
+}
+
+/* Маленькая кнопка-значок (стрелки порядка полей и т. п.): цель не меньше 32 px. */
+button.icon-btn {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0 6px;
+  font-size: 16px;
+  line-height: 1;
+  border-color: var(--border);
+  background: var(--card-bg);
+  color: var(--muted);
+}
+
 .add-block__title {
   margin: 0 0 8px;
   font-size: 13px;
@@ -1290,7 +1351,7 @@ button.danger-btn:not(:disabled) {
 
 .actions button.danger-btn:last-child:hover:not(:disabled) {
   background: var(--danger);
-  color: #fff;
+  color: var(--on-fill);
 }
 
 .actions button.danger-btn:disabled {
@@ -1658,7 +1719,7 @@ th.sortable-th:hover {
 }
 
 .segmented button.active {
-  background: var(--primary);
+  background: var(--primary-fill);
   color: #fff;
 }
 

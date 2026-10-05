@@ -15,7 +15,8 @@ from app.schemas.curator import (
     RosterResponse,
     SubmitDayRequest,
 )
-from app.services import attendance_service, calendar_service
+from app.services import attendance_service, calendar_service, my_day_service
+from app.schemas.my_day import RhythmDay
 from app.services.access_service import get_curator_group_ids
 
 router = APIRouter(prefix="/curator", tags=["curator"])
@@ -118,6 +119,17 @@ def mark_all_present(
     except attendance_service.BackdateNotAllowed as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc))
     return attendance_service.get_roster(db, study_group_id, date)
+
+
+@router.get("/groups/{study_group_id}/rhythm", response_model=list[RhythmDay])
+def group_rhythm(study_group_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """«Ритм группы» за три недели: тем же, кому открыт журнал группы (куратор, зав. отделением, администрация)."""
+    today = today_local()
+    assert_can_view_group(db, user, study_group_id, today)
+    group = db.get(StudyGroup, study_group_id)
+    if group is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Группа не найдена")
+    return my_day_service.rhythm_for_group(db, group, today)
 
 
 @router.get("/groups/{study_group_id}/month-status", response_model=list[MonthDayStatus])

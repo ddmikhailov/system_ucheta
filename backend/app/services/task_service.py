@@ -127,6 +127,39 @@ def _missing_required(fields: list[dict], values: dict[str, Any]) -> list[str]:
     return [f["label"] for f in fields if f["required"] and _is_empty(values.get(f["key"]))]
 
 
+def row_complete(fields: list[dict], values: dict[str, Any]) -> bool:
+    """Строка ответа заполнена: все обязательные поля есть, а если обязательных нет — хоть одно значение."""
+    if any(f["required"] for f in fields):
+        return not _missing_required(fields, values)
+    return any(not _is_empty(v) for v in values.values())
+
+
+def fill_progress(
+    db: Session, assignment: TaskAssignment, today: datetime.date, roster_ids: dict[int, set[int]] | None = None,
+) -> tuple[int, int]:
+    """Сколько заполнено и из скольких: поля — для ответа по группе, студенты — для остальных режимов.
+    В режиме «по выбранным» знаменатель — отмеченные куратором студенты. roster_ids — кэш состава групп."""
+    task = assignment.task
+    fields = task_fields(task)
+    if task.collect_mode == "group":
+        values = json.loads(assignment.group_values_json or "{}")
+        return sum(1 for f in fields if not _is_empty(values.get(f["key"]))), len(fields)
+    cache = roster_ids if roster_ids is not None else {}
+    if assignment.study_group_id not in cache:
+        cache[assignment.study_group_id] = {
+            s.id for s in attendance_service.get_active_students(db, assignment.study_group_id, today)
+        }
+    roster = cache[assignment.study_group_id]
+    rows = [r for r in assignment.rows if r.student_id in roster]
+    if task.collect_mode == "selected":
+        rows = [r for r in rows if r.is_included]
+        total = len(rows)
+    else:
+        total = len(roster)
+    filled = sum(1 for r in rows if r.is_included and row_complete(fields, json.loads(r.values_json or "{}")))
+    return filled, total
+
+
 # ---------- охват ----------
 
 def scope_matches(scope: ScopeDef, group: StudyGroup) -> bool:
@@ -275,7 +308,10 @@ def task_fields(task: Task) -> list[dict]:
 
 
 def assignees(db: Session, group_id: int, on_date: datetime.date) -> list[User]:
-    rows = db.query(CuratorAssignment).filter(CuratorAssignment.study_group_id == group_id).all()
+    rows = (
+        db.query(CuratorAssignment).options(joinedload(CuratorAssignment.user))
+        .filter(CuratorAssignment.study_group_id == group_id).all()
+    )
     return [a.user for a in rows if a.is_active_on(on_date) and a.user.is_active]
 
 
@@ -731,3 +767,124 @@ def assign_new_group(db: Session, group: StudyGroup) -> int:
             )
         created += 1
     return created
+
+
+# ---------- напоминание отстающим и сводка ответов (этап 13) ----------
+
+MANUAL_REMINDER_KIND = "task_manual_reminder"
+MANUAL_REMINDER_COOLDOWN = datetime.timedelta(hours=20)
+
+
+def lagging_assignments(assignments: list[TaskAssignment]) -> list[TaskAssignment]:
+    """Кому есть смысл напомнить: шаг открыт, ответ ещё не отправлен, задача не закрыта."""
+    return [
+        a for a in assignments
+        if not a.task.is_closed and not a.locked and a.status in EDITABLE_STATUSES
+    ]
+
+
+def remind_lagging(db: Session, user: User, task: Task) -> tuple[int, int]:
+    """Колокольчик кураторам групп, которые ещё не отправили ответ (в пределах видимого пользователю).
+    Одной группе — не чаще раза в 20 часов, кто бы ни нажимал. Возвращает (сколько групп, сколько пропущено)."""
+    lagging = lagging_assignments(visible_assignments(db, user, task))
+    if not lagging:
+        return 0, 0
+    since = utcnow() - MANUAL_REMINDER_COOLDOWN
+    recent = {
+        entity_id for (entity_id,) in db.query(InAppNotification.entity_id).filter(
+            InAppNotification.kind == MANUAL_REMINDER_KIND,
+            InAppNotification.entity_type == "task_assignment",
+            InAppNotification.entity_id.in_([str(a.id) for a in lagging]),
+            InAppNotification.created_at >= since,
+        )
+    }
+    today = today_local()
+    sent = skipped = 0
+    for a in lagging:
+        if str(a.id) in recent:
+            skipped += 1
+            continue
+        curators = assignees(db, a.study_group_id, today)
+        if not curators:
+            skipped += 1
+            continue
+        days_left = (task.due_date - today).days
+        when = (
+            f"срок был {_fmt(task.due_date)}" if days_left < 0
+            else "срок сегодня" if days_left == 0
+            else f"срок {_fmt(task.due_date)}"
+        )
+        for curator in curators:
+            in_app_notification_service.notify(
+                db, curator, MANUAL_REMINDER_KIND,
+                f"Напоминание от {user.full_name}: задача «{task.title}» для группы {a.study_group.code}, {when}.",
+                entity_type="task_assignment", entity_id=str(a.id),
+            )
+        sent += 1
+    return sent, skipped
+
+
+def answers_summary(db: Session, user: User, task: Task) -> dict:
+    """Сводка отправленных ответов (на проверке и принятых) по видимым группам: сколько выбрали каждый
+    вариант, сколько ответили «да»/«нет», сколько заполнили остальные поля. Без имён студентов."""
+    fields = task_fields(task)
+    sent = [
+        a for a in visible_assignments(db, user, task) if a.status in ("submitted", "accepted")
+    ]
+    if task.collect_mode == "group":
+        answers = [json.loads(a.group_values_json or "{}") for a in sent]
+    else:
+        # Строки — одним запросом на все группы, а не по запросу на каждую.
+        rows = db.query(TaskRow.values_json).filter(
+            TaskRow.assignment_id.in_([a.id for a in sent]), TaskRow.is_included.is_(True)
+        ).all() if sent else []
+        answers = [json.loads(values or "{}") for (values,) in rows]
+    result_fields = []
+    for f in fields:
+        values = [ans.get(f["key"]) for ans in answers]
+        filled = [v for v in values if not _is_empty(v)]
+        item: dict = {"key": f["key"], "label": f["label"], "type": f["type"], "filled": len(filled), "counts": []}
+        if f["type"] in ("select", "multiselect"):
+            counts = {o: 0 for o in f["options"]}
+            for v in filled:
+                for choice in (v if isinstance(v, list) else [v]):
+                    if choice in counts:
+                        counts[choice] += 1
+            item["counts"] = [{"label": k, "count": n} for k, n in counts.items()]
+        elif f["type"] == "bool":
+            item["counts"] = [
+                {"label": "да", "count": sum(1 for v in filled if v is True)},
+                {"label": "нет", "count": sum(1 for v in filled if v is False)},
+            ]
+        result_fields.append(item)
+    return {"groups": len(sent), "answers": len(answers), "fields": result_fields}
+
+
+def scope_preview(db: Session, creator: User, scope: ScopeDef) -> dict:
+    """Сколько групп, студентов и кураторов получат задачу — для мастера создания до отправки.
+    Те же правила охвата, что и при создании (включая ограничение отделением)."""
+    if not (scope.all_groups or scope.department_ids or scope.courses or scope.group_ids):
+        return {"groups": 0, "students": 0, "curators": 0, "without_curator": []}
+    groups = db.query(StudyGroup).filter(StudyGroup.is_active.is_(True)).all()
+    chosen = [g for g in groups if scope_matches(scope, g)]
+    if RoleCode(creator.role.code) in DEPARTMENT_SCOPED_ROLES:
+        chosen = [g for g in chosen if g.department_id == creator.department_id]
+    ids = [g.id for g in chosen]
+    if not ids:
+        return {"groups": 0, "students": 0, "curators": 0, "without_curator": []}
+    today = today_local()
+    students = db.query(Student).filter(
+        Student.study_group_id.in_(ids), Student.enrolled_at <= today,
+        (Student.left_at.is_(None)) | (Student.left_at >= today),
+    ).count()
+    active = [
+        a for a in db.query(CuratorAssignment).filter(CuratorAssignment.study_group_id.in_(ids)).all()
+        if a.is_active_on(today)
+    ]
+    covered = {a.study_group_id for a in active}
+    return {
+        "groups": len(chosen),
+        "students": students,
+        "curators": len({a.user_id for a in active}),
+        "without_curator": sorted(g.code for g in chosen if g.id not in covered),
+    }

@@ -2,6 +2,7 @@ import { fireEvent, render, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { useEscapeKey } from "./useEscapeKey";
 import { useScrollToTopOnChange } from "./useScrollToTopOnChange";
+import { useUnsavedWarning } from "./useUnsavedWarning";
 
 describe("useEscapeKey", () => {
   it("вызывает закрытие по Esc и только по нему", () => {
@@ -49,5 +50,25 @@ describe("useScrollToTopOnChange", () => {
     });
     rerender({ error: null });
     expect(window.scrollTo).not.toHaveBeenCalled();
+  });
+});
+
+describe("useUnsavedWarning", () => {
+  function fireBeforeUnload() {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  }
+
+  it("переспрашивает при уходе только пока есть несохранённое", () => {
+    const { rerender, unmount } = renderHook(({ dirty }) => useUnsavedWarning(dirty), { initialProps: { dirty: false } });
+    expect(fireBeforeUnload()).toBe(false);
+    rerender({ dirty: true });
+    expect(fireBeforeUnload()).toBe(true);
+    rerender({ dirty: false });
+    expect(fireBeforeUnload()).toBe(false);
+    rerender({ dirty: true });
+    unmount();
+    expect(fireBeforeUnload()).toBe(false);
   });
 });

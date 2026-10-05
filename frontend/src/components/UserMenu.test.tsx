@@ -59,4 +59,18 @@ describe("UserMenu", () => {
     await user.click(screen.getByRole("button", { name: "снаружи" }));
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
+
+  it("тема: выбор запоминается и ставится на страницу; «Как в системе» снимает выбор", async () => {
+    const user = userEvent.setup();
+    renderMenu();
+    await user.click(toggle());
+    expect(screen.getByRole("menuitemradio", { name: "Как в системе" })).toHaveAttribute("aria-checked", "true");
+    await user.click(screen.getByRole("menuitemradio", { name: "Тёмная" }));
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(localStorage.getItem("kait20_theme")).toBe("dark");
+    expect(screen.getByRole("menuitemradio", { name: "Тёмная" })).toHaveAttribute("aria-checked", "true");
+    await user.click(screen.getByRole("menuitemradio", { name: "Как в системе" }));
+    expect(document.documentElement.dataset.theme).toBeUndefined();
+    expect(localStorage.getItem("kait20_theme")).toBeNull();
+  });
 });

@@ -3,6 +3,7 @@ import { api, ApiError } from "../api/client";
 import { COLLECT_MODE_LABELS, REPEAT_LABELS, scheduleText } from "../constants/tasks";
 import { formatDateRu } from "../utils/date";
 import type { TaskTemplate } from "../api/types";
+import { dialogs } from "../utils/feedback";
 
 // Шаблоны задач и их расписание: очередная задача создаётся при открытии платформы после даты запуска.
 export default function TaskTemplatesTab() {
@@ -23,7 +24,7 @@ export default function TaskTemplatesTab() {
   useEffect(load, [load]);
 
   async function remove(t: TaskTemplate) {
-    if (!window.confirm(`Удалить шаблон «${t.name}»? Созданные по нему задачи не изменятся, повторный запуск прекратится.`)) return;
+    if (!(await dialogs.confirm(`Удалить шаблон «${t.name}»? Созданные по нему задачи не изменятся, повторный запуск прекратится.`, { confirmLabel: "Удалить", danger: true }))) return;
     try {
       await api.delete(`/tasks/templates/${t.id}`);
       load();

@@ -6,9 +6,11 @@ import DayActionsBar from "./DayActionsBar";
 import MarkCodeButtons from "./MarkCodeButtons";
 import MarkCommentModal from "./MarkCommentModal";
 import { scrollToTop } from "../utils/scroll";
-import type { MarkCodeOption, MonthDayStatus, RosterResponse } from "../api/types";
+import type { MarkCodeOption, MonthDayStatus, MyDayRhythmDay, RosterResponse } from "../api/types";
 import { formatServerDateTime, todayIso } from "../utils/date";
 import SearchSelect from "./SearchSelect";
+import { dialogs } from "../utils/feedback";
+import GroupRhythm from "./GroupRhythm";
 
 // Раньше подсказка точки в полоске месяца была просто ISO-датой (см. TODO.md 4).
 const MONTH_DOT_TITLES: Record<string, string> = {
@@ -63,6 +65,7 @@ export default function DayJournal({
   const [markCodes, setMarkCodes] = useState<MarkCodeOption[]>([]);
   const [pending, setPending] = useState<Record<number, PendingMark>>({});
   const [monthStatus, setMonthStatus] = useState<MonthDayStatus[]>([]);
+  const [rhythm, setRhythm] = useState<MyDayRhythmDay[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPeriodForm, setShowPeriodForm] = useState<number | null>(null);
@@ -130,6 +133,11 @@ export default function DayJournal({
       .get<MonthDayStatus[]>(`/curator/groups/${groupId}/month-status?year=${year}&month=${month}`)
       .then(setMonthStatus)
       .catch(() => setMonthStatus([]));
+    // Ритм группы (посещаемость за три недели) обновляется вместе с полосой месяца — после сдачи дня тоже.
+    api
+      .get<MyDayRhythmDay[]>(`/curator/groups/${groupId}/rhythm`)
+      .then((r) => setRhythm(Array.isArray(r) ? r : []))
+      .catch(() => setRhythm([]));
   }, [groupId, date]);
 
   useEffect(() => {
@@ -194,7 +202,7 @@ export default function DayJournal({
       // внесённые отметки (см. TODO.md 1.8) — переспрашиваем вместо того,
       // чтобы просто показать ошибку.
       if (err instanceof ApiError && err.status === 409 && allPresent && !confirmed) {
-        if (window.confirm(`${err.message}\n\nВсё равно отметить всех присутствующими?`)) {
+        if (await dialogs.confirm(`${err.message}\n\nВсё равно отметить всех присутствующими?`, { confirmLabel: "Отметить всех" })) {
           setBusy(false);
           await submitDay(true, true);
           return;
@@ -227,8 +235,8 @@ export default function DayJournal({
             options={groups.map((g) => ({ value: String(g.id), label: g.label }))}
             ariaLabel="Группа"
             title="Группа: начните вводить код, например «ГД»"
-            onChange={(v) => {
-              if (absentCount > 0 && !window.confirm("Несохранённые изменения будут потеряны. Сменить группу?")) return;
+            onChange={async (v) => {
+              if (absentCount > 0 && !(await dialogs.confirm("Несохранённые изменения будут потеряны. Сменить группу?", { confirmLabel: "Сменить группу" }))) return;
               setGroupId(Number(v));
             }}
           />
@@ -236,9 +244,10 @@ export default function DayJournal({
             type="date"
             value={date}
             max={todayIso()}
-            onChange={(e) => {
-              if (absentCount > 0 && !window.confirm("Несохранённые изменения будут потеряны. Сменить дату?")) return;
-              setDate(e.target.value);
+            onChange={async (e) => {
+              const next = e.target.value;
+              if (absentCount > 0 && !(await dialogs.confirm("Несохранённые изменения будут потеряны. Сменить дату?", { confirmLabel: "Сменить дату" }))) return;
+              setDate(next);
             }}
           />
         </div>
@@ -271,6 +280,13 @@ export default function DayJournal({
         </p>
       </div>
 
+      {rhythm.length > 0 && (
+        <div className="journal-rhythm">
+          <span className="hint">Ритм группы за три недели</span>
+          <GroupRhythm days={rhythm} />
+        </div>
+      )}
+
       {error && <div className="error-text">{error}</div>}
 
       {roster && isNonWorkingDay && (
@@ -291,10 +307,12 @@ export default function DayJournal({
             firstPeriod={firstPeriod}
             onFirstPeriodChange={setFirstPeriod}
             submitLabel={submitLabel}
-            onAllPresent={() => {
+            onAllPresent={async () => {
               if (
                 absentCount > 0 &&
-                !window.confirm(`Отметки отсутствующих (${absentCount}) будут сброшены. Отметить всех присутствующими?`)
+                !(await dialogs.confirm(`Отметки отсутствующих (${absentCount}) будут сброшены. Отметить всех присутствующими?`, {
+                  confirmLabel: "Отметить всех",
+                }))
               )
                 return;
               submitDay(true);

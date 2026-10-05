@@ -77,6 +77,14 @@ export interface MyDayGroup {
   is_on_time: boolean | null;
   missed_dates: string[];
   missed_total: number;
+  /** Последние три недели по дням, от старых к новым. */
+  rhythm?: MyDayRhythmDay[];
+}
+
+export interface MyDayRhythmDay {
+  date: string;
+  kind: "off" | "missing" | "absent" | "ok";
+  absent: number;
 }
 
 export interface MyDayTask {
@@ -561,6 +569,7 @@ export interface TaskListRow {
   reviewer_rule: string;
   due_date: string;
   is_closed: boolean;
+  author_id?: number | null;
   author_name: string | null;
   progress: TaskProgress;
   step_no: number;
@@ -578,6 +587,8 @@ export interface TaskAssignmentSummary {
   submitted_at: string | null;
   reviewed_at: string | null;
   reviewed_by_name: string | null;
+  /** Шаг цепочки ещё закрыт для группы. */
+  is_locked?: boolean;
 }
 
 export interface TaskDetail {
@@ -613,6 +624,11 @@ export interface MyAssignmentRow {
   is_locked: boolean;
   step_no: number;
   step_total: number | null;
+  /** Заполнено и всего: поля (ответ по группе) или студенты (остальные режимы). */
+  filled: number;
+  total: number;
+  /** Замечание проверяющего — только пока назначение возвращено. */
+  review_comment: string | null;
 }
 
 export interface TaskRowRead {
@@ -620,6 +636,8 @@ export interface TaskRowRead {
   student_name: string;
   is_included: boolean;
   values: Record<string, unknown>;
+  /** Строка ещё не сохранялась, значения подставлены из досье. */
+  from_dossier?: boolean;
 }
 
 export interface TaskCommentRead {
@@ -679,4 +697,24 @@ export interface ReviewQueueRow {
   due_date: string;
   submitted_at: string | null;
   is_overdue: boolean;
+}
+
+export interface RemindResult {
+  sent: number;
+  skipped: number;
+}
+
+export interface TaskSummaryField {
+  key: string;
+  label: string;
+  type: TaskFieldType;
+  filled: number;
+  counts: { label: string; count: number }[];
+}
+
+/** Сводка отправленных ответов по задаче (без имён студентов). */
+export interface TaskSummary {
+  groups: number;
+  answers: number;
+  fields: TaskSummaryField[];
 }

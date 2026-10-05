@@ -6,6 +6,7 @@ import { afterEach, beforeEach, vi } from "vitest";
 beforeEach(() => {
   window.scrollTo = vi.fn();
   localStorage.clear();
+  sessionStorage.clear();
 });
 
 afterEach(() => {

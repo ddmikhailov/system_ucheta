@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, ApiError } from "../../api/client";
 import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { MarkCodeAdmin } from "../../api/types";
+import { dialogs } from "../../utils/feedback";
 
 type FlagField = "counts_as_present" | "is_excused" | "requires_document" | "is_active";
 
@@ -29,9 +30,10 @@ export default function MarkCodesTab({ canEdit }: { canEdit: boolean }) {
   async function toggle(row: MarkCodeAdmin, field: FlagField) {
     const next = !row[field];
     if (
-      !window.confirm(
-        `Изменить флаг «${FIELD_LABELS[field]}» у кода «${row.code}» на «${next ? "да" : "нет"}»? Это пересчитает отчётность задним числом.`
-      )
+      !(await dialogs.confirm(
+        `Изменить флаг «${FIELD_LABELS[field]}» у кода «${row.code}» на «${next ? "да" : "нет"}»? Это пересчитает отчётность задним числом.`,
+        { confirmLabel: "Изменить" }
+      ))
     ) {
       return;
     }

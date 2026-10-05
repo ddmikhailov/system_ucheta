@@ -43,3 +43,30 @@ export function formatServerDateTimeFull(iso: string): string {
     minute: "2-digit",
   });
 }
+
+// «2026-10-09» → «09.10»: короткая дата там, где год очевиден (последние недели, ближайшие дни).
+export function formatDayMonthRu(iso: string): string {
+  const [, m, d] = iso.split("-");
+  return `${d}.${m}`;
+}
+
+const WEEKDAYS_SHORT = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
+
+// Срок с днём недели: «пт 09.10»; если год не текущий — «пт 08.01.2027», чтобы срок через Новый год не путался.
+export function formatDueShort(iso: string, today: string = todayIso()): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const weekday = WEEKDAYS_SHORT[new Date(y, m - 1, d).getDay()];
+  return iso.slice(0, 4) === today.slice(0, 4) ? `${weekday} ${formatDayMonthRu(iso)}` : `${weekday} ${formatDateRu(iso)}`;
+}
+
+// «2026-10-02» → «Пятница, 2 октября» — заголовок дня.
+export function formatWeekdayLong(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const text = new Date(y, m - 1, d).toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" });
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+// Местное время «14:32» (например, «Сохранено в 14:32»).
+export function formatTimeRu(d: Date): string {
+  return d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+}

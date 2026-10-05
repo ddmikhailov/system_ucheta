@@ -96,6 +96,7 @@ class TaskListRow(BaseModel):
     reviewer_rule: str
     due_date: datetime.date
     is_closed: bool
+    author_id: int | None = None
     author_name: str | None
     progress: Progress
     step_no: int = 1
@@ -113,6 +114,7 @@ class AssignmentSummary(BaseModel):
     submitted_at: datetime.datetime | None
     reviewed_at: datetime.datetime | None
     reviewed_by_name: str | None
+    is_locked: bool = False
 
 
 class StepRef(BaseModel):
@@ -155,6 +157,10 @@ class MyAssignmentRow(BaseModel):
     is_locked: bool = False
     step_no: int = 1
     step_total: int | None = None
+    # Заполненность: поля (ответ по группе) или студенты (остальные режимы); см. task_service.fill_progress.
+    filled: int = 0
+    total: int = 0
+    review_comment: str | None = None
 
 
 class RowRead(BaseModel):
@@ -162,6 +168,8 @@ class RowRead(BaseModel):
     student_name: str
     is_included: bool
     values: dict[str, Any]
+    # Строка ещё не сохранялась, значения подставлены из досье — куратору достаточно проверить.
+    from_dossier: bool = False
 
 
 class CommentRead(BaseModel):
@@ -244,3 +252,36 @@ class ReviewQueueRow(BaseModel):
     due_date: datetime.date
     submitted_at: datetime.datetime | None
     is_overdue: bool
+
+
+class RemindResult(BaseModel):
+    sent: int
+    skipped: int
+
+
+class SummaryCount(BaseModel):
+    label: str
+    count: int
+
+
+class SummaryField(BaseModel):
+    key: str
+    label: str
+    type: str
+    filled: int
+    counts: list[SummaryCount]
+
+
+class TaskSummary(BaseModel):
+    """Сводка отправленных ответов: groups — сколько групп отправили, answers — сколько строк (или групп)."""
+    groups: int
+    answers: int
+    fields: list[SummaryField]
+
+
+class ScopePreview(BaseModel):
+    """Охват до создания задачи: группы, студенты, кураторы и группы без куратора (по коду)."""
+    groups: int
+    students: int
+    curators: int
+    without_curator: list[str]

@@ -171,3 +171,30 @@ def test_assert_can_manage_student_matrix(actor_role, actor_dept, student_group_
     else:
         with pytest.raises(Exception):
             policies.assert_can_manage_student(db, actor, student)
+
+
+# --- task_service.manager_sees: кто видит группу в задаче (этап 13: от неё зависят «Напомнить» и сводка) ---
+
+MANAGER_SEES_CASES = [
+    # (роль, отделение пользователя, отделение группы, пользователь — автор задачи, видит ли)
+    (ADMIN, None, DEPT_A, False, True),
+    (EDU_DEPARTMENT, None, DEPT_B, False, True),
+    (DEPT_HEAD, DEPT_A, DEPT_A, False, True),
+    (DEPT_HEAD, DEPT_A, DEPT_B, False, False),
+    (DEPT_HEAD, DEPT_A, DEPT_B, True, True),  # автор видит всю свою задачу
+    (TUTOR, DEPT_A, DEPT_A, False, True),
+    (TUTOR, DEPT_A, DEPT_B, False, False),
+    (CURATOR, DEPT_A, DEPT_A, False, False),
+]
+
+
+@pytest.mark.parametrize("role,user_dept,group_dept,is_author,allowed", MANAGER_SEES_CASES)
+def test_task_manager_sees_matrix(role, user_dept, group_dept, is_author, allowed):
+    from app.services import task_service
+
+    user = _user(role, user_dept, user_id=1)
+    assignment = SimpleNamespace(
+        study_group=SimpleNamespace(department_id=group_dept),
+        task=SimpleNamespace(created_by=1 if is_author else 2),
+    )
+    assert task_service.manager_sees(user, assignment) is allowed

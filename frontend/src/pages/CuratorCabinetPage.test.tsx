@@ -31,6 +31,12 @@ function roster(entries: RosterEntry[], over: Partial<RosterResponse> = {}): Ros
   return { study_group_id: 7, date: todayIso(), is_submitted: false, submitted_at: null, is_on_time: null, first_period: null, entries, ...over };
 }
 
+const RHYTHM = [
+  { date: "2026-09-30", kind: "ok", absent: 0 },
+  { date: "2026-10-01", kind: "absent", absent: 3 },
+  { date: "2026-10-02", kind: "missing", absent: 0 },
+];
+
 function mockApi(r: RosterResponse, dayType = "study_day") {
   get.mockImplementation(async (path: string) => {
     if (path === "/curator/groups") return [{ id: 7, code: "СА172", course: 1, is_submitted_today: false }];
@@ -38,6 +44,7 @@ function mockApi(r: RosterResponse, dayType = "study_day") {
     if (path === "/curator/settings") return { risk_threshold_consecutive_unexcused: 3 };
     if (path.includes("/month-status")) return [{ date: todayIso(), day_type: dayType, is_submitted: false, is_on_time: null }];
     if (path.includes("/day?")) return r;
+    if (path.endsWith("/rhythm")) return RHYTHM;
     throw new Error(`неожиданный запрос ${path}`);
   });
 }
@@ -195,5 +202,13 @@ describe("CuratorCabinetPage — «Все присутствуют» (защит
     post.mockRejectedValue(new ApiError(400, "Неизвестный код отметки"));
     await user.click(screen.getByRole("button", { name: "Сдать день" }));
     expect(await screen.findByText("Неизвестный код отметки")).toBeInTheDocument();
+  });
+
+  it("ритм группы за три недели — под шапкой журнала", async () => {
+    mockApi(roster([]));
+    renderPage(<CuratorCabinetPage />, { role: "curator" });
+    const rhythm = await screen.findByRole("img", { name: /Ритм за 3 дня: учебных 3, с пропусками без причины 1, не сдано 1/ });
+    expect(rhythm.querySelector('[title="01.10: пропуски без причины — 3"]')).not.toBeNull();
+    expect(get).toHaveBeenCalledWith("/curator/groups/7/rhythm");
   });
 });
