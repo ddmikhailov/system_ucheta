@@ -10,15 +10,16 @@
 Особые данные досье сюда не попадают: список виден тем же людям, что и журнал групп, а особые поля — уже."""
 import datetime
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.time import today_local
 from app.models import (
-    AttendanceMark, CuratorAssignment, DaySubmission, MarkCode, Student, StudentProfile, StudyGroup,
+    AttendanceMark, CuratorAssignment, DaySubmission, MarkCode, RoleCode, Student, StudentProfile, StudyGroup,
     TaskAssignment, User,
 )
 from app.schemas.my_day import (
-    AbsenceLine, AbsenceMessage, AttentionStudent, Birthday, DayGroup, DayTask, MyDay, ReviewWaiting,
+    AbsenceLine, AbsenceMessage, AttentionStudent, Birthday, DayGroup, DayTask, MyDay, ReviewWaiting, RhythmDay,
 )
 from app.services import attendance_service, calendar_service, individual_work_service
 from app.services import task_service
@@ -28,6 +29,7 @@ DUE_SOON_DAYS = 3
 BIRTHDAY_DAYS = 7
 MISSED_LOOKBACK_DAYS = 14
 MAX_MISSED_DATES = 5
+RHYTHM_DAYS = 21
 MAX_ATTENTION = 30
 MAX_ABSENCE_DAYS = 60
 
@@ -41,30 +43,76 @@ def _my_groups(db: Session, user: User, today: datetime.date) -> list[StudyGroup
     return db.query(StudyGroup).filter(StudyGroup.id.in_(ids)).order_by(StudyGroup.course, StudyGroup.code).all()
 
 
-def _assignment_start(db: Session, user: User, group_id: int, today: datetime.date) -> datetime.date | None:
-    """С какого дня пользователь ведёт группу (самое раннее из действующих назначений)."""
-    starts = [
-        a.start_date for a in db.query(CuratorAssignment).filter(
-            CuratorAssignment.user_id == user.id, CuratorAssignment.study_group_id == group_id)
-        if a.is_active_on(today)
-    ]
-    return min(starts) if starts else None
+def _unexcused_by_day(db: Session, group_ids: list[int], start: datetime.date, end: datetime.date) -> dict[tuple[int, datetime.date], int]:
+    """Сколько пропусков без уважительной причины в каждой группе по дням — одним запросом."""
+    rows = (
+        db.query(Student.study_group_id, AttendanceMark.date, func.count(AttendanceMark.id))
+        .join(Student, Student.id == AttendanceMark.student_id)
+        .join(MarkCode, MarkCode.id == AttendanceMark.mark_code_id)
+        .filter(Student.study_group_id.in_(group_ids), AttendanceMark.date >= start, AttendanceMark.date <= end,
+                MarkCode.counts_as_present.is_(False), MarkCode.is_excused.is_(False))
+        .group_by(Student.study_group_id, AttendanceMark.date)
+        .all()
+    )
+    return {(group_id, day): count for group_id, day, count in rows}
+
+
+def group_rhythm(
+    db: Session, group: StudyGroup, today: datetime.date, submitted: set[datetime.date],
+    unexcused: dict[tuple[int, datetime.date], int], study_days: set[datetime.date] | None = None,
+) -> list[RhythmDay]:
+    start = today - datetime.timedelta(days=RHYTHM_DAYS - 1)
+    if study_days is None:
+        study_days = set(calendar_service.study_days_between(db, start, today, study_group_id=group.id, course=group.course))
+    result: list[RhythmDay] = []
+    for i in range(RHYTHM_DAYS):
+        day = start + datetime.timedelta(days=i)
+        if day not in study_days:
+            result.append(RhythmDay(date=day, kind="off"))
+        elif day not in submitted:
+            result.append(RhythmDay(date=day, kind="missing"))
+        else:
+            absent = unexcused.get((group.id, day), 0)
+            result.append(RhythmDay(date=day, kind="absent" if absent else "ok", absent=absent))
+    return result
+
+
+def rhythm_for_group(db: Session, group: StudyGroup, today: datetime.date | None = None) -> list[RhythmDay]:
+    """«Ритм группы» отдельно — для журнала группы (кабинет куратора, журнал в админке)."""
+    today = today or today_local()
+    start = today - datetime.timedelta(days=RHYTHM_DAYS - 1)
+    submitted = {
+        d for (d,) in db.query(DaySubmission.date).filter(
+            DaySubmission.study_group_id == group.id, DaySubmission.date >= start, DaySubmission.date <= today)
+    }
+    return group_rhythm(db, group, today, submitted, _unexcused_by_day(db, [group.id], start, today))
 
 
 def day_groups(db: Session, user: User, groups: list[StudyGroup], today: datetime.date) -> list[DayGroup]:
     if not groups:
         return []
-    window_start = today - datetime.timedelta(days=MISSED_LOOKBACK_DAYS)
+    window_start = today - datetime.timedelta(days=max(MISSED_LOOKBACK_DAYS, RHYTHM_DAYS))
+    unexcused = _unexcused_by_day(db, [g.id for g in groups], window_start, today)
     submissions: dict[tuple[int, datetime.date], DaySubmission] = {
         (s.study_group_id, s.date): s
         for s in db.query(DaySubmission).filter(
             DaySubmission.study_group_id.in_([g.id for g in groups]),
             DaySubmission.date >= window_start, DaySubmission.date <= today)
     }
+    # Календарь всех групп и назначения пользователя — разом, а не по запросу на группу.
+    calendar = calendar_service.study_days_by_group(db, window_start, today, groups)
+    starts: dict[int, datetime.date] = {}
+    for a in db.query(CuratorAssignment).filter(
+        CuratorAssignment.user_id == user.id, CuratorAssignment.study_group_id.in_([g.id for g in groups])
+    ):
+        if a.is_active_on(today):
+            starts[a.study_group_id] = min(a.start_date, starts.get(a.study_group_id, a.start_date))
+    rhythm_start = today - datetime.timedelta(days=RHYTHM_DAYS - 1)
     result: list[DayGroup] = []
     for g in groups:
-        start = max(window_start, _assignment_start(db, user, g.id, today) or window_start)
-        study_days = calendar_service.study_days_between(db, start, today, study_group_id=g.id, course=g.course)
+        missed_start = today - datetime.timedelta(days=MISSED_LOOKBACK_DAYS)
+        start = max(missed_start, starts.get(g.id) or missed_start)
+        study_days = [d for d in calendar[g.id] if d >= start]
         today_sub = submissions.get((g.id, today))
         if today not in study_days:
             today_status = "no_study_day"
@@ -72,10 +120,13 @@ def day_groups(db: Session, user: User, groups: list[StudyGroup], today: datetim
             today_status = "submitted" if today_sub is not None else "pending"
         missed = sorted(
             (d for d in study_days if d < today and (g.id, d) not in submissions), reverse=True)
+        submitted_days = {d for (gid, d) in submissions if gid == g.id}
         result.append(DayGroup(
             id=g.id, code=g.code, course=g.course, today_status=today_status,
             is_on_time=today_sub.is_on_time if today_sub is not None else None,
             missed_dates=missed[:MAX_MISSED_DATES], missed_total=len(missed),
+            rhythm=group_rhythm(
+                db, g, today, submitted_days, unexcused, study_days={d for d in calendar[g.id] if d >= rhythm_start}),
         ))
     return result
 
@@ -190,6 +241,34 @@ def build_my_day(db: Session, user: User, today: datetime.date | None = None) ->
         tasks=day_tasks(db, groups, today), attention=attention, attention_total=attention_total,
         no_work_days=individual_work_service.NO_WORK_DAYS, birthdays=day_birthdays(db, groups, today), review_waiting=review_waiting(db, user),
     )
+
+
+def nav_counters(db: Session, user: User, today: datetime.date | None = None) -> dict[str, int]:
+    """Числа на пунктах меню: дела на сегодня («Мой день»), горящие задачи куратора, ответы на проверке.
+    Только подсчёт по уже имеющимся данным, без досье и без посещаемости по студентам."""
+    today = today or today_local()
+    groups = _my_groups(db, user, today)
+    tasks = len(day_tasks(db, groups, today))
+    pending_days = 0
+    if groups:
+        submitted = {
+            s.study_group_id for s in db.query(DaySubmission).filter(
+                DaySubmission.study_group_id.in_([g.id for g in groups]), DaySubmission.date == today)
+        }
+        calendar = calendar_service.study_days_by_group(db, today, today, groups)
+        pending_days = sum(1 for g in groups if g.id not in submitted and today in calendar[g.id])
+    return {"my_day": pending_days + tasks, "my_tasks": tasks, "review": review_count(db, user)}
+
+
+def review_count(db: Session, user: User) -> int:
+    """Сколько ответов ждут решения пользователя. Администратор проверяет всё — ему хватает COUNT; остальным
+    правило проверки (ступень, отделение, автор) применяется к каждому назначению, как в очереди."""
+    if not task_service.is_manager(user):
+        return 0
+    if RoleCode(user.role.code) == RoleCode.ADMIN:
+        return db.query(TaskAssignment).filter(TaskAssignment.status == "submitted").count()
+    waiting = review_waiting(db, user)
+    return waiting.count if waiting else 0
 
 
 # ---------- быстрые действия ----------

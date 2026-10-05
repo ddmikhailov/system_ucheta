@@ -15,3 +15,9 @@ router = APIRouter(prefix="/my-day", tags=["my-day"])
 @router.get("", response_model=MyDay)
 def my_day(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return my_day_service.build_my_day(db, user)
+
+
+@router.get("/counters")
+def nav_counters(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, int]:
+    """Числа на пунктах меню — запрашиваются при каждом переходе, поэтому только подсчёт без списков."""
+    return my_day_service.nav_counters(db, user)

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api, setToken } from "./api/client";
 import App from "./App";
@@ -97,6 +97,13 @@ describe("App — защита маршрутов", () => {
   it("новые разделы доступны вошедшим: задачи, мои задачи, паспорт, назначение", async () => {
     visit("/tasks", "admin");
     expect(await screen.findByText("страница: задачи")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Задачи" })).toBeInTheDocument(); // обёртка Layout с меню
+    // Обёртка Layout с меню: и боковое меню, и нижняя панель телефона.
+    expect(within(screen.getByRole("navigation", { name: "Разделы" })).getByRole("link", { name: "Задачи" })).toBeInTheDocument();
+  });
+
+  it("куратора по ссылке на «Задачи» отправляет на его главную", async () => {
+    visit("/tasks", "curator");
+    expect(await screen.findByText("страница: мой день")).toBeInTheDocument();
+    expect(screen.queryByText("страница: задачи")).not.toBeInTheDocument();
   });
 });

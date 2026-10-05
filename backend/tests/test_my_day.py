@@ -318,3 +318,121 @@ def test_absence_message_follows_student_access(client, curator_group, db_second
     assert client.get(f"/students/{s.id}/absence-message", headers=admin_headers).status_code == 200
     assert client.get("/students/999999/absence-message", headers=admin_headers).status_code == 404
     assert client.get(f"/students/{s.id}/absence-message").status_code == 401
+
+
+# ---------- ритм группы (этап 13) ----------
+
+def test_rhythm_covers_three_weeks_with_off_missing_absent_and_ok(client, curator_headers, curator_user, curator_group, imported, db, today):
+    db.query(CuratorAssignment).filter(CuratorAssignment.user_id == curator_user.id).update(
+        {CuratorAssignment.start_date: today - datetime.timedelta(days=30)})
+    db.commit()
+    study = calendar_service.study_days_between(
+        db, today - datetime.timedelta(days=10), today - datetime.timedelta(days=1),
+        study_group_id=curator_group.id, course=curator_group.course)
+    assert len(study) >= 2
+    s = _students(db, curator_group)[0]
+    _mark(client, curator_headers, curator_group, s, "н", study[-1])   # день с пропуском без причины
+    _submit_all_present(client, curator_headers, curator_group, study[-2])  # все на месте
+    # День с больничным считается «ok»: причина уважительная.
+    if len(study) >= 3:
+        _mark(client, curator_headers, curator_group, s, "б", study[-3])
+
+    rhythm = _build(db, curator_user, today).groups[0].rhythm
+    assert len(rhythm) == my_day_service.RHYTHM_DAYS
+    assert rhythm[-1].date == today and rhythm[0].date == today - datetime.timedelta(days=my_day_service.RHYTHM_DAYS - 1)
+    by_day = {r.date: r for r in rhythm}
+    assert by_day[study[-1]].kind == "absent" and by_day[study[-1]].absent == 1
+    assert by_day[study[-2]].kind == "ok"
+    if len(study) >= 3:
+        assert by_day[study[-3]].kind == "ok"
+    all_study = set(calendar_service.study_days_between(
+        db, rhythm[0].date, today, study_group_id=curator_group.id, course=curator_group.course))
+    assert all(r.kind == "off" for r in rhythm if r.date not in all_study)
+    untouched = [d for d in all_study if d not in (study[-1], study[-2]) and (len(study) < 3 or d != study[-3])]
+    assert all(by_day[d].kind == "missing" for d in untouched)
+
+
+def test_rhythm_is_in_the_api_response(client, curator_headers, curator_group, imported):
+    groups = client.get("/my-day", headers=curator_headers).json()["groups"]
+    assert len(groups[0]["rhythm"]) == my_day_service.RHYTHM_DAYS
+    assert set(groups[0]["rhythm"][0]) == {"date", "kind", "absent"}
+
+
+# ---------- счётчики меню (этап 13) ----------
+
+def test_nav_counters_for_curator(client, admin_headers, curator_headers, curator_user, curator_group, imported, db, today):
+    before = client.get("/my-day/counters", headers=curator_headers).json()
+    assert before["review"] == 0
+    r = client.post("/tasks", headers=admin_headers, json={
+        "title": "Срочно", "collect_mode": "group", "reviewer_rule": "dept_head", "due_date": str(today_local()),
+        "fields": [{"label": "Сдано", "type": "bool"}], "scope": {"all_groups": True}})
+    assert r.status_code == 201
+    after = client.get("/my-day/counters", headers=curator_headers).json()
+    assert after["my_tasks"] == before["my_tasks"] + 1
+    assert after["my_day"] == before["my_day"] + 1
+    built = my_day_service.build_my_day(db, curator_user)
+    pending = sum(1 for g in built.groups if g.today_status == "pending")
+    assert after["my_day"] == pending + len(built.tasks)
+
+
+def test_nav_counters_for_reviewer_and_login(client, admin_headers, curator_headers, curator_group, imported):
+    task = client.post("/tasks", headers=admin_headers, json={
+        "title": "Видео", "collect_mode": "group", "reviewer_rule": "dept_head", "due_date": _day(5),
+        "fields": [{"label": "Сдано", "type": "bool", "required": True}], "scope": {"all_groups": True}}).json()
+    aid = next(r["id"] for r in client.get("/tasks/my", headers=curator_headers).json() if r["task_id"] == task["id"])
+    client.put(f"/tasks/assignments/{aid}/answers", headers=curator_headers, json={"group_values": {"f1": True}})
+    client.post(f"/tasks/assignments/{aid}/submit", headers=curator_headers)
+    counters = client.get("/my-day/counters", headers=admin_headers).json()
+    assert counters == {"my_day": 0, "my_tasks": 0, "review": 1}
+    assert client.get("/my-day/counters").status_code == 401
+
+
+def test_group_rhythm_endpoint_matches_my_day_and_respects_access(
+    client, curator_headers, curator_user, curator_group, db_second_curator, imported, db, today,
+):
+    from tests.conftest import _login
+
+    r = client.get(f"/curator/groups/{curator_group.id}/rhythm", headers=curator_headers)
+    assert r.status_code == 200
+    assert len(r.json()) == my_day_service.RHYTHM_DAYS
+    built = _build(db, curator_user, today_local()).groups[0].rhythm
+    assert [d["kind"] for d in r.json()] == [d.kind for d in built]
+
+    # Чужой куратор журнал этой группы не видит — и ритм тоже.
+    other = _login(client, db_second_curator.username, "SecondCurator123!")
+    assert client.get(f"/curator/groups/{curator_group.id}/rhythm", headers=other).status_code in (403, 404)
+    assert client.get(f"/curator/groups/{curator_group.id}/rhythm").status_code == 401
+
+
+def test_my_day_and_counters_do_not_query_per_group(db, curator_user, imported, today):
+    """Заместитель с десятком групп: блок групп «Моего дня» и счётчики меню не делают запросов на каждую группу."""
+    from app.models import AssignmentRole, StudyGroup
+    from tests.test_dashboard_performance import count_queries
+
+    def give_groups(n):
+        have = {a.study_group_id for a in db.query(CuratorAssignment).filter(CuratorAssignment.user_id == curator_user.id)}
+        for g in db.query(StudyGroup).filter(StudyGroup.is_active.is_(True)).order_by(StudyGroup.id).all():
+            if len(have) >= n:
+                break
+            if g.id not in have:
+                db.add(CuratorAssignment(study_group_id=g.id, user_id=curator_user.id, role_type=AssignmentRole.DEPUTY,
+                                         start_date=today - datetime.timedelta(days=60)))
+                have.add(g.id)
+        db.commit()
+
+    def measure():
+        db.expire_all()
+        groups = my_day_service._my_groups(db, curator_user, today)
+        with count_queries(db) as groups_q:
+            my_day_service.day_groups(db, curator_user, groups, today)
+        with count_queries(db) as counters_q:
+            my_day_service.nav_counters(db, curator_user, today)
+        return groups_q["n"], counters_q["n"]
+
+    give_groups(2)
+    small = measure()
+    give_groups(10)
+    big = measure()
+    # Блок групп с ритмом и счётчики меню — пакетно: число запросов не зависит от числа групп.
+    # (Список «внимание» по-прежнему считается по группе — это отдельная, более старая часть сводки.)
+    assert big == small, (small, big)

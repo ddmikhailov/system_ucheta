@@ -1,6 +1,6 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "../api/client";
 import type { AssignmentDetail } from "../api/types";
 import { renderPage } from "../test/utils";
@@ -25,7 +25,7 @@ function detail(overrides: Partial<AssignmentDetail> = {}): AssignmentDetail {
     description: "Собрать данные о кружках",
     collect_mode: "student",
     reviewer_rule: "dept_head",
-    due_date: "2026-10-06",
+    due_date: "2026-10-09",
     is_closed: false,
     fields: FIELDS,
     study_group_id: 7,
@@ -65,299 +65,368 @@ function open(d: AssignmentDetail, role = "curator") {
   return renderPage(<TaskAssignmentPage />, { route: `/tasks/assignment/${d.id}`, path: "/tasks/assignment/:assignmentId", role });
 }
 
+function setup() {
+  return userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+}
+
+/** Дождаться автосохранения (пауза 1,5 с после последней правки). */
+async function autosave() {
+  await act(() => vi.advanceTimersByTimeAsync(1600));
+}
+
+// Имя студента встречается и в списке «К кому комментарий» — ищем именно строку ответа.
+const NAME = { selector: ".answer-row__name" };
+
+function row(name: string) {
+  return screen.getByText(name, NAME).closest(".answer-row") as HTMLElement;
+}
+
 beforeEach(() => {
   for (const fn of [get, put, post]) fn.mockReset();
+  put.mockResolvedValue(detail({ status: "in_progress" }));
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.setSystemTime(new Date(2026, 9, 4, 10, 0));
 });
 
-describe("TaskAssignmentPage — шаги", () => {
-  it("закрытый шаг: пояснение, когда откроется; номер шага; правки нет", async () => {
-    open(detail({
-      is_locked: true, can_edit: false, can_submit: false, step_no: 2, step_total: 2,
-      locked_reason: "Этот шаг откроется, когда предыдущий шаг «Сценарий» будет принят.",
-    }));
-    expect(await screen.findByText(/Этот шаг откроется, когда предыдущий шаг «Сценарий» будет принят/)).toBeInTheDocument();
-    expect(screen.getByText("Шаг 2 из 2")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Отправить на проверку/ })).not.toBeInTheDocument();
-  });
+afterEach(() => vi.useRealTimers());
 
-  it("обычное назначение без шагов — без пометки", async () => {
-    open(detail());
-    await screen.findByRole("heading", { name: "Кружки доп. образования" });
-    expect(screen.queryByText(/^Шаг \d из/)).not.toBeInTheDocument();
-  });
-});
-
-describe("TaskAssignmentPage — связь с досье", () => {
-  it("связанный столбец помечен «(досье)», подставленные из досье значения видны в строках", async () => {
-    const fields = [
-      { key: "f3", label: "Телефон", type: "text" as const, required: false, options: [], dossier_field: "phone" },
-      { key: "f4", label: "Заметка", type: "text" as const, required: false, options: [] },
-    ];
-    open(detail({
-      fields,
-      rows: [{ student_id: 11, student_name: "Алексеев Пётр", is_included: true, values: { f3: "+7 900 111-22-33" } }],
-    }));
-    expect(await screen.findByRole("columnheader", { name: /Телефон.*\(досье\)/ })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Заметка" })).toBeInTheDocument();
-    expect(screen.getByDisplayValue("+7 900 111-22-33")).toBeInTheDocument();
-  });
-});
-
-describe("TaskAssignmentPage — заполнение", () => {
-  it("показывает задачу, срок, режим и студентов", async () => {
+describe("TaskAssignmentPage — шапка", () => {
+  it("название, группа, срок словами, статус, режим, проверяющий и кольцо заполненности", async () => {
     open(detail());
     expect(await screen.findByRole("heading", { name: "Кружки доп. образования" })).toBeInTheDocument();
-    expect(screen.getByText(/срок 06\.10\.2026/)).toBeInTheDocument();
-    expect(screen.getByText(/По каждому студенту/)).toBeInTheDocument();
-    expect(screen.getByText("Собрать данные о кружках")).toBeInTheDocument();
-    expect(screen.getByRole("cell", { name: "Алексеев Пётр" })).toBeInTheDocument();
-    expect(screen.getByRole("cell", { name: "Андреева Елена" })).toBeInTheDocument();
+    expect(screen.getByText("СА172")).toBeInTheDocument();
+    expect(screen.getByText("срок пт 09.10, через 5 дней")).toBeInTheDocument();
     expect(screen.getByText("Не начато")).toBeInTheDocument();
-    expect(get).toHaveBeenCalledWith("/tasks/assignments/5");
+    expect(screen.getByText("По каждому студенту")).toBeInTheDocument();
+    expect(screen.getByText(/проверяет: Зав\. отделением группы/)).toBeInTheDocument();
+    expect(screen.getByText("Собрать данные о кружках")).toBeInTheDocument();
+    // У Андреевой обязательный телефон есть — она заполнена, Алексеев — нет.
+    expect(screen.getByRole("img", { name: "Заполнено 1 из 2" })).toBeInTheDocument();
   });
 
-  it("помечает просроченную задачу и возврат с комментарием проверяющего", async () => {
-    open(detail({ is_overdue: true, status: "returned", review_comment: "У Иванова нет кружка" }));
-    expect(await screen.findByText("просрочено")).toBeInTheDocument();
-    expect(screen.getByText(/Возвращено на доработку: У Иванова нет кружка/)).toBeInTheDocument();
+  it("возврат — заметное замечание проверяющего; просрочка — в статусе", async () => {
+    open(detail({ status: "returned", review_comment: "Нет телефона у Алексеева" }));
+    const note = await screen.findByRole("note");
+    expect(note).toHaveTextContent("Вернули на доработку");
+    expect(note).toHaveTextContent("Нет телефона у Алексеева");
+
+    open(detail({ status: "in_progress", is_overdue: true, due_date: "2026-10-02" }));
+    expect(await screen.findByText("В работе, просрочено")).toBeInTheDocument();
   });
 
-  it("«Сохранить черновик» доступна только после правки и отправляет все строки", async () => {
-    const user = userEvent.setup();
+  it("двухступенчатая проверка: ступень в статусе", async () => {
+    open(detail({ status: "submitted", review_step: 2, review_steps: 2, can_edit: false, can_submit: false }));
+    expect(await screen.findByText("На проверке (ступень 2 из 2)")).toBeInTheDocument();
+  });
+
+  it("закрытый шаг: пояснение и никаких полей ввода", async () => {
+    open(detail({ is_locked: true, locked_reason: "Откроется, когда примут шаг 1", can_edit: false, can_submit: false, step_no: 2, step_total: 2 }));
+    expect(await screen.findByText("Откроется, когда примут шаг 1")).toBeInTheDocument();
+    expect(screen.getByText("шаг 2 из 2")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: /Телефон родителя/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Отправить на проверку" })).not.toBeInTheDocument();
+  });
+
+  it("ошибка загрузки — текст сервера", async () => {
+    get.mockRejectedValue(new ApiError(404, "Задача не найдена"));
+    renderPage(<TaskAssignmentPage />, { route: "/tasks/assignment/9", path: "/tasks/assignment/:assignmentId", role: "curator" });
+    expect(await screen.findByText("Задача не найдена")).toBeInTheDocument();
+  });
+});
+
+describe("TaskAssignmentPage — заполнение и автосохранение", () => {
+  it("чипы и «да/нет» переключаются касанием, повторное касание снимает выбор", async () => {
+    const user = setup();
     open(detail());
-    const save = await screen.findByRole("button", { name: "Сохранить черновик" });
-    expect(save).toBeDisabled();
+    await screen.findByText("Алексеев Пётр", NAME);
+    const circles = screen.getByRole("group", { name: "Кружки: Алексеев Пётр" });
+    const sport = within(circles).getByRole("button", { name: "Спорт" });
+    await user.click(sport);
+    expect(sport).toHaveAttribute("aria-pressed", "true");
+    await user.click(within(circles).getByRole("button", { name: "Танцы" }));
+    await user.click(sport);
+    expect(sport).toHaveAttribute("aria-pressed", "false");
 
-    const row = screen.getByRole("row", { name: /Алексеев Пётр/ });
-    await user.type(within(row).getByRole("textbox"), "+7 911");
-    await user.click(within(row).getByLabelText("Спорт"));
-    expect(save).toBeEnabled();
+    const yesNo = screen.getByRole("group", { name: "Не посещает: Алексеев Пётр" });
+    await user.click(within(yesNo).getByRole("button", { name: "Да" }));
+    expect(within(yesNo).getByRole("button", { name: "Да" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(within(yesNo).getByRole("button", { name: "Да" }));
+    expect(within(yesNo).getByRole("button", { name: "Да" })).toHaveAttribute("aria-pressed", "false");
+  });
 
+  it("сохраняет сам через паузу одним запросом со всеми строками и пишет время", async () => {
+    const user = setup();
+    open(detail());
+    await screen.findByText("Алексеев Пётр", NAME);
     put.mockResolvedValue(detail({ status: "in_progress" }));
-    await user.click(save);
+    await user.click(within(screen.getByRole("group", { name: "Кружки: Алексеев Пётр" })).getByRole("button", { name: "Спорт" }));
+    await user.type(screen.getByRole("textbox", { name: "Телефон родителя: Алексеев Пётр" }), "+7 901");
+    expect(screen.getByText("Есть несохранённые правки")).toBeInTheDocument();
+    expect(put).not.toHaveBeenCalled();
+
+    await autosave();
+    expect(put).toHaveBeenCalledTimes(1);
     expect(put).toHaveBeenCalledWith("/tasks/assignments/5/answers", {
       group_values: {},
       rows: [
-        { student_id: 11, is_included: true, values: { f3: "+7 911", f1: ["Спорт"] } },
+        { student_id: 11, is_included: true, values: { f1: ["Спорт"], f3: "+7 901" } },
         { student_id: 12, is_included: true, values: { f3: "+7 900" } },
       ],
     });
-    expect(await screen.findByText("Черновик сохранён")).toBeInTheDocument();
+    expect(await screen.findByText("Сохранено в 10:00")).toBeInTheDocument();
     expect(screen.getByText("В работе")).toBeInTheDocument();
   });
 
-  it("снятая галочка множественного выбора убирает вариант", async () => {
-    const user = userEvent.setup();
-    open(detail({ rows: [{ student_id: 11, student_name: "Алексеев Пётр", is_included: true, values: { f1: ["Спорт", "Танцы"], f3: "1" } }] }));
-    const row = await screen.findByRole("row", { name: /Алексеев Пётр/ });
-    await user.click(within(row).getByLabelText("Танцы"));
-    put.mockResolvedValue(detail());
-    await user.click(screen.getByRole("button", { name: "Сохранить черновик" }));
-    expect(put.mock.calls[0][1]).toMatchObject({ rows: [{ values: { f1: ["Спорт"] } }] });
+  it("ошибка сохранения видна в панели и не теряет правки", async () => {
+    const user = setup();
+    open(detail());
+    await screen.findByText("Алексеев Пётр", NAME);
+    put.mockRejectedValue(new ApiError(400, "«Телефон родителя»: слишком длинный текст"));
+    await user.type(screen.getByRole("textbox", { name: "Телефон родителя: Алексеев Пётр" }), "1");
+    await autosave();
+    expect(await screen.findByText("Не сохранено: «Телефон родителя»: слишком длинный текст")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Телефон родителя: Алексеев Пётр" })).toHaveValue("1");
   });
 
-  it("отправка на проверку сначала сохраняет несохранённое, потом отправляет", async () => {
-    const user = userEvent.setup();
-    open(detail());
-    const row = await screen.findByRole("row", { name: /Алексеев Пётр/ });
-    await user.type(within(row).getByRole("textbox"), "+7 911");
-
-    put.mockResolvedValue(detail());
-    post.mockResolvedValue(detail({ status: "submitted", can_edit: false, can_submit: false }));
-    await user.click(screen.getByRole("button", { name: "Отправить на проверку" }));
-
-    await waitFor(() => expect(post).toHaveBeenCalledWith("/tasks/assignments/5/submit"));
-    expect(put).toHaveBeenCalledTimes(1);
-    expect(put.mock.invocationCallOrder[0]).toBeLessThan(post.mock.invocationCallOrder[0]);
-    expect(await screen.findByText("Отправлено на проверку")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Отправить на проверку" })).not.toBeInTheDocument();
-  });
-
-  it("без правок отправка идёт без лишнего сохранения", async () => {
-    const user = userEvent.setup();
-    open(detail());
-    post.mockResolvedValue(detail({ status: "submitted", can_edit: false, can_submit: false }));
-    await user.click(await screen.findByRole("button", { name: "Отправить на проверку" }));
-    await waitFor(() => expect(post).toHaveBeenCalled());
+  it("неверная ссылка не уходит на сервер, пока её не допишут", async () => {
+    const user = setup();
+    const fields: AssignmentDetail["fields"] = [{ key: "v", label: "Видео", type: "link", required: true, options: [] }];
+    open(detail({ collect_mode: "group", fields, rows: [] }));
+    const input = await screen.findByRole("textbox", { name: "Видео" });
+    await user.type(input, "vk.com");
+    await autosave();
     expect(put).not.toHaveBeenCalled();
+    expect(screen.getByText("Не сохранено: «Видео»: нужна ссылка вида https://…")).toBeInTheDocument();
+    expect(input).toHaveAttribute("aria-invalid", "true");
+
+    put.mockResolvedValue(detail({ collect_mode: "group", fields, rows: [], group_values: { v: "https://vk.com/v1" } }));
+    await user.clear(input);
+    await user.type(input, "https://vk.com/v1");
+    await autosave();
+    expect(put).toHaveBeenCalledWith("/tasks/assignments/5/answers", { group_values: { v: "https://vk.com/v1" }, rows: [] });
   });
 
-  it("если проверка не пускает — показывает причину и оставляет возможность править", async () => {
-    const user = userEvent.setup();
+  it("отправка держится, пока пусты обязательные поля, и объясняет почему", async () => {
     open(detail());
-    post.mockRejectedValue(new ApiError(400, "Нельзя отправить: Алексеев Пётр: не заполнено — Телефон родителя"));
-    await user.click(await screen.findByRole("button", { name: "Отправить на проверку" }));
-    expect(await screen.findByText(/не заполнено — Телефон родителя/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Отправить на проверку" })).toBeEnabled();
-    expect(window.scrollTo).toHaveBeenCalled(); // к ошибке прокручиваем, она вверху страницы
+    expect(await screen.findByText("Обязательные поля пусты у 1 студента")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Отправить на проверку" })).toBeDisabled();
   });
 
-  it("задача, принятая без проверки, сообщает об этом", async () => {
-    const user = userEvent.setup();
-    open(detail({ reviewer_rule: "none" }));
-    post.mockResolvedValue(detail({ status: "accepted", can_edit: false, can_submit: false }));
-    await user.click(await screen.findByRole("button", { name: "Отправить на проверку" }));
-    expect(await screen.findByText("Задача принята")).toBeInTheDocument();
-  });
-
-  it("в режиме только чтения поля недоступны и кнопок нет", async () => {
-    open(detail({ can_edit: false, can_submit: false, status: "submitted" }));
-    const row = await screen.findByRole("row", { name: /Алексеев Пётр/ });
-    expect(within(row).getByRole("textbox")).toBeDisabled();
-    expect(within(row).getByLabelText("Спорт")).toBeDisabled();
-    expect(screen.queryByRole("button", { name: "Сохранить черновик" })).not.toBeInTheDocument();
+  it("отправка сначала дописывает черновик, потом отправляет", async () => {
+    const user = setup();
+    open(detail());
+    await screen.findByText("Алексеев Пётр", NAME);
+    put.mockResolvedValue(detail({ status: "in_progress", rows: detail().rows.map((r) => ({ ...r, values: { f3: "+7" } })) }));
+    post.mockResolvedValue(detail({ status: "submitted", can_edit: false, can_submit: false }));
+    await user.type(screen.getByRole("textbox", { name: "Телефон родителя: Алексеев Пётр" }), "+7");
+    await user.click(screen.getByRole("button", { name: "Отправить на проверку" }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/tasks/assignments/5/submit"));
+    expect(put.mock.invocationCallOrder[0]).toBeLessThan(post.mock.invocationCallOrder[0]);
+    expect(await screen.findByText("На проверке")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Отправить на проверку" })).not.toBeInTheDocument();
   });
 
-  it("при двухступенчатой проверке показывает ступень", async () => {
-    open(detail({ status: "submitted", review_steps: 2, review_step: 2, can_edit: false, can_submit: false }));
-    expect(await screen.findByText(/На проверке \(ступень 2 из 2\)/)).toBeInTheDocument();
+  it("отказ сервера при отправке показывается, правка остаётся доступной", async () => {
+    const user = setup();
+    open(detail({ rows: [{ student_id: 12, student_name: "Андреева Елена", is_included: true, values: { f3: "+7 900" } }] }));
+    post.mockRejectedValue(new ApiError(400, "Нельзя отправить: срок закрыт"));
+    await user.click(await screen.findByRole("button", { name: "Отправить на проверку" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Нельзя отправить: срок закрыт");
+    expect(screen.getByRole("textbox", { name: "Телефон родителя: Андреева Елена" })).toBeEnabled();
+  });
+
+  it("без проверки кнопка называется «Отправить»", async () => {
+    open(detail({ reviewer_rule: "none", rows: [{ student_id: 12, student_name: "Андреева Елена", is_included: true, values: { f3: "+7" } }] }));
+    expect(await screen.findByRole("button", { name: "Отправить" })).toBeEnabled();
+    expect(screen.getByText("Заполнено: 1 из 1")).toBeInTheDocument();
+  });
+
+  it("фильтр «Не заполнены» оставляет только тех, кого осталось заполнить", async () => {
+    const user = setup();
+    open(detail());
+    await screen.findByText("Алексеев Пётр", NAME);
+    await user.click(screen.getByRole("button", { name: "Не заполнены 1" }));
+    expect(screen.getByText("Алексеев Пётр", NAME)).toBeInTheDocument();
+    expect(screen.queryByText("Андреева Елена", NAME)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Все 2" }));
+    expect(screen.getByText("Андреева Елена", NAME)).toBeInTheDocument();
+  });
+
+  it("«Заполнить столбец» ставит значение пустым строкам, а с галочкой — всем", async () => {
+    const user = setup();
+    open(detail({ rows: [...detail().rows, { student_id: 13, student_name: "Волкова Анна", is_included: true, values: { f2: false } }] }));
+    await screen.findByText("Волкова Анна", NAME);
+    await user.click(screen.getByRole("button", { name: "Заполнить столбец" }));
+    const panel = screen.getByRole("group", { name: "Заполнить столбец" });
+    await user.selectOptions(within(panel).getByRole("combobox"), "f2");
+    await user.click(within(within(panel).getByRole("group", { name: "Значение для всех: Не посещает" })).getByRole("button", { name: "Да" }));
+    await user.click(within(panel).getByRole("button", { name: "Заполнить 2 студентам" }));
+    expect(within(screen.getByRole("group", { name: "Не посещает: Алексеев Пётр" })).getByRole("button", { name: "Да" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(screen.getByRole("group", { name: "Не посещает: Волкова Анна" })).getByRole("button", { name: "Нет" })).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(screen.getByRole("button", { name: "Заполнить столбец" }));
+    const again = screen.getByRole("group", { name: "Заполнить столбец" });
+    await user.selectOptions(within(again).getByRole("combobox"), "f2");
+    await user.click(within(within(again).getByRole("group", { name: "Значение для всех: Не посещает" })).getByRole("button", { name: "Нет" }));
+    await user.click(within(again).getByRole("checkbox", { name: /Заменить и уже заполненные/ }));
+    await user.click(within(again).getByRole("button", { name: "Заполнить 3 студентам" }));
+    expect(within(screen.getByRole("group", { name: "Не посещает: Алексеев Пётр" })).getByRole("button", { name: "Нет" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("подставленное из досье помечено, пока строку не тронули", async () => {
+    const user = setup();
+    open(detail({ rows: [{ student_id: 11, student_name: "Алексеев Пётр", is_included: true, values: { f3: "+7 900" }, from_dossier: true }] }));
+    expect(await screen.findByText("из досье, проверьте")).toBeInTheDocument();
+    await user.click(within(screen.getByRole("group", { name: "Кружки: Алексеев Пётр" })).getByRole("button", { name: "Спорт" }));
+    expect(screen.queryByText("из досье, проверьте")).not.toBeInTheDocument();
+  });
+
+  it("«по выбранным»: поля появляются, когда студента отметили", async () => {
+    const user = setup();
+    open(detail({ collect_mode: "selected", rows: detail().rows.map((r) => ({ ...r, is_included: false, values: {} })) }));
+    await screen.findByText("Алексеев Пётр", NAME);
+    expect(screen.queryByRole("textbox", { name: "Телефон родителя: Алексеев Пётр" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Отправить на проверку" })).toBeEnabled();
+    await user.click(within(row("Алексеев Пётр")).getByRole("checkbox", { name: /касается/ }));
+    expect(screen.getByRole("textbox", { name: "Телефон родителя: Алексеев Пётр" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Заполнено 0 из 1" })).toBeInTheDocument();
+  });
+
+  it("никого не отметили в «по выбранным» — отправить можно (задача никого не касается)", async () => {
+    open(detail({ collect_mode: "selected", rows: detail().rows.map((r) => ({ ...r, is_included: false, values: {} })) }));
+    expect(await screen.findByRole("button", { name: "Отправить на проверку" })).toBeEnabled();
+  });
+
+  it("только чтение: значения текстом, панели отправки нет", async () => {
+    open(detail({ status: "submitted", can_edit: false, can_submit: false, rows: [{ student_id: 11, student_name: "Алексеев Пётр", is_included: true, values: { f1: ["Спорт", "Танцы"], f2: true, f3: "+7" } }] }));
+    expect(await screen.findByText("Спорт, Танцы")).toBeInTheDocument();
+    expect(screen.getByText("да")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Отправить на проверку" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Заполнить столбец" })).not.toBeInTheDocument();
+  });
+
+  it("принятое: кто и когда принял", async () => {
+    open(detail({ status: "accepted", can_edit: false, can_submit: false, reviewed_at: "2026-10-03T09:15:00", reviewed_by_name: "Зав. Отделением" }));
+    expect(await screen.findByText(/Принято 03\.10\.2026.*проверил\(а\): Зав\. Отделением/)).toBeInTheDocument();
   });
 });
 
-describe("TaskAssignmentPage — режимы сбора", () => {
-  const groupDetail = detail({
-    collect_mode: "group",
-    fields: [{ key: "f1", label: "Ссылка на видео", type: "link", required: true, options: [] }],
-    rows: [],
-  });
+describe("TaskAssignmentPage — проверка", () => {
+  const forReview = () => detail({ status: "submitted", can_edit: false, can_submit: false, can_review: true });
 
-  it("групповой ответ: поле-ссылка и сохранение group_values без строк", async () => {
-    const user = userEvent.setup();
-    open(groupDetail);
-    const input = await screen.findByPlaceholderText("https://…");
-    expect(input).toHaveAttribute("type", "url");
-    expect(screen.queryByRole("table")).not.toBeInTheDocument();
-
-    await user.type(input, "https://vk.com/video1");
-    put.mockResolvedValue(groupDetail);
-    await user.click(screen.getByRole("button", { name: "Сохранить черновик" }));
-    expect(put).toHaveBeenCalledWith("/tasks/assignments/5/answers", {
-      group_values: { f1: "https://vk.com/video1" },
-      rows: [],
-    });
-  });
-
-  it("«по выбранным»: поля студента скрыты, пока его не отметили", async () => {
-    const user = userEvent.setup();
-    open(detail({
-      collect_mode: "selected",
-      fields: [FIELDS[2]],
-      rows: [{ student_id: 11, student_name: "Алексеев Пётр", is_included: false, values: {} }],
-    }));
-    const row = await screen.findByRole("row", { name: /Алексеев Пётр/ });
-    expect(within(row).queryByRole("textbox")).not.toBeInTheDocument();
-    await user.click(within(row).getByRole("checkbox"));
-    expect(within(row).getByRole("textbox")).toBeInTheDocument();
-
-    put.mockResolvedValue(detail());
-    await user.type(within(row).getByRole("textbox"), "тема");
-    await user.click(screen.getByRole("button", { name: "Сохранить черновик" }));
-    expect(put.mock.calls[0][1]).toEqual({
-      group_values: {},
-      rows: [{ student_id: 11, is_included: true, values: { f3: "тема" } }],
-    });
-  });
-});
-
-describe("TaskAssignmentPage — проверка и комментарии", () => {
-  it("проверяющий видит панель; «Принять» отправляется без комментария", async () => {
-    const user = userEvent.setup();
-    open(detail({ status: "submitted", can_edit: false, can_submit: false, can_review: true }), "dept_head");
-    post.mockResolvedValue(detail({ status: "accepted", can_review: false, can_edit: false }));
+  it("«Принять» уходит без комментария", async () => {
+    const user = setup();
+    open(forReview(), "dept_head");
+    post.mockResolvedValue(detail({ status: "accepted", can_edit: false, can_submit: false }));
     await user.click(await screen.findByRole("button", { name: "Принять" }));
     expect(post).toHaveBeenCalledWith("/tasks/assignments/5/review", { action: "accept", comment: null });
-    // «Принято» — и в статусе, и в уведомлении об операции.
-    expect(await screen.findAllByText("Принято")).toHaveLength(2);
+    expect(await screen.findByText("Принято")).toBeInTheDocument();
   });
 
-  it("возврат уходит с комментарием", async () => {
-    const user = userEvent.setup();
-    open(detail({ status: "submitted", can_edit: false, can_submit: false, can_review: true }), "dept_head");
-    await user.type(await screen.findByPlaceholderText(/Комментарий \(обязателен/), "Допишите телефоны");
-    post.mockResolvedValue(detail({ status: "returned" }));
+  it("вернуть без комментария нельзя; с комментарием — уходит", async () => {
+    const user = setup();
+    open(forReview(), "dept_head");
+    await user.click(await screen.findByRole("button", { name: "Вернуть на доработку" }));
+    expect(post).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("без комментария вернуть нельзя");
+    post.mockResolvedValue(detail({ status: "returned", review_comment: "Нет телефона", can_edit: false, can_submit: false }));
+    await user.type(screen.getByRole("textbox", { name: "Комментарий проверяющего" }), "Нет телефона");
     await user.click(screen.getByRole("button", { name: "Вернуть на доработку" }));
-    expect(post).toHaveBeenCalledWith("/tasks/assignments/5/review", { action: "return", comment: "Допишите телефоны" });
-    expect(await screen.findByText("Возвращено на доработку")).toBeInTheDocument();
+    expect(post).toHaveBeenCalledWith("/tasks/assignments/5/review", { action: "return", comment: "Нет телефона" });
   });
 
   it("без права проверки панели нет", async () => {
-    open(detail({ status: "submitted", can_edit: false, can_submit: false, can_review: false }));
-    await screen.findByRole("heading", { name: "Кружки доп. образования" });
-    expect(screen.queryByRole("button", { name: "Принять" })).not.toBeInTheDocument();
-  });
-
-  it("комментарий к студенту уходит с student_id, а ко всему ответу — с null", async () => {
-    const user = userEvent.setup();
-    open(detail({ comments: [{ id: 1, student_id: 11, author_name: "Зав. отд.", text: "Проверьте телефон", created_at: "2026-10-01T09:00:00" }] }));
-    expect(await screen.findByText(/Проверьте телефон/)).toBeInTheDocument();
-    expect(screen.getByText(/Алексеев Пётр/, { selector: "li" })).toBeInTheDocument(); // комментарий подписан студентом
-
-    post.mockResolvedValue({});
-    await user.selectOptions(screen.getByLabelText("К кому комментарий"), "12");
-    await user.type(screen.getByPlaceholderText("Написать комментарий"), "Уточните");
-    await user.click(screen.getByRole("button", { name: "Отправить" }));
-    expect(post).toHaveBeenCalledWith("/tasks/assignments/5/comments", { text: "Уточните", student_id: 12 });
-
-    await waitFor(() => expect(screen.getByLabelText("К кому комментарий")).toHaveValue(""));
-    await user.type(screen.getByPlaceholderText("Написать комментарий"), "Общее");
-    await user.click(screen.getByRole("button", { name: "Отправить" }));
-    expect(post).toHaveBeenLastCalledWith("/tasks/assignments/5/comments", { text: "Общее", student_id: null });
-  });
-
-  it("у группового ответа нет выбора студента для комментария", async () => {
-    open(detail({ collect_mode: "group", rows: [], fields: [{ key: "f1", label: "Сдано", type: "bool", required: false, options: [] }] }));
-    await screen.findByRole("heading", { name: "Кружки доп. образования" });
-    expect(screen.queryByLabelText("К кому комментарий")).not.toBeInTheDocument();
-  });
-
-  it("если задачу не загрузить, показывает ошибку сервера", async () => {
-    get.mockRejectedValue(new ApiError(403, "Нет доступа к этой задаче"));
-    renderPage(<TaskAssignmentPage />, { route: "/tasks/assignment/5", path: "/tasks/assignment/:assignmentId" });
-    expect(await screen.findByText("Нет доступа к этой задаче")).toBeInTheDocument();
+    open(detail());
+    await screen.findByText("Алексеев Пётр", NAME);
+    expect(screen.queryByRole("region", { name: "Проверка" })).not.toBeInTheDocument();
   });
 });
 
-
-describe("TaskAssignmentPage — ход проверки", () => {
-  it("показывает, кто и когда отправил, вернул и принял, с номером ступени", async () => {
-    open(detail({
-      status: "accepted", can_edit: false, can_submit: false, review_steps: 2, review_step: 1,
-      reviewed_at: "2026-10-03T12:30:00", reviewed_by_name: "Петрова Н.",
-      history: [
-        { kind: "submitted", user_name: "Иванова А.", at: "2026-10-01T09:00:00", step: null },
-        { kind: "returned", user_name: "Сидоров С.", at: "2026-10-01T10:00:00", step: 1 },
-        { kind: "accepted", user_name: "Сидоров С.", at: "2026-10-02T11:00:00", step: 1 },
-        { kind: "accepted", user_name: "Петрова Н.", at: "2026-10-03T12:30:00", step: 2 },
-      ],
-    }));
-    expect(await screen.findByRole("heading", { name: "Ход проверки" })).toBeInTheDocument();
-    const items = screen.getAllByRole("listitem").filter((li) => /Отправлено|Принято|Возвращено/.test(li.textContent ?? ""));
-    expect(items.map((li) => li.textContent)).toEqual([
-      expect.stringMatching(/Отправлено на проверку · Иванова А\./),
-      expect.stringMatching(/Возвращено на доработку \(ступень 1 из 2\) · Сидоров С\./),
-      expect.stringMatching(/Принято \(ступень 1 из 2\) · Сидоров С\./),
-      expect.stringMatching(/Принято \(ступень 2 из 2\) · Петрова Н\./),
-    ]);
-    expect(screen.getByText(/проверил\(а\): Петрова Н\./)).toBeInTheDocument();
+describe("TaskAssignmentPage — обсуждение", () => {
+  it("ход проверки и комментарии — одной лентой по времени", async () => {
+    open(
+      detail({
+        status: "returned",
+        review_steps: 2,
+        history: [
+          { kind: "submitted", user_name: "Иванова А. И.", at: "2026-10-01T08:00:00", step: null },
+          { kind: "returned", user_name: "Зав. Отделением", at: "2026-10-02T09:00:00", step: 1 },
+        ],
+        comments: [{ id: 1, student_id: null, author_name: "Зав. Отделением", text: "Проверьте телефоны", created_at: "2026-10-01T12:00:00" }],
+      })
+    );
+    const thread = await screen.findByRole("region", { name: "Обсуждение" });
+    const items = within(thread).getAllByRole("listitem").map((li) => li.textContent);
+    expect(items[0]).toContain("Отправлено на проверку");
+    expect(items[1]).toContain("Проверьте телефоны");
+    expect(items[2]).toContain("Возвращено на доработку (ступень 1 из 2)");
+    expect(items[2]).toContain("Зав. Отделением");
   });
 
-  it("принятое без проверки помечено как автоматическое", async () => {
-    open(detail({
-      status: "accepted", can_edit: false, can_submit: false, reviewed_at: "2026-10-03T12:30:00", reviewed_by_name: null,
-      history: [
-        { kind: "submitted", user_name: "Иванова А.", at: "2026-10-03T12:30:00", step: null },
-        { kind: "auto_accepted", user_name: null, at: "2026-10-03T12:30:00", step: null },
-      ],
-    }));
-    expect(await screen.findByText(/Принято автоматически/)).toBeInTheDocument();
-    expect(screen.getByText(/без проверки/)).toBeInTheDocument();
+  it("замечание к студенту видно в его строке и даёт фильтр", async () => {
+    const user = setup();
+    open(detail({ comments: [{ id: 1, student_id: 12, author_name: "Зав.", text: "Уточните телефон", created_at: "2026-10-01T12:00:00" }] }));
+    expect(await screen.findByText("Замечание: Уточните телефон")).toBeInTheDocument();
+    expect(row("Андреева Елена")).toHaveClass("is-flagged");
+    await user.click(screen.getByRole("button", { name: "С замечаниями 1" }));
+    expect(screen.queryByText("Алексеев Пётр", NAME)).not.toBeInTheDocument();
   });
 
-  it("пока истории нет — раздела нет, а «Принято…» не показывается у неотправленной", async () => {
+  it("комментарий к студенту уходит с student_id, ко всему ответу — с null; лента обновляется", async () => {
+    const user = setup();
     open(detail());
-    await screen.findByRole("heading", { name: "Кружки доп. образования" });
-    expect(screen.queryByRole("heading", { name: "Ход проверки" })).not.toBeInTheDocument();
-    expect(screen.queryByText(/проверил\(а\)/)).not.toBeInTheDocument();
+    await screen.findByText("Алексеев Пётр", NAME);
+    post.mockResolvedValue({});
+    const fresh = detail({ comments: [{ id: 9, student_id: 11, author_name: "Тестов Тест", text: "Нет справки", created_at: "2026-10-04T07:00:00" }] });
+    get.mockResolvedValue(fresh);
+    await user.selectOptions(screen.getByRole("combobox", { name: "К кому комментарий" }), "11");
+    await user.type(screen.getByRole("textbox", { name: "Комментарий" }), "Нет справки");
+    await user.click(screen.getByRole("button", { name: "Отправить комментарий" }));
+    expect(post).toHaveBeenCalledWith("/tasks/assignments/5/comments", { text: "Нет справки", student_id: 11 });
+    const thread = screen.getByRole("region", { name: "Обсуждение" });
+    expect(await within(thread).findByText("Нет справки")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Комментарий" })).toHaveValue("");
+
+    await user.type(screen.getByRole("textbox", { name: "Комментарий" }), "Всё ясно");
+    await user.click(screen.getByRole("button", { name: "Отправить комментарий" }));
+    expect(post).toHaveBeenLastCalledWith("/tasks/assignments/5/comments", { text: "Всё ясно", student_id: null });
+  });
+
+  it("у группового ответа нет выбора студента", async () => {
+    open(detail({ collect_mode: "group", rows: [] }));
+    await screen.findByRole("region", { name: "Обсуждение" });
+    expect(screen.queryByRole("combobox", { name: "К кому комментарий" })).not.toBeInTheDocument();
+  });
+});
+
+describe("TaskAssignmentPage — черновик при уходе", () => {
+  afterEach(() => sessionStorage.clear());
+
+  it("несохранённые правки сохраняются во вкладке и подставляются при возвращении", async () => {
+    const user = setup();
+    put.mockRejectedValue(new ApiError(0, "нет связи"));
+    const first = open(detail());
+    await screen.findByText("Алексеев Пётр", NAME);
+    await user.type(screen.getByRole("textbox", { name: "Телефон родителя: Алексеев Пётр" }), "+7 905");
+    await autosave();
+    expect(await screen.findByText(/Не сохранено/)).toBeInTheDocument();
+    first.unmount();
+
+    put.mockResolvedValue(detail({ status: "in_progress" }));
+    open(detail());
+    expect(await screen.findByRole("textbox", { name: "Телефон родителя: Алексеев Пётр" })).toHaveValue("+7 905");
+    await autosave();
+    expect(put).toHaveBeenLastCalledWith("/tasks/assignments/5/answers", expect.objectContaining({
+      rows: expect.arrayContaining([expect.objectContaining({ student_id: 11, values: { f3: "+7 905" } })]),
+    }));
+    await waitFor(() => expect(sessionStorage.getItem("task-draft-5")).toBeNull());
+  });
+
+  it("у отправленного ответа старый черновик не подставляется и удаляется", async () => {
+    sessionStorage.setItem("task-draft-5", JSON.stringify({ rows: { 11: { is_included: true, values: { f3: "старое" } } }, groupValues: {} }));
+    open(detail({ status: "submitted", can_edit: false, can_submit: false }));
+    await screen.findByText("Алексеев Пётр", NAME);
+    expect(screen.queryByText("старое")).not.toBeInTheDocument();
+    expect(sessionStorage.getItem("task-draft-5")).toBeNull();
   });
 });

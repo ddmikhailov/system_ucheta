@@ -1,0 +1,185 @@
+/* Значки статусов, кнопки по роли, свои диалоги и всплывающие сообщения.
+   Вынесено из index.css (этап 13); подключается в main.tsx после index.css — порядок файлов = порядок правил. */
+
+/* --- Значок статуса задачи (StatusMark) --- */
+
+.status-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
+}
+
+.status-mark svg {
+  flex: none;
+  display: block;
+}
+
+.status-mark__label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.status-mark--overdue .status-mark__label,
+.status-mark--returned .status-mark__label {
+  color: var(--hot);
+}
+
+.status-mark--locked .status-mark__label,
+.status-mark--new .status-mark__label {
+  color: var(--muted);
+}
+
+.status-mark--accepted .status-mark__label {
+  color: var(--ok);
+}
+
+.sm-fill-hot { fill: var(--hot); }
+.sm-stroke-hot { stroke: var(--hot); }
+.sm-fill-violet { fill: var(--primary); }
+.sm-stroke-violet { stroke: var(--primary); }
+.sm-fill-ok { fill: var(--ok); }
+.sm-fill-idle { fill: var(--idle); }
+.sm-stroke-idle { stroke: var(--idle); }
+.sm-on-fill { stroke: var(--on-fill); }
+.sm-on-fill-dot { fill: var(--on-fill); }
+
+/* --- Кнопки по роли (используются новыми экранами; старые полагаются на правило «последняя кнопка») --- */
+
+button.btn-primary,
+form button.btn-primary[type="submit"] {
+  background: var(--brand-gradient);
+  color: #fff;
+  border-color: transparent;
+}
+
+button.btn-primary:disabled,
+button.btn-danger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button.btn-secondary {
+  background: var(--card-bg);
+  color: var(--text);
+}
+
+button.btn-danger,
+form button.btn-danger[type="submit"] {
+  background: var(--danger);
+  color: var(--on-fill);
+  border-color: var(--danger);
+}
+
+button.btn-danger:hover:not(:disabled) {
+  filter: brightness(1.08);
+  border-color: var(--danger);
+}
+
+/* --- Диалоги и сообщения (FeedbackHost) --- */
+
+.feedback-backdrop {
+  z-index: 40;
+}
+
+.feedback-dialog {
+  max-width: 420px;
+}
+
+.feedback-dialog__message {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
+.feedback-dialog input {
+  width: 100%;
+}
+
+.feedback-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.toast-stack {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--bottom-nav-offset, 0px) + 16px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: min(440px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 10px 10px 16px;
+  border-radius: 12px;
+  background: var(--toast-bg);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: var(--shadow-md);
+  animation: toast-in 0.18s ease-out;
+}
+
+.toast span {
+  flex: 1;
+}
+
+.toast--ok {
+  background: var(--toast-ok);
+}
+
+.toast--error {
+  background: var(--danger);
+  color: var(--on-fill);
+}
+
+.toast__close {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px 8px;
+  opacity: 0.8;
+}
+
+.toast__close:hover:not(:disabled) {
+  box-shadow: none;
+  opacity: 1;
+}
+
+@keyframes toast-in {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+button.link-btn.danger-link {
+  color: var(--danger);
+}

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../api/client";
 import type { StudentDayAttendance, StudentMonthAttendance } from "../api/types";
+import GroupRhythm from "./GroupRhythm";
+import type { RhythmItem } from "./GroupRhythm";
 
 const WEEKDAYS = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
 
@@ -36,6 +38,15 @@ function statusText(day: StudentDayAttendance): string {
     default:
       return NONWORKING_LABELS[day.day_type] ?? "—";
   }
+}
+
+/** День студента в «ритме»: тот же язык, что у ритма группы, плюс отсутствие по уважительной причине. */
+function rhythmItem(day: StudentDayAttendance): RhythmItem {
+  const base = { date: day.date, title: statusText(day) };
+  if (day.status === "none") return { ...base, kind: "off" };
+  if (day.status === "not_submitted") return { ...base, kind: "missing" };
+  if (day.status === "mark" && day.counts_as_present === false) return { ...base, kind: day.is_excused ? "excused" : "absent" };
+  return { ...base, kind: "ok" };
 }
 
 function rowClass(day: StudentDayAttendance): string {
@@ -122,6 +133,15 @@ export default function StudentMonthAttendanceView({ studentId }: { studentId: n
           {summary.not_submitted > 0 && ` · не сдано группой: ${summary.not_submitted}`}
           {summary.percent !== null && ` · посещаемость: ${summary.percent}%`}
         </p>
+      )}
+
+      {data && data.days.length > 0 && (
+        <div className="journal-rhythm">
+          <GroupRhythm
+            days={data.days.map(rhythmItem)}
+            label={`Ритм за ${monthLabel(cursor.year, cursor.month).toLowerCase()}: присутствовал ${summary?.present ?? 0}, без причины отсутствовал ${summary?.absent_unexcused ?? 0}, по уважительной ${summary?.absent_excused ?? 0}`}
+          />
+        </div>
       )}
 
       {data && (

@@ -7,6 +7,7 @@ import { useEscapeKey } from "../../hooks/useEscapeKey";
 import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { DeleteResult, DepartmentAdmin, SetPasswordResult, UserAdmin } from "../../api/types";
 import { DEPARTMENT_REQUIRED_ROLES, DEPARTMENT_SCOPED_ROLES, ROLE, ROLE_LABELS, assignableRoles, inRoles, type RoleCode } from "../../constants/roles";
+import { dialogs } from "../../utils/feedback";
 
 function roleDisplay(u: UserAdmin): string {
   return ROLE_LABELS[u.role as RoleCode] || u.role;
@@ -373,7 +374,7 @@ function UserProfileModal({
   }
 
   async function removeUser() {
-    if (!window.confirm(`Удалить пользователя «${user.full_name}» насовсем?`)) return;
+    if (!(await dialogs.confirm(`Удалить пользователя «${user.full_name}» насовсем?`, { confirmLabel: "Удалить", danger: true }))) return;
     setError(null);
     try {
       const res = await api.delete<DeleteResult>(`/admin/users/${user.id}`);

@@ -20,8 +20,8 @@ beforeEach(() => {
 /** Названия пунктов основного меню в порядке показа. */
 function menu(role: string, groups: { id: number; code: string; course: number }[] = []) {
   renderPage(<Layout><div>содержимое</div></Layout>, { role, user: { groups } });
-  const nav = document.querySelector(".app-header__nav") as HTMLElement;
-  return within(nav).queryAllByRole("link").map((a) => a.textContent);
+  const nav = screen.getByRole("navigation", { name: "Разделы" });
+  return within(nav).queryAllByRole("link").map((a) => a.querySelector(".nav-link__label")?.textContent);
 }
 
 describe("Layout — меню по ролям", () => {
@@ -67,6 +67,43 @@ describe("Layout — меню по ролям", () => {
     const nav = screen.getByRole("navigation", { name: "Разделы" });
     expect(within(nav).queryByText("Выйти")).not.toBeInTheDocument();
     expect(within(nav).queryByText("Сменить пароль")).not.toBeInTheDocument();
+  });
+});
+
+describe("Layout — нижняя панель и счётчики", () => {
+  function tabbar(role: string) {
+    renderPage(<Layout><div /></Layout>, { role });
+    return screen.getByRole("navigation", { name: "Быстрые разделы" });
+  }
+
+  it("куратор: три раздела и «Ещё» с остальными", async () => {
+    const user = userEvent.setup();
+    const bar = tabbar("curator");
+    expect(within(bar).getAllByRole("link").map((a) => a.textContent)).toEqual(["Мой день", "Группы", "Задачи"]);
+    await user.click(within(bar).getByRole("button", { name: "Ещё" }));
+    const sheet = screen.getByRole("dialog", { name: "Все разделы" });
+    expect(within(sheet).getAllByRole("link").map((a) => a.textContent)).toEqual(["Соц. паспорт", "Индивидуальная работа"]);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Все разделы" })).not.toBeInTheDocument();
+  });
+
+  it("четыре раздела и меньше — без «Ещё»", () => {
+    const bar = tabbar("social_pedagogue");
+    expect(within(bar).getAllByRole("link")).toHaveLength(4);
+    expect(within(bar).queryByRole("button", { name: "Ещё" })).not.toBeInTheDocument();
+  });
+
+  it("счётчики на пунктах: дела на сегодня, задачи, проверка", async () => {
+    get.mockImplementation(async (path: string) => {
+      if (path === "/my-day/counters") return { my_day: 3, my_tasks: 2, review: 0 };
+      if (path === "/notifications/unread-count") return { unread: 0 };
+      return [];
+    });
+    renderPage(<Layout><div /></Layout>, { role: "curator" });
+    const nav = screen.getByRole("navigation", { name: "Разделы" });
+    expect(await within(nav).findByText("3 дел на сегодня")).toBeInTheDocument();
+    expect(within(nav).getByText("2 задач требуют внимания")).toBeInTheDocument();
+    expect(within(nav).queryByText(/ждут проверки/)).not.toBeInTheDocument();
   });
 });
 

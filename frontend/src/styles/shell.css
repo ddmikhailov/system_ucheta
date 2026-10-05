@@ -1,0 +1,247 @@
+/* Оболочка: боковое меню, нижняя панель на телефоне, лист «Ещё».
+   Вынесено из index.css (этап 13); подключается в main.tsx после index.css — порядок файлов = порядок правил. */
+
+/* --- Оболочка (этап 13): боковое меню на десктопе, нижняя панель на телефоне --- */
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.app-sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  background: var(--card-bg);
+  border-right: 1px solid var(--border);
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.app-sidebar__logo img,
+.app-topbar__logo img {
+  height: 34px;
+  width: auto;
+  display: block;
+}
+
+.app-sidebar__logo {
+  padding: 0 8px;
+}
+
+.app-nav {
+  display: grid;
+  gap: 2px;
+}
+
+.nav-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 14px;
+  border-radius: 8px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.nav-link--side {
+  padding: 9px 12px;
+}
+
+.nav-link--side:hover {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.nav-link--side.active {
+  background: var(--brand-gradient);
+  color: #fff;
+}
+
+.nav-link__label {
+  flex: 1;
+  min-width: 0;
+}
+
+.nav-icon {
+  flex: none;
+}
+
+.nav-badge {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--hot);
+  color: var(--on-fill);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.nav-link.active .nav-badge {
+  background: var(--card-bg);
+  color: var(--primary);
+}
+
+.app-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-topbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 24px;
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.app-topbar__logo {
+  display: none;
+}
+
+.app-tabbar {
+  display: none;
+}
+
+.more-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: rgba(28, 25, 48, 0.35);
+  display: flex;
+  align-items: flex-end;
+}
+
+.more-sheet {
+  width: 100%;
+  background: var(--card-bg);
+  border-radius: 16px 16px 0 0;
+  padding: 12px 12px calc(var(--bottom-nav-offset, 0px) + 12px);
+  display: grid;
+  gap: 2px;
+  animation: sheet-in 0.18s ease-out;
+}
+
+.nav-link--sheet {
+  padding: 12px;
+  font-size: 15px;
+}
+
+.nav-link--sheet.active {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  :root {
+    --bottom-nav-offset: calc(62px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .app-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-sidebar {
+    display: none;
+  }
+
+  .app-topbar {
+    justify-content: space-between;
+    padding: 8px 14px;
+  }
+
+  .app-topbar__logo {
+    display: block;
+  }
+
+  .app-main {
+    padding-bottom: calc(var(--bottom-nav-offset) + 16px);
+  }
+
+  .app-tabbar {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 25;
+    background: var(--card-bg);
+    border-top: 1px solid var(--border);
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -4px 16px rgba(28, 25, 48, 0.06);
+  }
+
+  .nav-link--tab {
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    padding: 4px 2px;
+    min-height: 50px;
+    font-size: 11px;
+    border: 0;
+    background: transparent;
+    font-family: inherit;
+  }
+
+  button.nav-link--tab:hover:not(:disabled) {
+    box-shadow: none;
+  }
+
+  .nav-link--tab .nav-link__label {
+    flex: none;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  .nav-link--tab.active {
+    color: var(--primary);
+  }
+
+  .nav-link--tab.active .nav-icon {
+    stroke-width: 2.2;
+  }
+
+  .nav-link--tab .nav-badge {
+    position: absolute;
+    top: 0;
+    left: calc(50% + 6px);
+    min-width: 18px;
+    padding: 0 5px;
+    font-size: 10px;
+  }
+
+  .nav-link--tab.active .nav-badge {
+    background: var(--hot);
+    color: var(--on-fill);
+  }
+
+  /* Липкие панели действий встают над нижним меню, а не под него. */
+  .submit-bar,
+  .actions-sticky-mobile {
+    bottom: var(--bottom-nav-offset);
+  }
+}

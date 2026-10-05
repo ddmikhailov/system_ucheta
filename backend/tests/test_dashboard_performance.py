@@ -137,3 +137,29 @@ def test_roster_does_not_query_per_student(busy, db, today):
     with count_queries(db) as q:
         roster = attendance_service.get_roster(db, group.id, today)
     assert len(roster["entries"]) >= 20 and q["n"] <= 15, q["n"]
+
+
+def test_day_stats_bulk_is_zero_on_days_without_classes(imported, db, today):
+    """Отметки, оставшиеся на дне без занятий (воскресенье, день, объявленный нерабочим задним числом), не
+    попадают в «День по колледжу» — так же, как в построчном расчёте. Раньше тест выше падал по понедельникам:
+    в его окно попадала суббота, а быстрый расчёт её не отсекал."""
+    admin = db.query(User).filter_by(username="admin").one()
+    n_code = db.query(MarkCode).filter_by(code="н").one()
+    group = db.query(StudyGroup).order_by(StudyGroup.code).first()
+    student = db.query(Student).filter_by(study_group_id=group.id).order_by(Student.id).first()
+    sunday = today - datetime.timedelta(days=(today.weekday() + 1) % 7 or 7)
+    weekday = today
+    for day in (sunday, weekday):
+        db.add(DaySubmission(study_group_id=group.id, date=day, submitted_by_user_id=admin.id))
+        db.add(AttendanceMark(student_id=student.id, date=day, created_by_user_id=admin.id, mark_code_id=n_code.id))
+    db.commit()
+
+    assert stats_service.compute_day_stats_bulk(db, weekday, [group.id])[group.id].absent_unexcused == 1
+    fast = stats_service.compute_day_stats_bulk(db, sunday, [group.id])[group.id]
+    slow = stats_service.compute_period_stats(db, sunday, sunday, study_group_id=group.id)
+    assert (fast.in_list, fast.absent_total) == (slow.in_list, slow.absent_total) == (0, 0)
+
+    db.add(GroupCalendarOverride(study_group_id=group.id, date=weekday, day_type=DayType.HOLIDAY))
+    db.commit()
+    fast = stats_service.compute_day_stats_bulk(db, weekday, [group.id])[group.id]
+    assert (fast.in_list, fast.absent_total) == (0, 0)

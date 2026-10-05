@@ -1,0 +1,64 @@
+/* Доступность и ритм в журнале группы и карточке студента.
+   Вынесено из index.css (этап 13); подключается в main.tsx после index.css — порядок файлов = порядок правил. */
+
+/* --- Доступность (этап 13, ревью интерфейса) --- */
+
+/* Текст только для экранного диктора. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.field-card__name {
+  flex: 1 1 200px;
+}
+
+.field-card__name input,
+.field-card > .form-field input {
+  width: 100%;
+}
+
+.thread__form {
+  align-items: flex-end;
+}
+
+.thread__field {
+  flex: 1 1 220px;
+}
+
+.thread__field input {
+  width: 100%;
+}
+
+@media (max-width: 640px) {
+  /* Чипы выбора и «Да/Нет» — цель касания не меньше 44 px. */
+  .choice-chips button,
+  .choice-seg button {
+    min-height: 44px;
+  }
+}
+
+/* Ритм в журнале группы и в карточке студента */
+.journal-rhythm {
+  display: grid;
+  gap: 4px;
+  margin: 4px 0 14px;
+  max-width: 560px;
+}
+
+.journal-rhythm .hint {
+  margin: 0;
+}
+
+.rhythm__day--excused {
+  background: var(--brand-purple);
+  opacity: 0.45;
+  height: 62%;
+}

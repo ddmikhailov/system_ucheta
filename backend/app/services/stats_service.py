@@ -226,12 +226,18 @@ def compute_day_stats_bulk(db: Session, day: datetime.date, group_ids: list[int]
     stats = {gid: PeriodStats() for gid in group_ids}
     if not group_ids:
         return stats
+    # Как в построчном расчёте: если у группы в этот день занятий нет (выходной по её курсу, праздник,
+    # день, объявленный нерабочим задним числом), её числа — нули, даже если отметки в базе остались.
+    groups = db.execute(select(StudyGroup).where(StudyGroup.id.in_(group_ids))).scalars().all()
+    studying = {gid for gid, days in calendar_service.study_days_by_group(db, day, day, groups).items() if days}
+    if not studying:
+        return stats
 
     members = db.execute(
         select(StudentGroupMembership.study_group_id, Student.id, Student.enrolled_at, Student.left_at)
         .join(Student, Student.id == StudentGroupMembership.student_id)
         .where(
-            StudentGroupMembership.study_group_id.in_(group_ids),
+            StudentGroupMembership.study_group_id.in_(studying),
             StudentGroupMembership.start_date <= day,
             (StudentGroupMembership.end_date.is_(None)) | (StudentGroupMembership.end_date >= day),
         )

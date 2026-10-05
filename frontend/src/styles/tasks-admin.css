@@ -1,0 +1,567 @@
+/* Раздел «Задачи» у администрации: список, карта групп, сводка, режим проверки.
+   Вынесено из index.css (этап 13); подключается в main.tsx после index.css — порядок файлов = порядок правил. */
+
+/* --- Раздел «Задачи» у администрации (этап 13) --- */
+
+.tasks-page {
+  max-width: 1000px;
+}
+
+.tasks-page .tabs {
+  margin-top: 4px;
+}
+
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.filter-chips button.chip.active {
+  background: var(--inverse-bg);
+  color: var(--inverse-fg);
+  border-color: var(--inverse-bg);
+}
+
+.task-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.task-list__item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px 130px;
+  gap: 16px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 8px;
+}
+
+.task-list__item + .task-list__item {
+  border-top: 1px solid var(--border);
+}
+
+.task-list__item:hover {
+  background: var(--primary-light);
+}
+
+.task-list__item.is-closed {
+  opacity: 0.65;
+}
+
+button.task-list__title {
+  border: 0;
+  background: none;
+  padding: 0;
+  text-align: left;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+button.task-list__title:hover:not(:disabled) {
+  box-shadow: none;
+  color: var(--primary);
+}
+
+.progress-strip {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.progress-strip__bar {
+  display: flex;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--sunken);
+  gap: 1px;
+}
+
+.progress-strip__bar i,
+.progress-strip__legend i {
+  display: block;
+  min-width: 3px;
+}
+
+.seg-accepted { background: var(--ok); }
+.seg-submitted { background: var(--primary-fill); }
+.seg-in_progress { background: var(--seg-progress); }
+.seg-returned { background: var(--hot); }
+.seg-new { background: var(--seg-new); }
+
+.progress-strip__text {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-strip__overdue {
+  color: var(--hot);
+  font-weight: 700;
+}
+
+.progress-strip__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.progress-strip__legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.progress-strip__legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+/* Карточка задачи */
+.task-view {
+  max-width: 1000px;
+}
+
+.task-view__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.task-view__title {
+  min-width: 0;
+  flex: 1 1 360px;
+}
+
+.task-view__title h2 {
+  margin: 4px 0 6px;
+  text-wrap: balance;
+}
+
+.task-view__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.task-view__fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.task-view__fields .hint {
+  margin: 0;
+}
+
+.field-chip {
+  display: inline-flex;
+  gap: 4px;
+  align-items: baseline;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--sunken);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.task-view__tabs {
+  margin: 16px 0 12px;
+}
+
+.task-view .progress-strip {
+  max-width: 520px;
+}
+
+.more-menu {
+  position: relative;
+}
+
+.more-menu > summary {
+  list-style: none;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.more-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.more-menu > summary::after {
+  content: " ▾";
+  color: var(--muted);
+}
+
+.more-menu__panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  min-width: 220px;
+  display: grid;
+  padding: 6px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+}
+
+.more-menu__panel button {
+  border: 0;
+  text-align: left;
+  font-weight: 500;
+  padding: 10px 12px;
+}
+
+.more-menu__panel button:hover:not(:disabled) {
+  background: var(--primary-light);
+  box-shadow: none;
+}
+
+.more-menu__panel button.danger-link {
+  color: var(--danger);
+}
+
+.steps-chain {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0;
+  margin: 0 0 10px;
+}
+
+.steps-chain li {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card-bg);
+  font-size: 13px;
+}
+
+.steps-chain li .hint {
+  margin: 0;
+  font-size: 12px;
+}
+
+.steps-chain li.is-current {
+  border-color: var(--primary);
+}
+
+/* Карта групп */
+.group-map {
+  display: grid;
+  gap: 10px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.group-map__row {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.group-map__course {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  padding-top: 8px;
+}
+
+.group-map__tiles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 6px;
+}
+
+.group-tile {
+  display: block;
+  padding: 8px 4px;
+  border-radius: 8px;
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+  transition: transform 0.1s ease;
+}
+
+a.group-tile:hover {
+  transform: translateY(-1px);
+}
+
+a.group-tile:focus-visible {
+  outline: 2px solid var(--brand-purple);
+  outline-offset: 2px;
+}
+
+.group-tile--accepted { background: var(--ok); color: var(--on-fill); }
+.group-tile--submitted { background: var(--primary-fill); color: #fff; }
+.group-tile--in_progress { background: var(--tile-progress); color: var(--primary-dark); }
+.group-tile--returned { background: var(--hot-bg); color: var(--hot); box-shadow: inset 0 0 0 1.5px var(--hot); }
+.group-tile--new { background: var(--sunken); color: var(--muted); }
+.group-tile--overdue { background: var(--hot); color: var(--on-fill); }
+.group-tile--locked { background: transparent; color: var(--idle); box-shadow: inset 0 0 0 1px var(--border); }
+
+.group-map__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 12px;
+  color: var(--muted);
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.group-map__legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.group-map__legend i {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+/* Сводка ответов */
+.answers-summary {
+  display: grid;
+  gap: 12px;
+}
+
+.answers-summary__field {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+
+.answers-summary__field h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.answers-summary__field ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.answers-summary__field li {
+  display: grid;
+  grid-template-columns: minmax(90px, 200px) minmax(0, 1fr) 48px;
+  gap: 10px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.answers-summary__field li b {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.answers-summary__meter > i {
+  background: var(--brand-purple);
+}
+
+/* Режим проверки */
+.review-mode {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 0;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  min-height: 360px;
+}
+
+.review-mode__queue {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  border-right: 1px solid var(--border);
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.review-mode__queue button {
+  width: 100%;
+  display: grid;
+  gap: 1px;
+  text-align: left;
+  border: 0;
+  padding: 8px 10px;
+  font-weight: 500;
+  background: transparent;
+}
+
+.review-mode__queue button span {
+  font-size: 13px;
+}
+
+.review-mode__queue button small {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.review-mode__queue button.is-current {
+  background: var(--primary-light);
+}
+
+.review-mode__queue button:hover:not(:disabled) {
+  box-shadow: none;
+  background: var(--primary-light);
+}
+
+.review-mode__pane {
+  padding: 14px 18px;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  min-width: 0;
+}
+
+.review-mode__head h3 {
+  margin: 0 0 4px;
+}
+
+.review-mode__decide {
+  display: grid;
+  gap: 8px;
+}
+
+.review-mode__decide textarea {
+  width: 100%;
+}
+
+.review-mode__group {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.review-mode__group dt {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.review-mode__group dd {
+  margin: 2px 0 0;
+  word-break: break-word;
+}
+
+kbd {
+  font: 600 11px var(--font-text);
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 0 4px;
+  opacity: 0.7;
+}
+
+@media (max-width: 640px) {
+  .task-list__item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 12px;
+  }
+
+  .task-list__item .progress-strip {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .task-list__item .inbox-row__due {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .task-view__actions {
+    width: 100%;
+  }
+
+  .task-view__actions .btn-primary {
+    flex: 1 1 100%;
+  }
+
+  .group-map {
+    padding: 10px;
+  }
+
+  .group-map__row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .group-map__course {
+    padding-top: 0;
+  }
+
+  .group-map__tiles {
+    grid-template-columns: repeat(auto-fill, minmax(68px, 1fr));
+  }
+
+  .answers-summary__field li {
+    grid-template-columns: minmax(80px, 1fr) 80px 36px;
+  }
+
+  .review-mode {
+    grid-template-columns: 1fr;
+  }
+
+  .review-mode__queue {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(180px, 70%);
+    overflow-x: auto;
+    max-height: none;
+  }
+
+  .review-mode kbd {
+    display: none;
+  }
+}

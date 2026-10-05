@@ -13,6 +13,7 @@ import { useScrollToTopOnChange } from "../hooks/useScrollToTopOnChange";
 import type { DeleteResult, StudentCard, StudyGroupAdmin } from "../api/types";
 import { formatDateRu, todayIso } from "../utils/date";
 import SearchSelect from "../components/SearchSelect";
+import { dialogs } from "../utils/feedback";
 
 // Личная карточка студента: вся информация на одном экране и всё управление
 // им (правка ФИО, перевод в другую группу, статус обучения, удаление).
@@ -242,10 +243,11 @@ function ManageSection({
     e.preventDefault();
     if (
       groupChanged &&
-      !window.confirm(
+      !(await dialogs.confirm(
         `Перевести студента в группу «${targetGroupCode}»? Перевод действует с сегодняшнего дня, ` +
-          "прошлая посещаемость останется в прежней группе."
-      )
+          "прошлая посещаемость останется в прежней группе.",
+        { confirmLabel: "Перевести" }
+      ))
     )
       return;
     setBusy(true);
@@ -268,7 +270,7 @@ function ManageSection({
 
   async function saveStatus() {
     if (status === card.status) return;
-    if (!window.confirm(`Сменить статус на «${STUDENT_STATUS_LABELS[status] ?? status}»?`)) return;
+    if (!(await dialogs.confirm(`Сменить статус на «${STUDENT_STATUS_LABELS[status] ?? status}»?`, { confirmLabel: "Сменить статус" }))) return;
     setBusy(true);
     setError(null);
     try {
@@ -286,7 +288,7 @@ function ManageSection({
   }
 
   async function removeStudent() {
-    if (!window.confirm(`Удалить студента «${card.full_name}» насовсем?`)) return;
+    if (!(await dialogs.confirm(`Удалить студента «${card.full_name}» насовсем?`, { confirmLabel: "Удалить", danger: true }))) return;
     setBusy(true);
     setError(null);
     try {

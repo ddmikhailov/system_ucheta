@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, ApiError } from "../api/client";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import type { CuratorDaysRead } from "../api/types";
-import { formatDateRu } from "../utils/date";
+import { formatDateRu, formatDayMonthRu } from "../utils/date";
 
 const STATUS_LABELS: Record<string, string> = {
   on_time: "вовремя",
@@ -22,7 +22,7 @@ function weekday(iso: string): string {
 function formatSubmitted(localIso: string, dayIso: string): string {
   const [date, time] = localIso.split("T");
   const hhmm = time.slice(0, 5);
-  return date === dayIso ? hhmm : `${formatDateRu(date).slice(0, 5)} ${hhmm}`;
+  return date === dayIso ? hhmm : `${formatDayMonthRu(date)} ${hhmm}`;
 }
 
 /** Разбор дисциплины одной группы по дням — только для зав. отделением:

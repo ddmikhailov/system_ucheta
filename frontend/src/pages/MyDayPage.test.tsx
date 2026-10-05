@@ -1,9 +1,11 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "../api/client";
 import type { MyDay } from "../api/types";
 import { renderPage } from "../test/utils";
+import FeedbackHost from "../components/FeedbackHost";
+import { resetFeedback } from "../utils/feedback";
 import MyDayPage from "./MyDayPage";
 
 vi.mock("../api/client", async (importOriginal) => {
@@ -28,6 +30,11 @@ beforeEach(() => {
   post.mockReset();
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+  resetFeedback();
+});
+
 describe("MyDayPage", () => {
   it("показывает дату и сообщение «всё в порядке», когда срочного нет", async () => {
     get.mockResolvedValue(day());
@@ -49,7 +56,7 @@ describe("MyDayPage", () => {
     expect(await screen.findByText("день не сдан")).toBeInTheDocument();
     expect(screen.getByText("сегодня занятий нет")).toBeInTheDocument();
     expect(screen.queryByText(/всё в порядке/)).not.toBeInTheDocument();
-    expect(screen.getByText(/Не сданы: 7 дней/)).toBeInTheDocument();
+    expect(screen.getByText(/Не сданы 7 дней/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "01.10" })).toHaveAttribute("href", "/cabinet?group=7&date=2026-10-01");
     expect(screen.getByRole("link", { name: "30.09" })).toHaveAttribute("href", "/cabinet?group=7&date=2026-09-30");
     expect(screen.getByText(/и ранее/)).toBeInTheDocument();
@@ -61,7 +68,7 @@ describe("MyDayPage", () => {
       groups: [{ id: 7, code: "СА172", course: 1, today_status: "submitted", is_on_time: true, missed_dates: ["2026-10-01"], missed_total: 1 }],
     }));
     renderPage(<MyDayPage />, { role: "curator" });
-    expect(await screen.findByText(/Не сданы: 1 день/)).toBeInTheDocument();
+    expect(await screen.findByText(/Не сданы 1 день/)).toBeInTheDocument();
     expect(screen.queryByText(/и ранее/)).not.toBeInTheDocument();
   });
 
@@ -96,7 +103,13 @@ describe("MyDayPage", () => {
     }));
     get.mockResolvedValue(day());
     post.mockResolvedValue({});
-    renderPage(<MyDayPage />, { role: "curator" });
+    renderPage(
+      <>
+        <MyDayPage />
+        <FeedbackHost />
+      </>,
+      { role: "curator" }
+    );
     expect(await screen.findByText("5 пропусков подряд, записей за 14 дн. нет")).toBeInTheDocument();
     expect(screen.getByText("вернуться к вопросу было до 30.09.2026")).toBeInTheDocument();
     expect(screen.getByText("вернуться к вопросу сегодня")).toBeInTheDocument();
@@ -187,5 +200,43 @@ describe("MyDayPage", () => {
     get.mockRejectedValue(new ApiError(500, "Сбой сервера"));
     renderPage(<MyDayPage />, { role: "curator" });
     expect(await screen.findByText("Сбой сервера")).toBeInTheDocument();
+  });
+
+  it("приветствие по времени суток и по имени-отчеству, число дел на сегодня", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 2, 8, 30));
+    get.mockResolvedValue(day({
+      groups: [{ id: 7, code: "СА172", course: 1, today_status: "pending", is_on_time: null, missed_dates: [], missed_total: 0 }],
+      tasks: [{ assignment_id: 11, title: "Кружки", group_code: "СА172", due_date: "2026-10-02", kind: "due_soon", status: "new", days_left: 0 }],
+    }));
+    renderPage(<MyDayPage />, { role: "curator", user: { full_name: "Иванова Анна Ивановна" } });
+    expect(await screen.findByRole("heading", { name: "Доброе утро, Анна Ивановна" })).toBeInTheDocument();
+    expect(screen.getByText("2 дела на сегодня")).toBeInTheDocument();
+  });
+
+  it("несданный сегодня день — крупная кнопка отметки для группы", async () => {
+    get.mockResolvedValue(day({
+      groups: [{ id: 7, code: "СА172", course: 1, today_status: "pending", is_on_time: null, missed_dates: [], missed_total: 0 }],
+    }));
+    renderPage(<MyDayPage />, { role: "curator" });
+    expect(await screen.findByRole("link", { name: "Отметить посещаемость СА172" })).toHaveAttribute("href", "/cabinet?group=7");
+  });
+
+  it("ритм группы: столбик на день с подписью и общая сводка для диктора", async () => {
+    get.mockResolvedValue(day({
+      groups: [{
+        id: 7, code: "СА172", course: 1, today_status: "submitted", is_on_time: true, missed_dates: [], missed_total: 0,
+        rhythm: [
+          { date: "2026-09-30", kind: "ok", absent: 0 },
+          { date: "2026-10-01", kind: "absent", absent: 2 },
+          { date: "2026-10-02", kind: "missing", absent: 0 },
+          { date: "2026-10-03", kind: "off", absent: 0 },
+        ],
+      }],
+    }));
+    renderPage(<MyDayPage />, { role: "curator" });
+    const rhythm = await screen.findByRole("img", { name: "Ритм за 4 дня: учебных 3, с пропусками без причины 1, не сдано 1" });
+    expect(rhythm.querySelector('[title="01.10: пропуски без причины — 2"]')).not.toBeNull();
+    expect(screen.getByText("занятий нет", { selector: ".rhythm-legend__item" })).toBeInTheDocument();
   });
 });

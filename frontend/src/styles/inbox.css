@@ -1,0 +1,223 @@
+/* Общие элементы новых экранов и входящие куратора («Мои задачи»).
+   Вынесено из index.css (этап 13); подключается в main.tsx после index.css — порядок файлов = порядок правил. */
+
+/* --- Общие элементы новых экранов (этап 13) --- */
+
+.page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.page-head h2 {
+  margin: 0;
+}
+
+.empty-state {
+  background: var(--card-bg);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.group-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--primary-light);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.meter {
+  height: 6px;
+  background: var(--sunken);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.meter > i {
+  display: block;
+  height: 100%;
+  background: var(--primary-fill);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+/* --- Входящие куратора («Мои задачи») --- */
+
+.inbox {
+  max-width: 900px;
+}
+
+.inbox-section {
+  margin-top: 22px;
+}
+
+.inbox-section h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inbox-section--hot h3 {
+  color: var(--hot);
+}
+
+.inbox-section__count {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.inbox-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.inbox-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 130px 120px;
+  gap: 12px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 8px;
+  position: relative;
+}
+
+.inbox-row + .inbox-row {
+  border-top: 1px solid var(--border);
+}
+
+.inbox-row:hover {
+  background: var(--primary-light);
+}
+
+.inbox-row.is-locked {
+  opacity: 0.6;
+}
+
+.inbox-row.is-locked:hover {
+  background: transparent;
+}
+
+.inbox-row__main {
+  min-width: 0;
+}
+
+.inbox-row__title {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+/* Вся строка кликабельна: ссылка растягивается на строку, остальное лежит поверх неё только визуально. */
+a.inbox-row__title::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+}
+
+a.inbox-row__title:focus-visible {
+  outline: none;
+}
+
+a.inbox-row__title:focus-visible::after {
+  outline: 2px solid var(--brand-purple);
+  outline-offset: -2px;
+}
+
+.inbox-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.inbox-row__note {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--hot);
+}
+
+.inbox-row__progress {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.inbox-row__due {
+  text-align: right;
+  font-size: 13px;
+  display: grid;
+}
+
+.inbox-row__due b {
+  font-weight: 600;
+}
+
+.inbox-row__due span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.inbox-row__due.is-hot b {
+  color: var(--hot);
+}
+
+.inbox-row__due.is-warn b {
+  color: var(--warn-ink);
+}
+
+@media (max-width: 640px) {
+  .inbox-row {
+    grid-template-columns: 22px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "mark main due"
+      ". progress progress";
+    gap: 6px 10px;
+    align-items: start;
+  }
+
+  .inbox-row > .status-mark {
+    grid-area: mark;
+    padding-top: 2px;
+  }
+
+  .inbox-row__main {
+    grid-area: main;
+  }
+
+  .inbox-row__progress {
+    grid-area: progress;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .inbox-row__due {
+    grid-area: due;
+  }
+}

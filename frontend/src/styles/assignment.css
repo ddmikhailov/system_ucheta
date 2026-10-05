@@ -1,0 +1,514 @@
+/* Заполнение задачи куратором и обсуждение.
+   Вынесено из index.css (этап 13); подключается в main.tsx после index.css — порядок файлов = порядок правил. */
+
+/* --- Заполнение задачи (TaskAssignmentPage) --- */
+
+.assignment {
+  max-width: 1000px;
+}
+
+.assignment__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.assignment__title {
+  min-width: 0;
+}
+
+.assignment__title h2 {
+  margin: 4px 0 6px;
+  text-wrap: balance;
+}
+
+.assignment__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.assignment__meta .is-hot {
+  color: var(--hot);
+  font-weight: 700;
+}
+
+.assignment__description {
+  white-space: pre-wrap;
+  max-width: 70ch;
+}
+
+.progress-ring {
+  position: relative;
+  width: 68px;
+  height: 68px;
+  flex: none;
+}
+
+.progress-ring svg {
+  width: 68px;
+  height: 68px;
+  transform: rotate(-90deg);
+}
+
+.progress-ring__track {
+  fill: none;
+  stroke: var(--sunken);
+  stroke-width: 4;
+}
+
+.progress-ring__value {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 4;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.35s ease;
+}
+
+.progress-ring.is-complete .progress-ring__value {
+  stroke: var(--ok);
+}
+
+.progress-ring b {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.callout {
+  display: grid;
+  gap: 2px;
+  padding: 10px 14px;
+  margin: 10px 0;
+  border-radius: var(--radius);
+  background: var(--sunken);
+  font-size: 14px;
+}
+
+.callout--hot {
+  background: var(--hot-bg);
+}
+
+.callout--hot b {
+  color: var(--hot);
+}
+
+.review-panel {
+  background: var(--card-bg);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin: 12px 0;
+  display: grid;
+  gap: 8px;
+}
+
+.review-panel h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.review-panel textarea {
+  width: 100%;
+}
+
+.review-panel__actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.roster-tools {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 14px 0 8px;
+}
+
+.fill-column {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+
+.fill-column__actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* Чипы выбора и кнопки да/нет */
+.choice-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.choice-chips button,
+.choice-seg button {
+  padding: 4px 11px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  border-radius: 999px;
+}
+
+.choice-chips button.on {
+  background: var(--primary-fill);
+  border-color: var(--primary-fill);
+  color: #fff;
+}
+
+.choice-seg {
+  display: inline-flex;
+  justify-self: start;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.choice-seg button {
+  border: 0;
+  border-radius: 0;
+  padding: 5px 14px;
+}
+
+.choice-seg button + button {
+  border-left: 1px solid var(--border);
+}
+
+.choice-seg button.on {
+  background: var(--primary-fill);
+  color: #fff;
+}
+
+input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.required-mark {
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.answer-value {
+  font-size: 14px;
+}
+
+/* Ответы по студентам: на десктопе строки сетки, на телефоне карточки */
+.answer-grid {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  overflow-x: auto;
+}
+
+.answer-grid__head,
+.answer-row {
+  display: grid;
+  grid-template-columns: 32px minmax(170px, 230px) var(--answer-template, minmax(160px, 1fr));
+  gap: 12px;
+  align-items: center;
+  padding: 8px 12px;
+}
+
+.answer-grid__head {
+  background: var(--bg);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.answer-row + .answer-row {
+  border-top: 1px solid var(--border);
+}
+
+.answer-row.is-flagged {
+  background: var(--hot-bg);
+}
+
+.answer-row.is-excluded .answer-row__name {
+  color: var(--muted);
+}
+
+.avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--primary-light);
+  color: var(--primary);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.answer-row.is-complete .avatar {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.answer-row__who {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.answer-row__name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.answer-row__remark {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--hot);
+}
+
+.answer-row__dossier {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ok);
+}
+
+.answer-row__todo {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--warn-ink);
+}
+
+.answer-row__cell {
+  min-width: 0;
+}
+
+.answer-row__cell input {
+  width: 100%;
+}
+
+.answer-row__label {
+  display: none;
+}
+
+.group-answer {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-top: 12px;
+  display: grid;
+  gap: 14px;
+}
+
+.group-answer__field {
+  display: grid;
+  gap: 6px;
+  max-width: 560px;
+}
+
+.group-answer__label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Панель отправки прилипает к низу экрана: прогресс и кнопка всегда под рукой */
+.submit-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 8px 16px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 -4px 16px rgba(28, 25, 48, 0.08);
+}
+
+.submit-bar__save {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.submit-bar__save--saved {
+  color: var(--ok);
+}
+
+.submit-bar__save--invalid,
+.submit-bar__save--error {
+  color: var(--danger);
+}
+
+.submit-bar__left {
+  flex: 1;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Обсуждение */
+.thread {
+  margin-top: 28px;
+}
+
+.thread h3 {
+  margin: 0 0 10px;
+}
+
+.thread__list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0 0 0 4px;
+  display: grid;
+  gap: 12px;
+}
+
+.thread__list li {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.thread__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-top: 5px;
+  background: var(--idle);
+}
+
+.thread__event--accepted .thread__dot,
+.thread__event--auto_accepted .thread__dot {
+  background: var(--ok);
+}
+
+.thread__event--returned .thread__dot {
+  background: var(--hot);
+}
+
+.thread__event--submitted .thread__dot {
+  background: var(--primary-fill);
+}
+
+.thread__comment .thread__dot {
+  background: transparent;
+  border: 2px solid var(--primary);
+}
+
+.thread__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: center;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.thread__text {
+  margin: 2px 0 0;
+  white-space: pre-wrap;
+}
+
+.thread__form {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.thread__form input {
+  flex: 1 1 220px;
+}
+
+@media (max-width: 640px) {
+  .assignment__head {
+    align-items: flex-start;
+  }
+
+  .progress-ring,
+  .progress-ring svg {
+    width: 56px;
+    height: 56px;
+  }
+
+  .answer-grid {
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    display: grid;
+    gap: 8px;
+  }
+
+  .answer-grid__head {
+    display: none;
+  }
+
+  .answer-row {
+    grid-template-columns: 32px minmax(0, 1fr);
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    gap: 8px 10px;
+  }
+
+  .answer-row__cell {
+    grid-column: 1 / -1;
+    display: grid;
+    gap: 4px;
+  }
+
+  .answer-row__label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .choice-chips button,
+  .choice-seg button {
+    min-height: 36px;
+  }
+
+  .fill-column__actions {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .submit-bar {
+    margin-left: -14px;
+    margin-right: -14px;
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+  }
+
+  .submit-bar .btn-primary {
+    width: 100%;
+  }
+}

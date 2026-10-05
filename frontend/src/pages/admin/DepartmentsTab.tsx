@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { api, ApiError } from "../../api/client";
 import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { DepartmentAdmin } from "../../api/types";
+import { dialogs } from "../../utils/feedback";
 
 export default function DepartmentsTab({ canEdit }: { canEdit: boolean }) {
   const [rows, setRows] = useState<DepartmentAdmin[]>([]);
@@ -52,7 +53,7 @@ export default function DepartmentsTab({ canEdit }: { canEdit: boolean }) {
   }
 
   async function toggleActive(d: DepartmentAdmin) {
-    if (d.is_active && !window.confirm(`Архивировать отделение «${d.name}»? Группы и пользователи в нём не удаляются.`)) return;
+    if (d.is_active && !(await dialogs.confirm(`Архивировать отделение «${d.name}»? Группы и пользователи в нём не удаляются.`, { confirmLabel: "Архивировать" }))) return;
     setError(null);
     try {
       await api.patch(`/admin/departments/${d.id}`, { is_active: !d.is_active });

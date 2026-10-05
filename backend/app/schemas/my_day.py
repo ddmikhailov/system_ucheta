@@ -4,6 +4,14 @@ from typing import Literal
 from pydantic import BaseModel
 
 
+class RhythmDay(BaseModel):
+    """День в «ритме группы»: off — занятий нет, missing — учебный день не сдан, absent — есть пропуски
+    без уважительной причины (absent — сколько), ok — все на месте или отсутствуют по уважительной."""
+    date: datetime.date
+    kind: Literal["off", "missing", "absent", "ok"]
+    absent: int = 0
+
+
 class DayGroup(BaseModel):
     id: int
     code: str
@@ -14,6 +22,8 @@ class DayGroup(BaseModel):
     # Несданные учебные дни за последние дни (самые свежие первыми); missed_total — сколько их всего в окне
     missed_dates: list[datetime.date]
     missed_total: int
+    # Последние три недели по дням (от старых к новым) — полоса «ритм группы» в «Моём дне».
+    rhythm: list[RhythmDay] = []
 
 
 class DayTask(BaseModel):

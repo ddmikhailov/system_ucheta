@@ -194,6 +194,8 @@ def test_form_opens_prefilled_from_the_dossier_for_the_curator_only(client, admi
     rows = {r["student_id"]: r for r in client.get(f"/tasks/assignments/{aid}", headers=curator_headers).json()["rows"]}
     assert rows[students[0].id]["values"] == {keys["Телефон"]: "+7 900 000-11-22", keys["Кружки"]: ["Спорт"]}
     assert rows[students[1].id]["values"] == {}
+    # Метка «из досье» — только у подставленных строк.
+    assert rows[students[0].id]["from_dossier"] is True and rows[students[1].id]["from_dossier"] is False
 
     # проверяющий видит только то, что реально сохранил куратор
     seen = {r["student_id"]: r for r in client.get(f"/tasks/assignments/{aid}", headers=dept_head_headers).json()["rows"]}
@@ -211,6 +213,7 @@ def test_saved_answers_win_over_the_dossier(client, admin_headers, curator_heade
                json={"rows": [{"student_id": students[0].id, "values": {key: "+7 new"}}]})
     rows = {r["student_id"]: r for r in client.get(f"/tasks/assignments/{aid}", headers=curator_headers).json()["rows"]}
     assert rows[students[0].id]["values"] == {key: "+7 new"}
+    assert rows[students[0].id]["from_dossier"] is False  # после сохранения строка — ответ куратора
 
 
 def test_multiselect_is_not_prefilled_when_the_dossier_has_other_text(client, admin_headers, curator_headers, curator_group, imported, db):

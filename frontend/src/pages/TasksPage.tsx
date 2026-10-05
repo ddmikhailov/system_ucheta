@@ -1,33 +1,44 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { api, ApiError, downloadFile } from "../api/client";
+import { useSearchParams } from "react-router-dom";
+import { api, ApiError } from "../api/client";
+import { useAuth } from "../auth/useAuth";
 import TaskCreateForm from "../components/TaskCreateForm";
 import type { AfterTask } from "../components/TaskCreateForm";
 import TaskTemplatesTab from "../components/TaskTemplatesTab";
-import { COLLECT_MODE_LABELS, REVIEWER_LABELS, TASK_STATUS_LABELS } from "../constants/tasks";
-import { formatDateRu, formatServerDateTimeFull } from "../utils/date";
-import type { ReviewQueueRow, TaskDetail, TaskListRow, TaskProgress } from "../api/types";
+import ProgressStrip from "../components/task/ProgressStrip";
+import ReviewMode from "../components/task/ReviewMode";
+import TaskView from "../components/task/TaskView";
+import { COLLECT_MODE_LABELS } from "../constants/tasks";
+import { formatDateRu, formatDueShort, todayIso } from "../utils/date";
+import { daysUntil, relativeDue } from "../utils/deadline";
+import type { ReviewQueueRow, TaskListRow } from "../api/types";
 
 type Tab = "list" | "review" | "templates" | "create";
+type Filter = "active" | "mine" | "overdue" | "closed";
 
-function ProgressText({ p }: { p: TaskProgress }) {
-  return (
-    <span>
-      сдано {p.submitted + p.accepted}/{p.total}, принято {p.accepted}
-      {p.returned > 0 && <>, возвращено {p.returned}</>}
-      {p.overdue > 0 && (
-        <b style={{ marginLeft: 6 }}>просрочено {p.overdue}</b>
-      )}
-    </span>
-  );
+const FILTERS: [Filter, string][] = [
+  ["active", "Активные"],
+  ["mine", "Мои"],
+  ["overdue", "С просрочкой"],
+  ["closed", "Закрытые"],
+];
+
+function matches(t: TaskListRow, filter: Filter, userId: number | undefined): boolean {
+  if (filter === "closed") return t.is_closed;
+  if (t.is_closed) return false;
+  if (filter === "mine") return t.author_id === userId;
+  if (filter === "overdue") return t.progress.overdue > 0;
+  return true;
 }
 
 // Раздел «Задачи» для администрации, воспитательного отдела, зав. отделением и тьютора:
-// список с прогрессом, очередь проверки, создание, карточка задачи с матрицей по группам.
+// список с прогрессом, режим проверки, шаблоны, создание, карточка задачи с картой групп.
 export default function TasksPage() {
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const taskId = searchParams.get("task");
   const [tab, setTab] = useState<Tab>("list");
+  const [filter, setFilter] = useState<Filter>("active");
   const [list, setList] = useState<TaskListRow[] | null>(null);
   const [queue, setQueue] = useState<ReviewQueueRow[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -50,8 +61,14 @@ export default function TasksPage() {
     return (
       <TaskView
         id={taskId}
-        onBack={() => { setSearchParams({}); loadList(); }}
-        onDeleted={() => { setSearchParams({}); loadList(); }}
+        onBack={() => {
+          setSearchParams({});
+          loadList();
+        }}
+        onDeleted={() => {
+          setSearchParams({});
+          loadList();
+        }}
         onAddStep={(t) => {
           setAfterTask({ id: t.id, title: t.title, due_date: t.due_date });
           setTab("create");
@@ -61,21 +78,38 @@ export default function TasksPage() {
     );
   }
 
+  const today = todayIso();
+  const counts = Object.fromEntries(FILTERS.map(([f]) => [f, list?.filter((t) => matches(t, f, user?.id)).length ?? 0]));
+  const shown = (list ?? [])
+    .filter((t) => matches(t, filter, user?.id))
+    .sort((a, b) => (filter === "closed" ? b.due_date.localeCompare(a.due_date) : a.due_date.localeCompare(b.due_date)));
+
+  const tabs: [Tab, string][] = [
+    ["list", "Задачи"],
+    ["review", queue.length > 0 ? `На проверке ${queue.length}` : "На проверке"],
+    ["templates", "Шаблоны"],
+  ];
+
   return (
-    <div>
-      <div className="tabs">
-        <button className={tab === "list" ? "active" : ""} onClick={() => setTab("list")}>
-          Задачи
-        </button>
-        <button className={tab === "review" ? "active" : ""} onClick={() => setTab("review")}>
-          На проверке{queue.length > 0 ? ` (${queue.length})` : ""}
-        </button>
-        <button className={tab === "templates" ? "active" : ""} onClick={() => setTab("templates")}>
-          Шаблоны
-        </button>
-        <button className={tab === "create" ? "active" : ""} onClick={() => { setAfterTask(null); setTab("create"); }}>
+    <div className="tasks-page">
+      <div className="page-head">
+        <h2>Задачи</h2>
+        <button
+          className={tab === "create" ? "btn-secondary" : "btn-primary"}
+          onClick={() => {
+            setAfterTask(null);
+            setTab("create");
+          }}
+        >
           + Новая задача
         </button>
+      </div>
+      <div className="tabs" role="group" aria-label="Разделы задач">
+        {tabs.map(([key, label]) => (
+          <button key={key} aria-pressed={tab === key} className={tab === key ? "active" : ""} onClick={() => setTab(key)}>
+            {label}
+          </button>
+        ))}
       </div>
       {error && <div className="error-text">{error}</div>}
 
@@ -94,271 +128,61 @@ export default function TasksPage() {
         />
       )}
 
-      {tab === "list" &&
-        (list === null ? (
-          <p className="hint">Загрузка…</p>
-        ) : list.length === 0 ? (
-          <p className="hint">Задач пока нет — создайте первую.</p>
-        ) : (
-          <table className="dash-table roster-table">
-            <thead>
-              <tr>
-                <th>Задача</th>
-                <th>Срок</th>
-                <th>Прогресс</th>
-                <th>Автор</th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((t) => (
-                <tr
-                  key={t.id}
-                  className="clickable-row"
-                  onClick={() => setSearchParams({ task: String(t.id) })}
-                  style={t.is_closed ? { opacity: 0.6 } : undefined}
-                >
-                  <td data-label="Задача">
-                    {t.title} {t.step_total && <span className="hint">(шаг {t.step_no} из {t.step_total})</span>}{" "}
-                    {t.is_closed && <span className="locked-badge">закрыта</span>}
-                    <br />
-                    <span className="hint">{COLLECT_MODE_LABELS[t.collect_mode]}</span>
-                  </td>
-                  <td data-label="Срок">{formatDateRu(t.due_date)}</td>
-                  <td data-label="Прогресс">
-                    <ProgressText p={t.progress} />
-                  </td>
-                  <td data-label="Автор">{t.author_name ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ))}
-
-      {tab === "review" &&
-        (queue.length === 0 ? (
-          <p className="hint">Ничего не ждёт вашей проверки.</p>
-        ) : (
-          <table className="dash-table roster-table">
-            <thead>
-              <tr>
-                <th>Задача</th>
-                <th>Группа</th>
-                <th>Отправлено</th>
-                <th>Срок</th>
-              </tr>
-            </thead>
-            <tbody>
-              {queue.map((q) => (
-                <tr key={q.id} className={q.is_overdue ? "not-submitted-row" : ""}>
-                  <td data-label="Задача">
-                    <Link to={`/tasks/assignment/${q.id}`} className="link-btn">
-                      {q.title}
-                    </Link>
-                  </td>
-                  <td data-label="Группа">
-                    {q.group_code} <span className="hint">{q.department_name}</span>
-                  </td>
-                  <td data-label="Отправлено">{q.submitted_at ? formatServerDateTimeFull(q.submitted_at) : "—"}</td>
-                  <td data-label="Срок">{formatDateRu(q.due_date)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ))}
-    </div>
-  );
-}
-
-// Что видно в матрице о ходе проверки: кто принял и когда, либо когда отправлено на проверку.
-function reviewSummary(a: TaskDetail["assignments"][number]): string {
-  if (a.reviewed_at && (a.status === "accepted" || a.status === "returned")) {
-    const who = a.reviewed_by_name ?? "без проверки";
-    return `${a.status === "accepted" ? "Принято" : "Возвращено"} ${formatServerDateTimeFull(a.reviewed_at)} · ${who}`;
-  }
-  if (a.submitted_at && a.status === "submitted") return `Отправлено ${formatServerDateTimeFull(a.submitted_at)}`;
-  return "—";
-}
-
-function TaskView({ id, onBack, onDeleted, onAddStep }: { id: string; onBack: () => void; onDeleted: () => void; onAddStep: (task: TaskDetail) => void }) {
-  const [task, setTask] = useState<TaskDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [notice, setNotice] = useState<string | null>(null);
-
-  const load = useCallback(() => {
-    api
-      .get<TaskDetail>(`/tasks/${id}`)
-      .then((t) => {
-        setTask(t);
-        setError(null);
-      })
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Не удалось загрузить задачу"));
-  }, [id]);
-
-  useEffect(load, [load]);
-
-  if (!task) {
-    return (
-      <div>
-        <button className="link-btn" onClick={onBack}>← К списку задач</button>
-        {error ? <div className="error-text">{error}</div> : <p className="hint">Загрузка…</p>}
-      </div>
-    );
-  }
-
-  const act = async (action: () => Promise<unknown>, fail: string, after: () => void) => {
-    setError(null);
-    setNotice(null);
-    try {
-      await action();
-      after();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : fail);
-    }
-  };
-
-  const shown = task.assignments.filter((a) => statusFilter === "all" || (statusFilter === "overdue" ? a.is_overdue : a.status === statusFilter));
-
-  return (
-    <div className="student-card">
-      <p>
-        <button className="link-btn" onClick={onBack}>← К списку задач</button>
-      </p>
-      <div className="student-card__header">
-        <h2>{task.title}</h2>
-        {task.is_closed && <span className="locked-badge">закрыта</span>}
-      </div>
-      {task.steps.length > 1 && (
-        <p>
-          <b>Шаги:</b>{" "}
-          {task.steps.map((s, i) => (
-            <span key={s.id}>
-              {i > 0 && " → "}
-              {s.id === task.id ? (
-                <b>{s.step_no}. {s.title}</b>
-              ) : (
-                <Link to={`?task=${s.id}`} className="link-btn">
-                  {s.step_no}. {s.title}
-                </Link>
-              )}{" "}
-              <span className="hint">до {formatDateRu(s.due_date)}</span>
-            </span>
-          ))}
-          {task.unlock_on && (
-            <span className="hint"> · этот шаг открывается {task.unlock_on === "submitted" ? "после сдачи" : "после приёмки"} предыдущего</span>
-          )}
-        </p>
-      )}
-      <p className="hint">
-        Срок {formatDateRu(task.due_date)} · {COLLECT_MODE_LABELS[task.collect_mode]} · проверяет: {REVIEWER_LABELS[task.reviewer_rule]} · автор:{" "}
-        {task.author_name ?? "—"}
-      </p>
-      {task.description && <p style={{ whiteSpace: "pre-wrap" }}>{task.description}</p>}
-      <p>
-        <b>Поля формы:</b>{" "}
-        {task.fields.map((f) => `${f.label}${f.required ? " *" : ""}`).join(", ")}
-      </p>
-      <p>
-        <ProgressText p={task.progress} />
-      </p>
-      {error && <div className="error-text">{error}</div>}
-      {notice && <div className="day-status submitted">{notice}</div>}
-
-      <p>
-        <button
-          className="link-btn"
-          onClick={() => act(() => downloadFile(`/tasks/${task.id}/export`, `task_${task.id}.xlsx`), "Не удалось скачать файл", () => undefined)}
-        >
-          Выгрузить в Excel
-        </button>
-        {" · "}
-        <button
-          className="link-btn"
-          onClick={() => {
-            const name = window.prompt("Название шаблона", task.title);
-            if (name === null) return;
-            act(
-              () => api.post("/tasks/templates", { task_id: task.id, name }),
-              "Не удалось сохранить шаблон",
-              () => setNotice(`Шаблон «${name.trim() || task.title}» сохранён — он доступен при создании новой задачи`)
-            );
+      {tab === "review" && (
+        <ReviewMode
+          queue={queue}
+          onDecided={(id) => {
+            setQueue((q) => q.filter((x) => x.id !== id));
+            api.get<TaskListRow[]>("/tasks").then(setList).catch(() => undefined);
           }}
-        >
-          Сохранить как шаблон
-        </button>
-        {task.can_manage && (task.steps.length === 0 || task.steps[task.steps.length - 1].id === task.id) && (
-          <>
-            {" · "}
-            <button className="link-btn" onClick={() => onAddStep(task)}>
-              Добавить следующий шаг
-            </button>
-          </>
-        )}
-        {task.can_manage && (
-          <>
-            {" · "}
-            <button
-              className="link-btn"
-              onClick={() => act(() => api.patch(`/tasks/${task.id}`, { is_closed: !task.is_closed }), "Не удалось изменить", load)}
-            >
-              {task.is_closed ? "Открыть снова" : "Закрыть задачу"}
-            </button>
-            {" · "}
-            <button
-              className="link-btn"
-              onClick={() => {
-                if (window.confirm(`Удалить задачу «${task.title}»?`))
-                  act(() => api.delete(`/tasks/${task.id}`), "Не удалось удалить", onDeleted);
-              }}
-            >
-              Удалить
-            </button>
-          </>
-        )}
-      </p>
+        />
+      )}
 
-      <div className="toolbar">
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-          <option value="all">Все статусы</option>
-          <option value="overdue">Просроченные</option>
-          {Object.entries(TASK_STATUS_LABELS).map(([v, l]) => (
-            <option key={v} value={v}>
-              {l}
-            </option>
-          ))}
-        </select>
-      </div>
-      <table className="dash-table roster-table">
-        <thead>
-          <tr>
-            <th>Группа</th>
-            <th>Отделение</th>
-            <th>Статус</th>
-            <th>Проверка</th>
-          </tr>
-        </thead>
-        <tbody>
-          {shown.map((a) => (
-            <tr key={a.id} className={a.is_overdue ? "not-submitted-row" : ""}>
-              <td data-label="Группа">
-                <Link to={`/tasks/assignment/${a.id}`} className="link-btn">
-                  {a.group_code}
-                </Link>
-              </td>
-              <td data-label="Отделение">{a.department_name}</td>
-              <td data-label="Статус">
-                {TASK_STATUS_LABELS[a.status] ?? a.status} {a.is_overdue && <b>просрочено</b>}
-              </td>
-              <td data-label="Проверка">{reviewSummary(a)}</td>
-            </tr>
-          ))}
-          {shown.length === 0 && (
-            <tr>
-              <td colSpan={4}>Нет групп с таким статусом.</td>
-            </tr>
+      {tab === "list" && (
+        <>
+          <div className="filter-chips" role="group" aria-label="Какие задачи показать">
+            {FILTERS.map(([key, label]) => (
+              <button key={key} className={`chip${filter === key ? " active" : ""}`} aria-pressed={filter === key} onClick={() => setFilter(key)}>
+                {label} {counts[key]}
+              </button>
+            ))}
+          </div>
+          {list === null ? (
+            error ? null : <p className="hint">Загрузка…</p>
+          ) : list.length === 0 ? (
+            <p className="empty-state">Задач пока нет. Создайте первую: «+ Новая задача» вверху справа.</p>
+          ) : shown.length === 0 ? (
+            <p className="empty-state">В этом списке пусто.</p>
+          ) : (
+            <ul className="task-list">
+              {shown.map((t) => {
+                const days = daysUntil(t.due_date, today);
+                const hot = !t.is_closed && days < 0 && t.progress.accepted < t.progress.total;
+                return (
+                  <li key={t.id} className={`task-list__item${t.is_closed ? " is-closed" : ""}`}>
+                    <div className="task-list__main">
+                      <button className="task-list__title" onClick={() => setSearchParams({ task: String(t.id) })}>
+                        {t.title}
+                      </button>
+                      <div className="inbox-row__meta">
+                        {t.step_total ? <span>шаг {t.step_no} из {t.step_total}</span> : null}
+                        <span>{COLLECT_MODE_LABELS[t.collect_mode]}</span>
+                        <span>автор: {t.author_name ?? "—"}</span>
+                        {t.is_closed && <span className="locked-badge">закрыта</span>}
+                      </div>
+                    </div>
+                    <ProgressStrip p={t.progress} />
+                    <div className={`inbox-row__due${hot ? " is-hot" : !t.is_closed && days <= 2 ? " is-warn" : ""}`}>
+                      <b>{t.is_closed || (days < 0 && !hot) ? formatDateRu(t.due_date) : relativeDue(t.due_date, today)}</b>
+                      <span>{formatDueShort(t.due_date)}</span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           )}
-        </tbody>
-      </table>
+        </>
+      )}
     </div>
   );
 }
