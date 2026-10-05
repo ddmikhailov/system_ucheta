@@ -65,6 +65,19 @@ describe("CuratorCabinetPage — журнал дня", () => {
     expect(screen.getByText("Отсутствуют: 0")).toBeInTheDocument();
   });
 
+  it("«Список для печати» открывает окно выбора столбцов для текущей группы", async () => {
+    const user = userEvent.setup();
+    mockApi(roster([entry(1, "Алексеев Пётр")]));
+    renderPage(<CuratorCabinetPage />, { role: "curator" });
+    await screen.findByText("День ещё не сдан — можно заполнить");
+
+    await user.click(screen.getByRole("button", { name: "Список для печати" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Список группы для печати" });
+    expect(within(dialog).getByRole("heading", { name: /Список группы СА172 для печати/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Скачать .docx" })).toBeEnabled();
+  });
+
   it("нет закреплённых групп — подсказка", async () => {
     get.mockImplementation(async (path: string) => (path === "/curator/groups" ? [] : []));
     renderPage(<CuratorCabinetPage />, { role: "curator" });

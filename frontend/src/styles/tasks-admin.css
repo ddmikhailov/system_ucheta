@@ -565,3 +565,46 @@ kbd {
     display: none;
   }
 }
+
+/* «Список группы» для печати: набор столбцов галочками */
+.group-list-modal {
+  max-width: 560px;
+}
+
+.group-list-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.group-list-fields legend {
+  padding: 0 6px;
+  font-weight: 600;
+}
+
+/* Перебивает общее правило .modal label (подпись над полем): здесь галочка и текст в одну строку. */
+.modal .group-list-fields label,
+.modal label.inline-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-height: 32px;
+}
+
+/* На телефоне поля ввода растягиваются до 40 px по высоте — галочке это не нужно, иначе строка раздувается. */
+.modal .group-list-fields input[type="checkbox"],
+.modal label.inline-check input[type="checkbox"] {
+  min-height: 0;
+  min-width: 0;
+  margin: 0;
+}
+
+@media (max-width: 600px) {
+  .group-list-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

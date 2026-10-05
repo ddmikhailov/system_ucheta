@@ -34,7 +34,7 @@ app = FastAPI(
     # общий VERSION-файл сюда не даёт выигрыша, см. TODO.md 5), поэтому при
     # бампе версии меняйте все три места;
     # tests/test_versions.py проверяет, что они не разошлись.
-    version="2.1.1",
+    version="2.2.0",
     docs_url="/docs" if _docs_enabled else None,
     redoc_url="/redoc" if _docs_enabled else None,
     openapi_url="/openapi.json" if _docs_enabled else None,

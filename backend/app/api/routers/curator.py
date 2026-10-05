@@ -1,6 +1,7 @@
 import datetime
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import assert_can_access_group, assert_can_view_group, get_current_user
@@ -15,7 +16,8 @@ from app.schemas.curator import (
     RosterResponse,
     SubmitDayRequest,
 )
-from app.services import attendance_service, calendar_service, my_day_service
+from app.services import attendance_service, calendar_service, group_list_service, my_day_service
+from app.services.audit_service import log_action
 from app.schemas.my_day import RhythmDay
 from app.services.access_service import get_curator_group_ids
 
@@ -130,6 +132,52 @@ def group_rhythm(study_group_id: int, user: User = Depends(get_current_user), db
     if group is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Группа не найдена")
     return my_day_service.rhythm_for_group(db, group, today)
+
+
+DOCX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+@router.get("/groups/{study_group_id}/roster-sheet")
+def roster_sheet(
+    study_group_id: int,
+    fields: str = Query(..., description="Столбцы через запятую, например full_name,phone,email"),
+    numbering: bool = True,
+    title: str | None = Query(None, max_length=group_list_service.MAX_TITLE_LENGTH),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """«Список группы» для печати (.docx) — таблица с выбранными столбцами (ФИО, телефон, e-mail, адреса,
+    представители, пустые столбцы для подписи…). Особые категории досье в список не попадают. Тем же, кому
+    открыт журнал группы: куратор — своей, зав. отделением и тьютор — отделения, администрация — любой."""
+    today = today_local()
+    assert_can_view_group(db, user, study_group_id, today)
+    group = db.get(StudyGroup, study_group_id)
+    if group is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Группа не найдена")
+    try:
+        chosen = group_list_service.parse_fields(fields)
+    except group_list_service.UnknownField as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+
+    rows = group_list_service.collect_rows(db, group, today, chosen)
+    if not rows:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "В группе нет студентов")
+    curator = next(
+        (a.user.full_name for a in group.curator_assignments
+         if a.role_type.value == "curator" and a.is_active_on(today) and a.user.is_active),
+        None,
+    )
+    content = group_list_service.build_docx(
+        group_code=group.code, department_name=group.department.name, curator_name=curator, on_date=today,
+        fields=chosen, rows=rows, numbering=numbering, title=title,
+    )
+    log_action(db, user, "group.roster_sheet", "study_group", str(group.id), new_value=",".join(f.key for f in chosen))
+    db.commit()
+    filename = f"Список_{group.code}_{today:%d.%m.%Y}.docx"
+    return Response(
+        content=content, media_type=DOCX_MEDIA_TYPE,
+        headers={"Content-Disposition": f"attachment; filename=\"roster_sheet.docx\"; filename*=UTF-8''{quote(filename)}"},
+    )
 
 
 @router.get("/groups/{study_group_id}/month-status", response_model=list[MonthDayStatus])

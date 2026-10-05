@@ -10,6 +10,7 @@ import type { MarkCodeOption, MonthDayStatus, MyDayRhythmDay, RosterResponse } f
 import { formatServerDateTime, todayIso } from "../utils/date";
 import SearchSelect from "./SearchSelect";
 import { dialogs } from "../utils/feedback";
+import GroupListModal from "./GroupListModal";
 import GroupRhythm from "./GroupRhythm";
 
 // Раньше подсказка точки в полоске месяца была просто ISO-датой (см. TODO.md 4).
@@ -60,6 +61,7 @@ export default function DayJournal({
 
   const [groups, setGroups] = useState<JournalGroup[]>([]);
   const [groupId, setGroupId] = useState<number | null>(deepLinkGroupId ? Number(deepLinkGroupId) : null);
+  const [listOpen, setListOpen] = useState(false);
   const [date, setDate] = useState(deepLinkDate ?? todayIso());
   const [roster, setRoster] = useState<RosterResponse | null>(null);
   const [markCodes, setMarkCodes] = useState<MarkCodeOption[]>([]);
@@ -251,6 +253,9 @@ export default function DayJournal({
               setDate(next);
             }}
           />
+          <button type="button" className="link-btn" onClick={() => setListOpen(true)} title="Список группы для печати (Word): выберите столбцы">
+            Список для печати
+          </button>
         </div>
 
         <div className="month-strip">
@@ -389,6 +394,14 @@ export default function DayJournal({
           </table>
 
         </>
+      )}
+
+      {listOpen && groupId !== null && (
+        <GroupListModal
+          groupId={groupId}
+          groupCode={(groups.find((g) => g.id === groupId)?.label ?? "").split(" ")[0]}
+          onClose={() => setListOpen(false)}
+        />
       )}
 
       {showPeriodForm !== null && (
