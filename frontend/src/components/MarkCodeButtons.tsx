@@ -18,6 +18,7 @@ export default function MarkCodeButtons({
         className={`mark-code-btn ${value === null ? "active" : ""}`}
         onClick={() => onChange(null)}
         title="Присутствует"
+        aria-pressed={value === null}
       >
         Я
       </button>
@@ -28,6 +29,7 @@ export default function MarkCodeButtons({
           className={`mark-code-btn ${value === m.code ? "active" : ""}`}
           onClick={() => onChange(m.code)}
           title={m.name}
+          aria-pressed={value === m.code}
         >
           {m.code.toUpperCase()}
         </button>

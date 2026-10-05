@@ -242,6 +242,7 @@ export default function DayJournal({
           />
           <input
             type="date"
+            aria-label="Дата"
             value={date}
             max={todayIso()}
             onChange={async (e) => {

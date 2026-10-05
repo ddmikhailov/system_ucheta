@@ -8,7 +8,7 @@ import Layout from "./components/Layout";
 import LoginPage from "./pages/LoginPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 import CuratorCabinetPage from "./pages/CuratorCabinetPage";
-import { DOSSIER_STAFF_ROLES, MANAGEMENT_ROLES, TASK_MANAGER_ROLES, inRoles } from "./constants/roles";
+import { DOSSIER_STAFF_ROLES, MANAGEMENT_ROLES, TASK_MANAGER_ROLES, VIEWER_ROLES, inRoles } from "./constants/roles";
 import MyDayPage from "./pages/MyDayPage";
 import MyTasksPage from "./pages/MyTasksPage";
 import TaskAssignmentPage from "./pages/TaskAssignmentPage";
@@ -54,6 +54,14 @@ function RequireAdminAccess({ children }: { children: ReactElement }) {
 function RequireTaskManager({ children }: { children: ReactElement }) {
   const { user } = useAuth();
   if (!user || !inRoles(user.role, TASK_MANAGER_ROLES)) return <Navigate to="/" replace />;
+  return children;
+}
+
+// «Витрины» и поиск студентов отдаются сервером только руководству и специалистам; куратор по прямой ссылке
+// раньше видел пустую страницу с ошибкой «Недостаточно прав» — теперь попадает к себе на главную.
+function RequireViewer({ children }: { children: ReactElement }) {
+  const { user } = useAuth();
+  if (!user || !inRoles(user.role, VIEWER_ROLES)) return <Navigate to="/" replace />;
   return children;
 }
 
@@ -117,9 +125,11 @@ export default function App() {
               path="/dashboards"
               element={
                 <RequireAuth>
-                  <Layout>
-                    <DashboardsPage />
-                  </Layout>
+                  <RequireViewer>
+                    <Layout>
+                      <DashboardsPage />
+                    </Layout>
+                  </RequireViewer>
                 </RequireAuth>
               }
             />
@@ -191,9 +201,11 @@ export default function App() {
               path="/students"
               element={
                 <RequireAuth>
-                  <Layout>
-                    <StudentsSearchPage />
-                  </Layout>
+                  <RequireViewer>
+                    <Layout>
+                      <StudentsSearchPage />
+                    </Layout>
+                  </RequireViewer>
                 </RequireAuth>
               }
             />

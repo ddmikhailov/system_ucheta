@@ -464,7 +464,8 @@ select:hover {
 .auth-screen {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* minmax(0, …): иначе колонка не уже содержимого формы и на телефоне страница уезжает вбок */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
 .auth-screen__visual {
@@ -608,7 +609,15 @@ select:hover {
 
 @media (max-width: 860px) {
   .auth-screen {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .auth-screen__form {
+    padding: 16px;
+  }
+
+  .auth-card {
+    padding: 28px 20px;
   }
 
   .auth-screen__visual {
@@ -1734,4 +1743,25 @@ th.sortable-th:hover {
 
 .filterable-multi__bar input[type="search"] {
   flex: 1 1 200px;
+}
+
+/* Список с поиском: стрелка показывает, что это выбор из списка, а не обычное поле. */
+.search-select input {
+  padding-right: 30px;
+}
+
+.search-select::after {
+  content: "";
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  margin-top: -2px;
+  border: 5px solid transparent;
+  border-top-color: var(--muted);
+  pointer-events: none;
+}
+
+/* Таблицы Витрин и Паспорта шире экрана прокручиваются сами, а не растягивают страницу. */
+.table-scroll {
+  max-width: 100%;
 }

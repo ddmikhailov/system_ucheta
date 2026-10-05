@@ -104,23 +104,24 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
         <div className="add-block">
           <p className="add-block__title">Добавить группу</p>
           <form className="inline-form" onSubmit={handleCreate}>
-            <input placeholder="Код группы" value={code} onChange={(e) => setCode(e.target.value)} required />
+            <input placeholder="Код группы" aria-label="Код группы" value={code} onChange={(e) => setCode(e.target.value)} required />
             <input
               type="number"
+              aria-label="Курс"
               min={1}
               max={4}
               value={course}
               onChange={(e) => setCourse(Number(e.target.value))}
               style={{ width: 60 }}
             />
-            <select value={departmentId ?? ""} onChange={(e) => setDepartmentId(Number(e.target.value))}>
+            <select aria-label="Отделение" value={departmentId ?? ""} onChange={(e) => setDepartmentId(Number(e.target.value))}>
               {departments.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.name}
                 </option>
               ))}
             </select>
-            <input placeholder="Форма обучения (необязательно)" value={studyForm} onChange={(e) => setStudyForm(e.target.value)} />
+            <input placeholder="Форма обучения (необязательно)" aria-label="Форма обучения (необязательно)" value={studyForm} onChange={(e) => setStudyForm(e.target.value)} />
             <button type="submit" disabled={busy}>
               Добавить группу
             </button>

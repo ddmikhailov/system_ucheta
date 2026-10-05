@@ -101,6 +101,24 @@ describe("App — защита маршрутов", () => {
     expect(within(screen.getByRole("navigation", { name: "Разделы" })).getByRole("link", { name: "Задачи" })).toBeInTheDocument();
   });
 
+  it.each(["/dashboards", "/students"])("куратора по ссылке на %s отправляет на его главную, а не на страницу с ошибкой", async (path) => {
+    visit(path, "curator");
+    expect(await screen.findByText("страница: мой день")).toBeInTheDocument();
+    expect(screen.queryByText("страница: витрины")).not.toBeInTheDocument();
+    expect(screen.queryByText("страница: поиск студентов")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["/dashboards", "витрины", "dept_head"],
+    ["/dashboards", "витрины", "admin"],
+    ["/dashboards", "витрины", "social_pedagogue"],
+    ["/students", "поиск студентов", "admin"],
+    ["/students", "поиск студентов", "psychologist"],
+  ])("%s у роли %s: открывается (%s)", async (path, page, role) => {
+    visit(path, role);
+    expect(await screen.findByText(`страница: ${page}`)).toBeInTheDocument();
+  });
+
   it("куратора по ссылке на «Задачи» отправляет на его главную", async () => {
     visit("/tasks", "curator");
     expect(await screen.findByText("страница: мой день")).toBeInTheDocument();

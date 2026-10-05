@@ -10,6 +10,7 @@ import NavIcon from "./NavIcon";
 import type { NavIconName } from "./NavIcon";
 import NotificationBell from "./NotificationBell";
 import UserMenu from "./UserMenu";
+import { pageTitle } from "../utils/pageTitle";
 
 type CounterKey = "my_day" | "my_tasks" | "review";
 type Counters = Partial<Record<CounterKey, number>>;
@@ -70,6 +71,10 @@ export default function Layout({ children }: { children: ReactNode }) {
   const sheetRef = useRef<HTMLDivElement>(null);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
   const items = navItems(user);
+  const title = pageTitle(pathname);
+  useEffect(() => {
+    document.title = title === "КАИТ-20" ? "КАИТ-20 — Учёт посещаемости" : `${title} — КАИТ-20`;
+  }, [title]);
 
   // Счётчики на пунктах меню обновляем при каждом переходе: сдали день, отправили задачу — число уменьшилось.
   useEffect(() => {
@@ -137,6 +142,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           </div>
         </header>
         <main className="app-main">
+          <h1 className="visually-hidden">{title}</h1>
           {/* Раздел, который грузится по требованию: меню остаётся на месте, пока он подгружается. */}
           <Suspense fallback={<p className="hint">Загрузка…</p>}>{children}</Suspense>
         </main>

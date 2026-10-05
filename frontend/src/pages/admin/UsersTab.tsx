@@ -146,9 +146,9 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
         <div className="add-block">
           <p className="add-block__title">Добавить пользователя</p>
           <form className="inline-form" onSubmit={handleCreate}>
-            <input placeholder="ФИО" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
-            <input placeholder="Логин" value={username} onChange={(e) => setUsername(e.target.value)} required />
-            <select value={role} onChange={(e) => setRole(e.target.value)}>
+            <input placeholder="ФИО" aria-label="ФИО" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
+            <input placeholder="Логин" aria-label="Логин" value={username} onChange={(e) => setUsername(e.target.value)} required />
+            <select aria-label="Роль" value={role} onChange={(e) => setRole(e.target.value)}>
               {(Object.entries(ROLE_LABELS) as [RoleCode, string][])
                 .filter(([value]) => assignableRoles(me?.role).includes(value))
                 .map(([value, label]) => (
@@ -158,7 +158,7 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
                 ))}
             </select>
             {roleNeedsDepartment && (
-              <select value={departmentId ?? ""} onChange={(e) => setDepartmentId(Number(e.target.value))}>
+              <select aria-label="Отделение" value={departmentId ?? ""} onChange={(e) => setDepartmentId(Number(e.target.value))}>
                 {departments.map((d) => (
                   <option key={d.id} value={d.id}>
                     {d.name}
@@ -174,8 +174,8 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
       )}
 
       <div className="toolbar">
-        <input placeholder="Поиск по ФИО" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-        <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+        <input placeholder="Поиск по ФИО" aria-label="Поиск по ФИО" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+        <select aria-label="Фильтр по роли" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
           <option value="all">Все роли</option>
           {(Object.entries(ROLE_LABELS) as [RoleCode, string][]).map(([value, label]) => (
             <option key={value} value={value}>
@@ -184,6 +184,7 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
           ))}
         </select>
         <select
+          aria-label="Фильтр по отделению"
           value={departmentFilter}
           onChange={(e) => setDepartmentFilter(e.target.value === "all" ? "all" : Number(e.target.value))}
         >
@@ -452,7 +453,7 @@ function UserProfileModal({
           <form className="inline-form" onSubmit={submitCustomPassword}>
             <input
               type="text"
-              placeholder="Свой пароль"
+              placeholder="Свой пароль" aria-label="Свой пароль"
               value={customPasswordValue}
               onChange={(e) => setCustomPasswordValue(e.target.value)}
               minLength={MIN_PASSWORD_LENGTH}

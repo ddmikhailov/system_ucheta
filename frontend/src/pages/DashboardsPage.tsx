@@ -303,12 +303,12 @@ export default function DashboardsPage() {
 
       {(tab === "day" || tab === "risk") && (
         <div className="toolbar">
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Дата" />
           <button className="link-btn" onClick={() => setReloadKey((k) => k + 1)} title="Запросить данные заново">
             Обновить
           </button>
           {tab === "day" && (
-            <select value={courseFilter} onChange={(e) => setCourseFilter(e.target.value === "all" ? "all" : Number(e.target.value))}>
+            <select aria-label="Курс" value={courseFilter} onChange={(e) => setCourseFilter(e.target.value === "all" ? "all" : Number(e.target.value))}>
               <option value="all">Все курсы</option>
               {courses.map((c) => (
                 <option key={c} value={c}>
@@ -322,14 +322,14 @@ export default function DashboardsPage() {
 
       {(tab === "dynamics" || tab === "discipline") && (
         <div className="toolbar">
-          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} aria-label="Период с" />
           <span>—</span>
-          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} aria-label="Период по" />
         </div>
       )}
 
       {tab === "day" && (
-        <table className="dash-table">
+        <div className="table-scroll"><table className="dash-table">
           <thead>
             <tr>
               <th>Группа</th>
@@ -369,7 +369,7 @@ export default function DashboardsPage() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       )}
 
       {tab === "summary" && (
@@ -385,7 +385,7 @@ export default function DashboardsPage() {
       {tab === "dynamics" && (
         <>
           <DynamicsChart points={dynamicsPoints} />
-          <table className="dash-table">
+          <div className="table-scroll"><table className="dash-table">
             <thead>
               <tr>
                 <th>Дата</th>
@@ -406,12 +406,12 @@ export default function DashboardsPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </>
       )}
 
       {tab === "risk" && (
-        <table className="dash-table">
+        <div className="table-scroll"><table className="dash-table">
           <thead>
             <tr>
               <th>Студент</th>
@@ -437,7 +437,7 @@ export default function DashboardsPage() {
               </tr>
             )}
           </tbody>
-        </table>
+        </table></div>
       )}
 
       {tab === "discipline" && isDeptHead && (
@@ -445,7 +445,7 @@ export default function DashboardsPage() {
       )}
 
       {tab === "discipline" && (
-        <table className="dash-table">
+        <div className="table-scroll"><table className="dash-table">
           <thead>
             <tr>
               <th>Группа</th>
@@ -475,7 +475,7 @@ export default function DashboardsPage() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       )}
 
       {tab === "vacant" && (
@@ -484,7 +484,7 @@ export default function DashboardsPage() {
             Пока куратор не назначен, отмечать посещаемость в группе некому: в витринах она будет значиться как
             «не сдано». Назначьте куратора или заместителя, чтобы группа заработала как обычно.
           </p>
-          <table className="dash-table">
+          <div className="table-scroll"><table className="dash-table">
             <thead>
               <tr>
                 <th>Группа</th>
@@ -508,7 +508,7 @@ export default function DashboardsPage() {
                 </tr>
               )}
             </tbody>
-          </table>
+          </table></div>
         </>
       )}
 

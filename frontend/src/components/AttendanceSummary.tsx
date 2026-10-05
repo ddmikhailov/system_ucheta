@@ -378,10 +378,11 @@ export default function AttendanceSummaryView({
             <input
               type="date"
               value={dateFrom}
+              aria-label="Период с"
               onChange={(e) => update({ dateFrom: e.target.value, preset: null })}
             />
             <span>—</span>
-            <input type="date" value={dateTo} onChange={(e) => update({ dateTo: e.target.value, preset: null })} />
+            <input type="date" value={dateTo} aria-label="Период по" onChange={(e) => update({ dateTo: e.target.value, preset: null })} />
           </div>
         </div>
 
@@ -545,7 +546,7 @@ export default function AttendanceSummaryView({
               </label>
 
               {view === "groups" && (
-                <input placeholder="Поиск по коду группы" value={groupQuery} onChange={(e) => setGroupQuery(e.target.value)} />
+                <input placeholder="Поиск по коду группы" aria-label="Поиск по коду группы" value={groupQuery} onChange={(e) => setGroupQuery(e.target.value)} />
               )}
             </div>
           </div>

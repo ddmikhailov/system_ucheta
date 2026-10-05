@@ -90,6 +90,20 @@ describe("PassportPage — сводка", () => {
     expect(within(r).getAllByText("—")).toHaveLength(2);
   });
 
+  it("куратору без доступа к особым категориям — понятная фраза без технических слов; причину видит администратор", async () => {
+    mockApi({ summary: summary({ special_available: false, rows: [row(1, "СА172", { orphan: null, ovz: null })] }) });
+    renderPage(<PassportPage />, { role: "curator", user: { groups: [{ id: 1, code: "СА172", course: 1 }] } });
+    expect(await screen.findByText(/Особые категории \(здоровье, учёт\) сейчас не показываются/)).toBeInTheDocument();
+    expect(screen.queryByText(/ключ шифрования|DOSSIER_ENCRYPTION_KEY/)).not.toBeInTheDocument();
+  });
+
+  it("широкая таблица сводки лежит в прокручиваемой обёртке, а не растягивает страницу", async () => {
+    mockApi();
+    renderPage(<PassportPage />, { role: "admin" });
+    const table = await screen.findByRole("table");
+    expect(table.closest(".table-scroll")).not.toBeNull();
+  });
+
   it("фильтр по отделению перезапрашивает сводку, у куратора фильтра нет", async () => {
     const user = userEvent.setup();
     mockApi();

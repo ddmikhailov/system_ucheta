@@ -45,6 +45,13 @@ export default function MarkCodesTab({ canEdit }: { canEdit: boolean }) {
     }
   }
 
+  const FLAG_LABELS: Record<FlagField, string> = {
+    counts_as_present: "считается присутствием",
+    is_excused: "уважительная причина",
+    requires_document: "нужен документ",
+    is_active: "активен",
+  };
+
   return (
     <div>
       <p className="hint">
@@ -70,7 +77,7 @@ export default function MarkCodesTab({ canEdit }: { canEdit: boolean }) {
               <td>{r.name}</td>
               {(["counts_as_present", "is_excused", "requires_document", "is_active"] as FlagField[]).map((field) => (
                 <td key={field}>
-                  <input type="checkbox" checked={r[field]} disabled={!canEdit} onChange={() => toggle(r, field)} />
+                  <input type="checkbox" aria-label={`${r.code}: ${FLAG_LABELS[field]}`} checked={r[field]} disabled={!canEdit} onChange={() => toggle(r, field)} />
                 </td>
               ))}
             </tr>

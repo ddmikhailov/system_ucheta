@@ -361,6 +361,14 @@ describe("DashboardsPage — экспорт и отделение", () => {
     expect(screen.getByText("НОВАЯ-ГРУППА")).toBeInTheDocument();
   });
 
+  it("таблицы лежат в прокручиваемых обёртках; поля даты и курса подписаны", async () => {
+    open("admin");
+    const table = (await screen.findByText("СА172")).closest("table") as HTMLElement;
+    expect(table.closest(".table-scroll")).not.toBeNull();
+    expect(screen.getByLabelText("Дата")).toBeInTheDocument();
+    expect(screen.getByLabelText("Курс")).toBeInTheDocument();
+  });
+
   it("отделение передаётся и на других вкладках: группа риска, динамика, дисциплина", async () => {
     const user = userEvent.setup();
     open("admin");

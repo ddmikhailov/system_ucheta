@@ -307,9 +307,9 @@ function ManageSection({
       <form className="add-block" onSubmit={saveProfile}>
         <p className="add-block__title">Данные и группа</p>
         <div className="inline-form">
-          <input placeholder="Фамилия" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
-          <input placeholder="Имя" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
-          <input placeholder="Отчество" value={middleName} onChange={(e) => setMiddleName(e.target.value)} />
+          <input placeholder="Фамилия" aria-label="Фамилия" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
+          <input placeholder="Имя" aria-label="Имя" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
+          <input placeholder="Отчество" aria-label="Отчество" value={middleName} onChange={(e) => setMiddleName(e.target.value)} />
           <SearchSelect
             value={String(groupId)}
             options={[
@@ -332,7 +332,7 @@ function ManageSection({
       <div className="add-block">
         <p className="add-block__title">Статус обучения</p>
         <div className="inline-form">
-          <select value={status} onChange={(e) => setStatus(e.target.value)}>
+          <select aria-label="Статус обучения" value={status} onChange={(e) => setStatus(e.target.value)}>
             {Object.entries(STUDENT_STATUS_LABELS).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}

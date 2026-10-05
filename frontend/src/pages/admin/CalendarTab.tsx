@@ -155,9 +155,9 @@ export default function CalendarTab({ canEdit, canEditGroups }: { canEdit: boole
         >
           ← Прошедшие
         </button>
-        <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+        <input type="date" value={dateFrom} aria-label="Период с" onChange={(e) => setDateFrom(e.target.value)} />
         <span>—</span>
-        <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+        <input type="date" value={dateTo} aria-label="Период по" onChange={(e) => setDateTo(e.target.value)} />
       </div>
 
       <h4>Общий календарь (весь колледж)</h4>
@@ -165,15 +165,16 @@ export default function CalendarTab({ canEdit, canEditGroups }: { canEdit: boole
         <div className="add-block">
           <p className="add-block__title">Добавить исключение для всего колледжа</p>
           <div className="inline-form">
-            <input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} title="Дата (начало диапазона)" />
+            <input type="date" value={newDate} aria-label="Дата (начало диапазона)" onChange={(e) => setNewDate(e.target.value)} title="Дата (начало диапазона)" />
             <span>—</span>
             <input
               type="date"
+              aria-label="Конец диапазона"
               value={newDateTo}
               onChange={(e) => setNewDateTo(e.target.value)}
               title="Конец диапазона — необязательно, для каникул на несколько дней"
             />
-            <select value={newType} onChange={(e) => setNewType(e.target.value)}>
+            <select aria-label="Тип дня" value={newType} onChange={(e) => setNewType(e.target.value)}>
               {Object.entries(DAY_TYPE_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
@@ -232,8 +233,8 @@ export default function CalendarTab({ canEdit, canEditGroups }: { canEdit: boole
         <div className="add-block">
           <p className="add-block__title">Добавить исключение для выбранной группы</p>
           <div className="inline-form">
-            <input type="date" value={overrideDate} onChange={(e) => setOverrideDate(e.target.value)} />
-            <select value={overrideType} onChange={(e) => setOverrideType(e.target.value)}>
+            <input type="date" value={overrideDate} aria-label="Дата исключения" onChange={(e) => setOverrideDate(e.target.value)} />
+            <select aria-label="Тип дня" value={overrideType} onChange={(e) => setOverrideType(e.target.value)}>
               {Object.entries(DAY_TYPE_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}

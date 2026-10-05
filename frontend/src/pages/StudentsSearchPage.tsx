@@ -61,7 +61,7 @@ export default function StudentsSearchPage() {
       <div className="toolbar">
         <input
           type="search"
-          placeholder="Фамилия, имя или группа"
+          placeholder="Фамилия, имя или группа" aria-label="Фамилия, имя или группа"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           autoFocus

@@ -70,7 +70,7 @@ export default function DepartmentsTab({ canEdit }: { canEdit: boolean }) {
         <div className="add-block">
           <p className="add-block__title">Добавить отделение</p>
           <form className="inline-form" onSubmit={handleCreate}>
-            <input placeholder="Новое отделение" value={name} onChange={(e) => setName(e.target.value)} required />
+            <input placeholder="Новое отделение" aria-label="Новое отделение" value={name} onChange={(e) => setName(e.target.value)} required />
             <button type="submit" disabled={busy}>
               Добавить
             </button>

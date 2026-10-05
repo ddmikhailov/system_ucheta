@@ -100,10 +100,10 @@ export default function StudentsTab({ canCreate }: { canEdit?: boolean; canCreat
         <div className="add-block">
           <p className="add-block__title">Добавить студента в выбранную группу</p>
           <form className="inline-form" onSubmit={handleCreate}>
-            <input placeholder="Фамилия" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
-            <input placeholder="Имя" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
-            <input placeholder="Отчество" value={middleName} onChange={(e) => setMiddleName(e.target.value)} />
-            <input type="date" value={enrolledAt} onChange={(e) => setEnrolledAt(e.target.value)} />
+            <input placeholder="Фамилия" aria-label="Фамилия" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
+            <input placeholder="Имя" aria-label="Имя" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
+            <input placeholder="Отчество" aria-label="Отчество" value={middleName} onChange={(e) => setMiddleName(e.target.value)} />
+            <input type="date" value={enrolledAt} aria-label="Дата зачисления" onChange={(e) => setEnrolledAt(e.target.value)} />
             <button type="submit" disabled={busy || groupId === null}>
               Добавить студента
             </button>
@@ -121,7 +121,7 @@ export default function StudentsTab({ canCreate }: { canEdit?: boolean; canCreat
           title="Группа: начните вводить код, например «ГД»"
         />
         <input
-          placeholder="Поиск по ФИО — по всем группам"
+          placeholder="Поиск по ФИО — по всем группам" aria-label="Поиск по ФИО — по всем группам"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />

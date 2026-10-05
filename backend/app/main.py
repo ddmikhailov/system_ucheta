@@ -34,7 +34,7 @@ app = FastAPI(
     # общий VERSION-файл сюда не даёт выигрыша, см. TODO.md 5), поэтому при
     # бампе версии меняйте все три места;
     # tests/test_versions.py проверяет, что они не разошлись.
-    version="2.1.0",
+    version="2.1.1",
     docs_url="/docs" if _docs_enabled else None,
     redoc_url="/redoc" if _docs_enabled else None,
     openapi_url="/openapi.json" if _docs_enabled else None,
@@ -125,10 +125,35 @@ class _ImmutableStaticFiles(StaticFiles):
         return response
 
 
-if STATIC_DIR.is_dir():
-    assets_dir = STATIC_DIR / "assets"
+# Пути, которые браузер открывает «как страницу», но которые принадлежат серверу, а не интерфейсу.
+_SERVER_ONLY_PREFIXES = ("/assets", "/docs", "/redoc", "/openapi.json", "/health")
+
+
+def is_browser_navigation(method: str, path: str, headers) -> bool:
+    """Человек открыл адрес в браузере (обновил страницу, перешёл по закладке или ссылке), а не
+    интерфейс запросил данные. Нужно, потому что адреса интерфейса («/my-day», «/tasks», «/students»…)
+    совпадают с адресами API: без этой проверки F5 на них показывал JSON «Нужна авторизация»."""
+    if method not in ("GET", "HEAD") or path.startswith(_SERVER_ONLY_PREFIXES):
+        return False
+    destination = headers.get("sec-fetch-dest")  # современные браузеры: «document» для страниц, «empty» для fetch
+    if destination is not None:
+        return destination == "document"
+    return "text/html" in headers.get("accept", "")
+
+
+def register_spa(application: FastAPI, static_dir: Path) -> None:
+    """Подключает собранный интерфейс: /assets, отдачу страниц при переходе по адресу и SPA-фоллбэк."""
+    assets_dir = static_dir / "assets"
     if assets_dir.is_dir():
-        app.mount("/assets", _ImmutableStaticFiles(directory=assets_dir), name="assets")
+        application.mount("/assets", _ImmutableStaticFiles(directory=assets_dir), name="assets")
+
+    # Переход по адресу в браузере — всегда страница интерфейса, даже если такой же адрес есть у API.
+    # Запросы самого интерфейса (fetch) идут с другим заголовком и попадают в API как обычно.
+    @application.middleware("http")
+    async def serve_page_on_navigation(request, call_next):
+        if is_browser_navigation(request.method, request.url.path, request.headers):
+            return FileResponse(static_dir / "index.html", headers={"Cache-Control": "no-cache"})
+        return await call_next(request)
 
     # SPA-фоллбэк: отдаём реальный файл, если он есть (favicon, лого,
     # манифест), иначе index.html — дальше маршрутизацией занимается
@@ -138,8 +163,12 @@ if STATIC_DIR.is_dir():
     # index.html (и прочие файлы вне /assets) — без долгого кэша: иначе
     # браузер после деплоя может взять старую версию, ссылающуюся на уже
     # удалённые ассеты, и получить белый экран (см. TODO.md 5).
-    @app.get("/{full_path:path}")
+    @application.get("/{full_path:path}")
     async def spa_fallback(full_path: str):
-        candidate = resolve_static_file(full_path, STATIC_DIR)
-        target = candidate if candidate is not None else STATIC_DIR / "index.html"
+        candidate = resolve_static_file(full_path, static_dir)
+        target = candidate if candidate is not None else static_dir / "index.html"
         return FileResponse(target, headers={"Cache-Control": "no-cache"})
+
+
+if STATIC_DIR.is_dir():
+    register_spa(app, STATIC_DIR)

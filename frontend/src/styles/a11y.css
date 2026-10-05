@@ -62,3 +62,30 @@
   opacity: 0.45;
   height: 62%;
 }
+
+/* Цели нажатия на телефоне и планшете — не меньше 40–44 px (отметки в журнале, колокольчик, ссылки в таблицах). */
+@media (max-width: 900px) {
+  .mark-code-btn {
+    min-width: 40px;
+    height: 40px;
+  }
+
+  .notification-bell__toggle {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 10px;
+  }
+
+  .dash-table td > a:not(.link-btn),
+  .roster-table td > a:not(.link-btn) {
+    display: inline-block;
+    padding: 12px 0;
+  }
+
+  .dash-table td > .link-btn,
+  .roster-table td > .link-btn {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+  }
+}

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, ApiError, downloadFile } from "../api/client";
 import { useAuth } from "../auth/useAuth";
-import { COLLEGE_WIDE_ROLES, inRoles } from "../constants/roles";
+import { COLLEGE_WIDE_ROLES, DOSSIER_AUDIT_ROLES, inRoles } from "../constants/roles";
 import type { DepartmentAdmin } from "../api/types";
 
 interface SummaryRow {
@@ -56,6 +56,16 @@ const fmt = (n: number | null | undefined) => (n === null || n === undefined ? "
 // Социальный паспорт: сводка из досье по группам и поимённая карточка группы.
 // Особые данные берутся из зашифрованного досье — каждый просмотр поимённого
 // паспорта попадает в журнал просмотров досье.
+function SpecialUnavailable({ technical }: { technical: boolean }) {
+  return (
+    <p className="hint">
+      {technical
+        ? "Особые категории недоступны: на сервере не задан ключ шифрования (DOSSIER_ENCRYPTION_KEY)."
+        : "Особые категории (здоровье, учёт) сейчас не показываются. Если они нужны, обратитесь к администратору платформы."}
+    </p>
+  );
+}
+
 export default function PassportPage() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -67,6 +77,8 @@ export default function PassportPage() {
   const [error, setError] = useState<string | null>(null);
 
   const canFilterDepartment = inRoles(user?.role, COLLEGE_WIDE_ROLES);
+  // Причину (нет ключа шифрования на сервере) знать нужно администратору; остальным — что делать.
+  const technical = inRoles(user?.role, DOSSIER_AUDIT_ROLES);
 
   useEffect(() => {
     if (!canFilterDepartment) return;
@@ -124,7 +136,7 @@ export default function PassportPage() {
     <div>
       <div className="toolbar">
         {canFilterDepartment && (
-          <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
+          <select aria-label="Отделение" value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
             <option value="">Весь колледж</option>
             {departments.map((d) => (
               <option key={d.id} value={d.id}>
@@ -145,12 +157,12 @@ export default function PassportPage() {
       {summary && (
         <>
           {!summary.special_available && (
-            <p className="hint">Особые категории недоступны: на сервере не задан ключ шифрования.</p>
+            <SpecialUnavailable technical={technical} />
           )}
           {summary.rows.length === 0 ? (
             <p className="hint">Нет доступных групп.</p>
           ) : (
-            <table className="dash-table">
+            <div className="table-scroll"><table className="dash-table">
               <thead>
                 <tr>
                   <th>Группа</th>
@@ -192,7 +204,7 @@ export default function PassportPage() {
                   );
                 })}
               </tbody>
-            </table>
+            </table></div>
           )}
         </>
       )}
@@ -201,6 +213,8 @@ export default function PassportPage() {
 }
 
 function GroupView({ passport: p, onExport }: { passport: GroupPassport; onExport: () => void }) {
+  const { user } = useAuth();
+  const technical = inRoles(user?.role, DOSSIER_AUDIT_ROLES);
   return (
     <div className="student-card">
       <div className="student-card__header">
@@ -224,9 +238,9 @@ function GroupView({ passport: p, onExport }: { passport: GroupPassport; onExpor
 
       <h3 className="student-card__section">Особые категории</h3>
       {!p.special_available && (
-        <p className="hint">Недоступно: на сервере не задан ключ шифрования (DOSSIER_ENCRYPTION_KEY).</p>
+        <SpecialUnavailable technical={technical} />
       )}
-      <table className="dash-table">
+      <div className="table-scroll"><table className="dash-table">
         <thead>
           <tr>
             <th>Категория</th>
@@ -243,7 +257,7 @@ function GroupView({ passport: p, onExport }: { passport: GroupPassport; onExpor
             </tr>
           ))}
         </tbody>
-      </table>
+      </table></div>
       {p.dossier_empty > 0 && (
         <p className="hint">
           У {p.dossier_empty} студентов досье не заполнено — цифры по категориям неполные, пока данные не внесены.

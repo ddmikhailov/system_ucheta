@@ -316,14 +316,14 @@ function Guardians({
       )}
       <form className="add-block" onSubmit={add}>
         <div className="inline-form">
-          <input placeholder="ФИО" value={name} onChange={(e) => setName(e.target.value)} required />
+          <input placeholder="ФИО" aria-label="ФИО представителя" value={name} onChange={(e) => setName(e.target.value)} required />
           <input
-            placeholder="Кем приходится (мать, отец, опекун…)"
+            placeholder="Кем приходится (мать, отец, опекун…)" aria-label="Кем приходится (мать, отец, опекун…)"
             value={relation}
             onChange={(e) => setRelation(e.target.value)}
             required
           />
-          <input placeholder="Телефон" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          <input placeholder="Телефон" aria-label="Телефон представителя" value={phone} onChange={(e) => setPhone(e.target.value)} />
           <label>
             <input type="checkbox" checked={primary} onChange={(e) => setPrimary(e.target.checked)} /> Основной
           </label>
@@ -403,7 +403,7 @@ function Notes({
             <input type="date" value={occurredOn} max={todayIso()} onChange={(e) => setOccurredOn(e.target.value)} />
           </label>
           <input
-            placeholder="Что произошло, о чём договорились"
+            placeholder="Что произошло, о чём договорились" aria-label="Что произошло, о чём договорились"
             value={text}
             onChange={(e) => setText(e.target.value)}
             required
