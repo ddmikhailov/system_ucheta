@@ -23,7 +23,7 @@ const MARK_CODES = [
 function entry(id: number, name: string, over: Partial<RosterEntry> = {}): RosterEntry {
   return {
     student_id: id, full_name: name, mark_code: null, mark_name: null, comment: null, basis_reference: null,
-    is_draft_suggestion: false, is_locked: false, risk_streak: 0, last_edited_by: null, last_edited_at: null, ...over,
+    is_draft_suggestion: false, is_locked: false, risk_streak: 0, attendance_percent: 100, is_risk: false, last_edited_by: null, last_edited_at: null, ...over,
   };
 }
 
@@ -105,11 +105,11 @@ describe("CuratorCabinetPage — журнал дня", () => {
     expect(screen.queryByRole("link", { name: "Алексеев Пётр" })).not.toBeInTheDocument();
   });
 
-  it("подсвечивает риск (серия неуважительных) по порогу из настроек", async () => {
-    mockApi(roster([entry(1, "Алексеев Пётр", { risk_streak: 3 }), entry(2, "Андреева Елена", { risk_streak: 2 })]));
+  it("подсвечивает группу риска: посещаемость с начала семестра ниже порога, процент в подписи", async () => {
+    mockApi(roster([entry(1, "Алексеев Пётр", { attendance_percent: 78.5, is_risk: true }), entry(2, "Андреева Елена", { attendance_percent: 91 })]));
     renderPage(<CuratorCabinetPage />, { role: "curator" });
     await screen.findByText("Алексеев Пётр");
-    expect(within(studentRow("Алексеев")).getByText(/риск: 3 дн\. подряд/)).toBeInTheDocument();
+    expect(within(studentRow("Алексеев")).getByText(/риск: посещаемость 78,5 %/)).toBeInTheDocument();
     expect(within(studentRow("Андреева")).queryByText(/риск/)).not.toBeInTheDocument();
   });
 

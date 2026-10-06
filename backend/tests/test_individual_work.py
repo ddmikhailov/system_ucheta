@@ -24,16 +24,22 @@ def _day(delta):
 
 
 @pytest.fixture()
-def streaks(monkeypatch):
-    """Серия пропусков задаётся тестом: {индекс студента: серия}."""
+def attendance(monkeypatch):
+    """Посещаемость студентов задаётся тестом: {индекс студента в группе: процент}; остальные — 100 %."""
     holder = {}
 
-    def fake(db, students, as_of, lookback_days=21):
+    def fake(db, students, as_of):
         ids = sorted(s.id for s in students)  # номера в тестах — по порядку id, как в _students
-        return {sid: holder.get(i, 0) for i, sid in enumerate(ids)}
+        return {sid: svc_rate(holder.get(i, 100.0)) for i, sid in enumerate(ids)}
 
-    monkeypatch.setattr(svc.attendance_service, "consecutive_unexcused_counts_bulk", fake)
+    monkeypatch.setattr(svc.attendance_service, "attendance_rates_bulk", fake)
     return holder
+
+
+def svc_rate(percent):
+    from app.services.attendance_service import AttendanceRate
+    return AttendanceRate(days=20, absent=round(20 * (100 - percent) / 100), percent=percent)
+
 
 
 # ---------- заметки ----------
@@ -77,10 +83,10 @@ def test_follow_up_can_be_closed_and_reopened_by_anyone_with_access(client, cura
 
 # ---------- обзор группы ----------
 
-def test_overview_lists_risk_students_and_those_with_work(client, curator_headers, curator_group, imported, db, streaks):
+def test_overview_lists_risk_students_and_those_with_work(client, curator_headers, curator_group, imported, db, attendance):
     st = _students(db, curator_group)
-    streaks[0] = 5  # риск, работы нет → нужна работа
-    streaks[1] = 4  # риск, беседа вчера → внимание не требуется
+    attendance[0] = 60.0  # посещаемость 60 % (риск), работы нет → нужна работа
+    attendance[1] = 70.0  # посещаемость 70 % (риск), беседа вчера → внимание не требуется
     _note(client, curator_headers, st[1].id, occurred_on=_day(-1))
     _note(client, curator_headers, st[2].id, kind="call", occurred_on=_day(-40))  # давняя работа, без риска
     r = client.get(f"/individual-work/groups/{curator_group.id}", headers=curator_headers)
@@ -95,24 +101,24 @@ def test_overview_lists_risk_students_and_those_with_work(client, curator_header
     assert body["no_work_days"] == 14
 
 
-def test_old_work_does_not_count_as_recent(client, curator_headers, curator_group, imported, db, streaks):
+def test_old_work_does_not_count_as_recent(client, curator_headers, curator_group, imported, db, attendance):
     st = _students(db, curator_group)
-    streaks[0] = 4
+    attendance[0] = 70.0
     _note(client, curator_headers, st[0].id, occurred_on=_day(-30))
     row = client.get(f"/individual-work/groups/{curator_group.id}", headers=curator_headers).json()["rows"][0]
     assert row["needs_attention"] is True and row["work_count"] == 1
 
 
-def test_non_work_notes_do_not_count(client, curator_headers, curator_group, imported, db, streaks):
+def test_non_work_notes_do_not_count(client, curator_headers, curator_group, imported, db, attendance):
     st = _students(db, curator_group)
-    streaks[0] = 4
+    attendance[0] = 70.0
     _note(client, curator_headers, st[0].id, kind="incident")
     _note(client, curator_headers, st[0].id, kind="other")
     row = client.get(f"/individual-work/groups/{curator_group.id}", headers=curator_headers).json()["rows"][0]
     assert row["work_count"] == 0 and row["needs_attention"] is True
 
 
-def test_follow_up_dates_in_overview(client, curator_headers, curator_group, imported, db, streaks):
+def test_follow_up_dates_in_overview(client, curator_headers, curator_group, imported, db, attendance):
     st = _students(db, curator_group)
     _note(client, curator_headers, st[0].id, occurred_on=_day(-10), follow_up_on=_day(-1))
     later = _note(client, curator_headers, st[0].id, follow_up_on=_day(5)).json()

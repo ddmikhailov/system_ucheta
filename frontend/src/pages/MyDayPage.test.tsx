@@ -96,9 +96,9 @@ describe("MyDayPage", () => {
     get.mockResolvedValueOnce(day({
       attention_total: 3,
       attention: [
-        { student_id: 1, full_name: "Алексеев Пётр", group_code: "СА172", risk_streak: 5, needs_work: true, last_work_on: null, follow_up_on: null, follow_up_overdue: false, follow_up_today: false },
-        { student_id: 2, full_name: "Андреева Елена", group_code: "СА172", risk_streak: 0, needs_work: false, last_work_on: "2026-09-20", follow_up_on: "2026-09-30", follow_up_overdue: true, follow_up_today: false },
-        { student_id: 3, full_name: "Борисов Иван", group_code: "СА172", risk_streak: 0, needs_work: false, last_work_on: "2026-09-25", follow_up_on: "2026-10-02", follow_up_overdue: false, follow_up_today: true },
+        { student_id: 1, full_name: "Алексеев Пётр", group_code: "СА172", risk_streak: 5, attendance_percent: 62, needs_work: true, last_work_on: null, follow_up_on: null, follow_up_overdue: false, follow_up_today: false },
+        { student_id: 2, full_name: "Андреева Елена", group_code: "СА172", risk_streak: 0, attendance_percent: 100, needs_work: false, last_work_on: "2026-09-20", follow_up_on: "2026-09-30", follow_up_overdue: true, follow_up_today: false },
+        { student_id: 3, full_name: "Борисов Иван", group_code: "СА172", risk_streak: 0, attendance_percent: 100, needs_work: false, last_work_on: "2026-09-25", follow_up_on: "2026-10-02", follow_up_overdue: false, follow_up_today: true },
       ],
     }));
     get.mockResolvedValue(day());
@@ -110,7 +110,7 @@ describe("MyDayPage", () => {
       </>,
       { role: "curator" }
     );
-    expect(await screen.findByText("5 пропусков подряд, записей за 14 дн. нет")).toBeInTheDocument();
+    expect(await screen.findByText("посещаемость 62 %, записей за 14 дн. нет")).toBeInTheDocument();
     expect(screen.getByText("вернуться к вопросу было до 30.09.2026")).toBeInTheDocument();
     expect(screen.getByText("вернуться к вопросу сегодня")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Алексеев Пётр" })).toHaveAttribute("href", "/students/1");
@@ -133,14 +133,14 @@ describe("MyDayPage", () => {
     expect(await screen.findByText("Запись сохранена: Алексеев Пётр.")).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(get).toHaveBeenCalledTimes(2); // сводка перечитана
-    expect(screen.queryByText(/пропусков подряд/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/посещаемость \d/)).not.toBeInTheDocument();
   });
 
   it("форма быстрой записи: срок возврата уходит на сервер, ошибка показана, окно не закрывается, Отмена закрывает", async () => {
     const user = userEvent.setup();
     get.mockResolvedValue(day({
       attention_total: 1,
-      attention: [{ student_id: 1, full_name: "Алексеев Пётр", group_code: "СА172", risk_streak: 4, needs_work: true, last_work_on: null, follow_up_on: null, follow_up_overdue: false, follow_up_today: false }],
+      attention: [{ student_id: 1, full_name: "Алексеев Пётр", group_code: "СА172", risk_streak: 4, attendance_percent: 70, needs_work: true, last_work_on: null, follow_up_on: null, follow_up_overdue: false, follow_up_today: false }],
     }));
     post.mockRejectedValueOnce(new ApiError(400, "Вернуться к вопросу нужно не раньше даты события"));
     renderPage(<MyDayPage />, { role: "curator" });
@@ -160,7 +160,7 @@ describe("MyDayPage", () => {
   it("список внимания обрезан — подсказка с полным числом", async () => {
     get.mockResolvedValue(day({
       attention_total: 41,
-      attention: [{ student_id: 1, full_name: "Алексеев Пётр", group_code: "СА172", risk_streak: 4, needs_work: true, last_work_on: null, follow_up_on: null, follow_up_overdue: false, follow_up_today: false }],
+      attention: [{ student_id: 1, full_name: "Алексеев Пётр", group_code: "СА172", risk_streak: 4, attendance_percent: 70, needs_work: true, last_work_on: null, follow_up_on: null, follow_up_overdue: false, follow_up_today: false }],
     }));
     renderPage(<MyDayPage />, { role: "curator" });
     expect(await screen.findByText(/Показаны первые 1 из 41/)).toBeInTheDocument();

@@ -25,6 +25,7 @@ import type {
 } from "../api/types";
 import { COLLEGE_WIDE_ROLES, CURATOR_CAPABLE_ROLES, DEPARTMENT_SCOPED_ROLES, DOSSIER_STAFF_ROLES, inRoles } from "../constants/roles";
 import { formatDateRu, toIso, todayIso } from "../utils/date";
+import { formatPercent } from "../utils/percent";
 
 function daysAgoIso(n: number): string {
   const d = new Date();
@@ -416,7 +417,8 @@ export default function DashboardsPage() {
             <tr>
               <th>Студент</th>
               <th>Группа</th>
-              <th>Пропусков подряд</th>
+              <th>Посещаемость с начала семестра</th>
+              <th>Пропущено дней</th>
             </tr>
           </thead>
           <tbody>
@@ -428,12 +430,15 @@ export default function DashboardsPage() {
                   </Link>
                 </td>
                 <td>{r.group_code}</td>
-                <td>{r.streak}</td>
+                <td>{formatPercent(r.attendance_percent)}</td>
+                <td>
+                  {r.absent} из {r.days}
+                </td>
               </tr>
             ))}
             {riskRows.length === 0 && (
               <tr>
-                <td colSpan={3}>Нет студентов группы риска на выбранную дату.</td>
+                <td colSpan={4}>Нет студентов группы риска на выбранную дату.</td>
               </tr>
             )}
           </tbody>

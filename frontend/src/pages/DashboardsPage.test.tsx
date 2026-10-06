@@ -51,7 +51,7 @@ function mockApi() {
       ];
     }
     if (path.startsWith("/dashboards/risk-students")) {
-      return [{ student_id: 7, full_name: "Алексеев Пётр", group_code: "СА172", streak: 4 }];
+      return [{ student_id: 7, full_name: "Алексеев Пётр", group_code: "СА172", streak: 4, attendance_percent: 72.5, days: 40, absent: 11 }];
     }
     if (path.startsWith("/dashboards/curator-discipline")) {
       return [
@@ -197,12 +197,14 @@ describe("DashboardsPage — динамика и группа риска", () =>
     expect(apiCalls("/dashboards/dynamics")[0]).toMatch(/date_from=\d{4}-\d{2}-\d{2}&date_to=\d{4}-\d{2}-\d{2}/);
   });
 
-  it("группа риска: ссылка на карточку студента и серия пропусков; пусто — сообщение", async () => {
+  it("группа риска: ссылка на карточку студента, посещаемость и пропущенные дни; пусто — сообщение", async () => {
     const user = userEvent.setup();
     open("admin", "/dashboards?tab=risk");
     const link = await screen.findByRole("link", { name: "Алексеев Пётр" });
     expect(link).toHaveAttribute("href", "/students/7");
-    expect(within(link.closest("tr") as HTMLElement).getByText("4")).toBeInTheDocument();
+    const riskRow = link.closest("tr") as HTMLElement;
+    expect(within(riskRow).getByText("72,5 %")).toBeInTheDocument();
+    expect(within(riskRow).getByText("11 из 40")).toBeInTheDocument();
 
     get.mockImplementation(async (path: string) => (path.startsWith("/dashboards/risk-students") ? [] : GROUPS));
     await user.click(screen.getByRole("button", { name: "День по колледжу" }));

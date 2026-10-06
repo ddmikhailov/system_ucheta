@@ -1,9 +1,9 @@
 """Журнал индивидуальной работы (этап 5а): беседы, вызовы родителей, Совет профилактики,
 визиты — это заметки досье особых видов, а здесь они сведены в обзор по группе.
 
-  * «Группа внимания» — студенты, у которых серия неуважительных пропусков дошла до порога, и те,
-    с кем уже ведётся работа (есть записи или открытые «вернуться к вопросу»);
-  * «Нужна работа» — серия пропусков есть, а записи об индивидуальной работе за последние
+  * «Группа внимания» — студенты в группе риска (посещаемость с начала семестра ниже порога,
+    `risk_attendance_percent`), и те, с кем уже ведётся работа (есть записи или открытые «вернуться к вопросу»);
+  * «Нужна работа» — студент в группе риска, а записи об индивидуальной работе за последние
     NO_WORK_DAYS дней нет;
   * «Вернуться к вопросу» — дата в заметке; когда она наступает, автору приходит напоминание."""
 import datetime
@@ -11,7 +11,6 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
 from app.models import Student, StudentNote, User
 from app.services import attendance_service, in_app_notification_service
 from app.services.audit_service import log_action
@@ -26,6 +25,7 @@ class WorkRow:
     full_name: str
     risk_streak: int
     is_risk: bool
+    attendance_percent: float | None
     work_count: int
     last_work_on: datetime.date | None
     next_follow_up_on: datetime.date | None
@@ -43,7 +43,7 @@ def group_overview(db: Session, group_id: int, today: datetime.date) -> list[Wor
         return []
     ids = [s.id for s in students]
     streaks = attendance_service.consecutive_unexcused_counts_bulk(db, students, today)
-    threshold = get_settings().risk_threshold_consecutive_unexcused
+    rates = attendance_service.attendance_rates_bulk(db, students, today)
     notes: dict[int, list[StudentNote]] = {}
     for n in db.query(StudentNote).filter(StudentNote.student_id.in_(ids), StudentNote.kind.in_(WORK_KINDS)):
         notes.setdefault(n.student_id, []).append(n)
@@ -52,19 +52,21 @@ def group_overview(db: Session, group_id: int, today: datetime.date) -> list[Wor
     for s in students:
         mine = notes.get(s.id, [])
         streak = streaks.get(s.id, 0)
-        is_risk = streak >= threshold
+        rate = rates[s.id]
+        is_risk = rate.is_risk
         open_follow = sorted(n.follow_up_on for n in mine if n.follow_up_on and not n.follow_up_done)
         if not (is_risk or mine):
             continue
         last = max((note_date(n) for n in mine), default=None)
         recent = last is not None and (today - last).days <= NO_WORK_DAYS
         rows.append(WorkRow(
-            student_id=s.id, full_name=s.full_name, risk_streak=streak, is_risk=is_risk, work_count=len(mine),
+            student_id=s.id, full_name=s.full_name, risk_streak=streak, is_risk=is_risk, attendance_percent=rate.percent, work_count=len(mine),
             last_work_on=last, next_follow_up_on=open_follow[0] if open_follow else None,
             follow_up_overdue=bool(open_follow and open_follow[0] < today),
             needs_attention=is_risk and not recent,
         ))
-    rows.sort(key=lambda r: (not r.needs_attention, not r.follow_up_overdue, -r.risk_streak, r.full_name))
+    rows.sort(key=lambda r: (not r.needs_attention, not r.follow_up_overdue,
+                             r.attendance_percent if r.attendance_percent is not None else 101.0, r.full_name))
     return rows
 
 

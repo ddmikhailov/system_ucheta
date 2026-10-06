@@ -27,10 +27,8 @@ settings = get_settings()
 
 @router.get("/settings")
 def curator_settings(user: User = Depends(get_current_user)):
-    # Порог "риска" был захардкожен во фронте (см. TODO.md 4) — теперь
-    # берётся из того же значения, что реально использует бэкенд при
-    # расчёте risk_students.
-    return {"risk_threshold_consecutive_unexcused": settings.risk_threshold_consecutive_unexcused}
+    # Порог «группы риска» берётся из того же значения, что реально использует бэкенд.
+    return {"risk_attendance_percent": settings.risk_attendance_percent, "risk_min_days": settings.risk_min_days}
 
 
 @router.get("/mark-codes")

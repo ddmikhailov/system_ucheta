@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import require_management, require_roles, require_viewer, scope_department_id, validate_date_range
 from app.core import policies
-from app.core.config import get_settings
 from app.core.roles import is_department_scoped
 from app.db.session import get_db
 from app.models import AttendanceMark, RoleCode, Student, StudyGroup, User
@@ -25,7 +24,6 @@ from app.schemas.dashboards import (
 from app.services import stats_service, summary_service
 
 router = APIRouter(prefix="/dashboards", tags=["dashboards"])
-settings = get_settings()
 
 
 @router.get("/day", response_model=list[DayOverviewRow])
@@ -107,15 +105,13 @@ def summary(
 @router.get("/risk-students", response_model=list[RiskStudentRow])
 def risk_students(
     as_of_date: datetime.date,
-    threshold: int | None = None,
+    threshold: float | None = Query(None, ge=0, le=100, description="порог посещаемости, %; по умолчанию 85"),
     department_id: int | None = None,
     user: User = Depends(require_viewer),
     db: Session = Depends(get_db),
 ):
     scope = scope_department_id(user, department_id)
-    rows = stats_service.risk_students(
-        db, as_of_date, threshold or settings.risk_threshold_consecutive_unexcused, scope
-    )
+    rows = stats_service.risk_students(db, as_of_date, threshold, scope)
     return [RiskStudentRow(**r) for r in rows]
 
 

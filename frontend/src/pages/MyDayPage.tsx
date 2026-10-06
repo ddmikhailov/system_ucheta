@@ -9,6 +9,7 @@ import { formatDateRu, formatDayMonthRu, formatWeekdayLong } from "../utils/date
 import { toast } from "../utils/feedback";
 import { initials } from "../utils/taskAnswers";
 import { plural } from "../utils/plural";
+import { formatPercent } from "../utils/percent";
 import type { MarkKind } from "../utils/statusMark";
 import type { MyDay, MyDayAttention, MyDayTask } from "../api/types";
 
@@ -46,7 +47,7 @@ function taskMark(t: MyDayTask): MarkKind {
 
 function attentionReasons(s: MyDayAttention, noWorkDays: number): string[] {
   const reasons: string[] = [];
-  if (s.needs_work) reasons.push(`${s.risk_streak} пропусков подряд, записей за ${noWorkDays} дн. нет`);
+  if (s.needs_work) reasons.push(`посещаемость ${formatPercent(s.attendance_percent)}, записей за ${noWorkDays} дн. нет`);
   if (s.follow_up_overdue && s.follow_up_on) reasons.push(`вернуться к вопросу было до ${formatDateRu(s.follow_up_on)}`);
   if (s.follow_up_today) reasons.push("вернуться к вопросу сегодня");
   return reasons;

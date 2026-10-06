@@ -30,7 +30,7 @@ const GROUPS = [
 function entry(id: number, name: string, over: Partial<RosterEntry> = {}): RosterEntry {
   return {
     student_id: id, full_name: name, mark_code: null, mark_name: null, comment: null, basis_reference: null,
-    is_draft_suggestion: false, is_locked: false, risk_streak: 0, last_edited_by: null, last_edited_at: null, ...over,
+    is_draft_suggestion: false, is_locked: false, risk_streak: 0, attendance_percent: 100, is_risk: false, last_edited_by: null, last_edited_at: null, ...over,
   };
 }
 

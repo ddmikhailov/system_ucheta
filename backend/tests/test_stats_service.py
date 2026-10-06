@@ -58,26 +58,7 @@ def test_curator_discipline_counts_missed_days(imported, db, curator_group, cura
     assert row["missed"] == row["total_study_days"] - 1
 
 
-def test_risk_students_threshold(imported, db, curator_group, curator_user):
-    students = attendance_service.get_active_students(db, curator_group.id, DAY1)
-    student = students[0]
-
-    for offset in range(3):
-        day = DAY1 + datetime.timedelta(days=offset)
-        attendance_service.submit_day(
-            db, curator_group.id, day,
-            [{"student_id": student.id, "mark_code": "н", "comment": None, "basis_reference": None}],
-            curator_user, today=day,
-        )
-
-    # as_of_date — последний размеченный день; risk_students сам заглядывает на день
-    # вперёд, чтобы включить его в подсчёт стрика (см. stats_service.risk_students).
-    as_of = DAY1 + datetime.timedelta(days=2)
-    risky = stats_service.risk_students(db, as_of, threshold=3)
-    assert any(r["student_id"] == student.id for r in risky)
-
-    not_risky = stats_service.risk_students(db, as_of, threshold=4)
-    assert not any(r["student_id"] == student.id for r in not_risky)
+# Правило «группы риска» (посещаемость ниже 85 % с начала семестра) проверяется в test_risk_group.py.
 
 
 def test_risk_students_query_count_does_not_scale_with_student_count(imported, db):
@@ -94,7 +75,7 @@ def test_risk_students_query_count_does_not_scale_with_student_count(imported, d
 
     event.listen(db.get_bind(), "before_cursor_execute", _count)
     try:
-        stats_service.risk_students(db, DAY1, threshold=3)
+        stats_service.risk_students(db, DAY1, threshold=85.0)
     finally:
         event.remove(db.get_bind(), "before_cursor_execute", _count)
 

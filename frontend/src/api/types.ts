@@ -64,6 +64,7 @@ export interface IndividualWorkRow {
   full_name: string;
   risk_streak: number;
   is_risk: boolean;
+  attendance_percent: number | null;
   work_count: number;
   last_work_on: string | null;
   next_follow_up_on: string | null;
@@ -111,6 +112,7 @@ export interface MyDayAttention {
   full_name: string;
   group_code: string;
   risk_streak: number;
+  attendance_percent: number | null;
   needs_work: boolean;
   last_work_on: string | null;
   follow_up_on: string | null;
@@ -184,6 +186,8 @@ export interface RosterEntry {
   is_draft_suggestion: boolean;
   is_locked: boolean;
   risk_streak: number;
+  attendance_percent: number | null;
+  is_risk: boolean;
   last_edited_by: string | null;
   last_edited_at: string | null;
 }
@@ -250,6 +254,9 @@ export interface RiskStudentRow {
   study_group_id: number;
   group_code: string;
   streak: number;
+  attendance_percent: number;
+  days: number;
+  absent: number;
 }
 
 export interface CuratorDisciplineRow {

@@ -173,11 +173,12 @@ def day_attention(db: Session, groups: list[StudyGroup], today: datetime.date) -
                 continue
             items.append(AttentionStudent(
                 student_id=r.student_id, full_name=r.full_name, group_code=g.code, risk_streak=r.risk_streak,
+                attendance_percent=r.attendance_percent,
                 needs_work=r.needs_attention, last_work_on=r.last_work_on, follow_up_on=r.next_follow_up_on,
                 follow_up_overdue=r.follow_up_overdue, follow_up_today=follow_today,
             ))
     items.sort(key=lambda s: (not s.needs_work, not s.follow_up_overdue, not s.follow_up_today,
-                              -s.risk_streak, s.full_name))
+                              s.attendance_percent if s.attendance_percent is not None else 101.0, s.full_name))
     return items[:MAX_ATTENTION], len(items)
 
 

@@ -13,6 +13,7 @@ import { dialogs } from "../utils/feedback";
 import GroupListModal from "./GroupListModal";
 import StudentCardModal from "./StudentCardModal";
 import GroupRhythm from "./GroupRhythm";
+import { formatPercent } from "../utils/percent";
 
 // Раньше подсказка точки в полоске месяца была просто ISO-датой (см. TODO.md 4).
 const MONTH_DOT_TITLES: Record<string, string> = {
@@ -79,7 +80,7 @@ export default function DayJournal({
   const [showCommentFor, setShowCommentFor] = useState<number | null>(null);
   const [groupsLoaded, setGroupsLoaded] = useState(false);
   const [groupsError, setGroupsError] = useState<string | null>(null);
-  const [riskThreshold, setRiskThreshold] = useState(3);
+  const [riskPercent, setRiskPercent] = useState(85);
   const [firstPeriod, setFirstPeriod] = useState("");
   // Выбранное отделение; пока не выбирали — отделение текущей группы.
   const [departmentChoice, setDepartmentChoice] = useState<number | null>(null);
@@ -102,8 +103,8 @@ export default function DayJournal({
     loadGroups();
     api.get<MarkCodeOption[]>("/curator/mark-codes").then(setMarkCodes);
     api
-      .get<{ risk_threshold_consecutive_unexcused: number }>("/curator/settings")
-      .then((s) => setRiskThreshold(s.risk_threshold_consecutive_unexcused))
+      .get<{ risk_attendance_percent: number }>("/curator/settings")
+      .then((s) => setRiskPercent(s.risk_attendance_percent))
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -393,7 +394,7 @@ export default function DayJournal({
               {roster.entries.map((entry) => {
                 const current = pending[entry.student_id];
                 const code = current?.mark_code ?? null;
-                const risky = entry.risk_streak >= riskThreshold;
+                const risky = entry.is_risk;
                 const hasComment = Boolean(current?.comment || current?.basis_reference);
                 return (
                   <tr key={entry.student_id} className={risky ? "risk-row" : ""}>
@@ -417,7 +418,11 @@ export default function DayJournal({
                       {entry.is_draft_suggestion && !entry.is_locked && (
                         <span className="draft-badge">черновик со вчера</span>
                       )}
-                      {risky && <span className="risk-badge">риск: {entry.risk_streak} дн. подряд</span>}
+                      {risky && (
+                        <span className="risk-badge" title={`Группа риска: посещаемость с начала семестра ниже ${riskPercent} %`}>
+                          риск: посещаемость {formatPercent(entry.attendance_percent)}
+                        </span>
+                      )}
                     </td>
                     <td data-label="Комментарий">
                       {!entry.is_locked && code && (

@@ -28,16 +28,22 @@ def _submit_all_present(client, headers, group, day):
 
 
 @pytest.fixture()
-def streaks(monkeypatch):
-    """Серия пропусков задаётся тестом: {индекс студента в группе: серия}."""
+def attendance(monkeypatch):
+    """Посещаемость студентов задаётся тестом: {индекс студента в группе: процент}; остальные — 100 %."""
     holder = {}
 
-    def fake(db, students, as_of, lookback_days=21):
-        ids = sorted(s.id for s in students)
-        return {sid: holder.get(i, 0) for i, sid in enumerate(ids)}
+    def fake(db, students, as_of):
+        ids = sorted(s.id for s in students)  # номера в тестах — по порядку id, как в _students
+        return {sid: svc_rate(holder.get(i, 100.0)) for i, sid in enumerate(ids)}
 
-    monkeypatch.setattr(iw.attendance_service, "consecutive_unexcused_counts_bulk", fake)
+    monkeypatch.setattr(iw.attendance_service, "attendance_rates_bulk", fake)
     return holder
+
+
+def svc_rate(percent):
+    from app.services.attendance_service import AttendanceRate
+    return AttendanceRate(days=20, absent=round(20 * (100 - percent) / 100), percent=percent)
+
 
 
 # ---------- группы: сдан ли день, несданные дни ----------
@@ -150,9 +156,9 @@ def _note(client, headers, sid, **body):
     assert r.status_code == 201, r.text
 
 
-def test_attention_lists_no_work_overdue_and_due_today_follow_ups(client, curator_headers, curator_user, curator_group, imported, db, streaks):
+def test_attention_lists_no_work_overdue_and_due_today_follow_ups(client, curator_headers, curator_user, curator_group, imported, db, attendance):
     st = _students(db, curator_group)
-    streaks[0] = 5  # серия, работы нет → нужна работа
+    attendance[0] = 60.0  # посещаемость 60 %, работы нет → нужна работа
     _note(client, curator_headers, st[1].id, occurred_on=_day(-10), follow_up_on=_day(-1))  # просрочено
     _note(client, curator_headers, st[2].id, follow_up_on=_day(0))                           # сегодня
     _note(client, curator_headers, st[3].id, follow_up_on=_day(4))                           # потом
@@ -165,10 +171,10 @@ def test_attention_lists_no_work_overdue_and_due_today_follow_ups(client, curato
         (st[2].id, False, False, True),
     ]
     assert day.attention_total == 3
-    assert day.attention[0].risk_streak == 5 and day.attention[0].group_code == curator_group.code
+    assert day.attention[0].attendance_percent == 60.0 and day.attention[0].group_code == curator_group.code
 
 
-def test_closed_follow_up_leaves_the_list(client, curator_headers, curator_user, curator_group, imported, db, streaks):
+def test_closed_follow_up_leaves_the_list(client, curator_headers, curator_user, curator_group, imported, db, attendance):
     st = _students(db, curator_group)
     _note(client, curator_headers, st[0].id, occurred_on=_day(-5), follow_up_on=_day(-1))
     assert len(_build(db, curator_user, today_local()).attention) == 1
@@ -177,10 +183,10 @@ def test_closed_follow_up_leaves_the_list(client, curator_headers, curator_user,
     assert _build(db, curator_user, today_local()).attention == []
 
 
-def test_attention_list_is_capped_but_total_is_honest(client, curator_headers, curator_user, curator_group, imported, db, streaks, monkeypatch):
+def test_attention_list_is_capped_but_total_is_honest(client, curator_headers, curator_user, curator_group, imported, db, attendance, monkeypatch):
     monkeypatch.setattr(my_day_service, "MAX_ATTENTION", 2)
     for i in range(4):
-        streaks[i] = 4
+        attendance[i] = 70.0
     day = _build(db, curator_user, today_local())
     assert len(day.attention) == 2 and day.attention_total == 4
 

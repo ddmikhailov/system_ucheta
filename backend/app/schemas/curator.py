@@ -12,7 +12,9 @@ class RosterEntry(BaseModel):
     basis_reference: str | None
     is_draft_suggestion: bool
     is_locked: bool
-    risk_streak: int
+    risk_streak: int  # сколько дней подряд «н» — справочно
+    attendance_percent: float | None = None  # посещаемость с начала семестра, %
+    is_risk: bool = False  # группа риска: посещаемость ниже порога
     # Кто и когда последний раз вносил/менял отметку — для журнала группы
     # у администрации (см. обновление 1.1). У куратора в его собственном
     # кабинете эти поля есть, но не показываются.

@@ -1,9 +1,11 @@
 import datetime
+from dataclasses import dataclass
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core import policies
+from app.core.config import get_settings
 from app.core.time import today_local, utcnow
 from app.models import (
     AbsencePeriod,
@@ -184,6 +186,66 @@ def consecutive_unexcused_counts_bulk(
     return result
 
 
+@dataclass(frozen=True)
+class AttendanceRate:
+    """Посещаемость студента с начала семестра: сданные группой дни, пропущенные из них, процент."""
+    days: int
+    absent: int
+    percent: float | None  # None — сданных дней ещё нет
+
+    @property
+    def is_risk(self) -> bool:
+        """Группа риска: посещаемость ниже порога (и сданных дней уже достаточно, чтобы процент что-то значил)."""
+        settings = get_settings()
+        return self.percent is not None and self.days >= settings.risk_min_days and self.percent < settings.risk_attendance_percent
+
+
+def semester_start(day: datetime.date) -> datetime.date:
+    """Начало семестра, в который попадает `day`: сентябрь–январь — с 1 сентября, февраль–август — с 1 февраля."""
+    if day.month >= 9:
+        return datetime.date(day.year, 9, 1)
+    if day.month == 1:
+        return datetime.date(day.year - 1, 9, 1)
+    return datetime.date(day.year, 2, 1)
+
+
+def attendance_rates_bulk(db: Session, students: list[Student], as_of_date: datetime.date) -> dict[int, AttendanceRate]:
+    """Посещаемость сразу для списка студентов — по сданным дням группы с начала семестра по `as_of_date` включительно.
+    Пропуск — любая отметка, которая не считается присутствием (опоздание — присутствие); пропуски по уважительной
+    причине тоже считаются, как в «Витринах». Три запроса независимо от числа студентов и групп."""
+    if not students:
+        return {}
+    start = semester_start(as_of_date)
+    group_ids = {s.study_group_id for s in students}
+    submitted: dict[int, set[datetime.date]] = {gid: set() for gid in group_ids}
+    for row in db.execute(
+        select(DaySubmission.study_group_id, DaySubmission.date)
+        .where(DaySubmission.study_group_id.in_(group_ids), DaySubmission.date >= start, DaySubmission.date <= as_of_date)
+    ).all():
+        submitted[row.study_group_id].add(row.date)
+
+    absent: dict[int, set[datetime.date]] = {}
+    for row in db.execute(
+        select(AttendanceMark.student_id, AttendanceMark.date)
+        .join(MarkCode, MarkCode.id == AttendanceMark.mark_code_id)
+        .where(
+            AttendanceMark.student_id.in_([s.id for s in students]),
+            AttendanceMark.date >= start, AttendanceMark.date <= as_of_date,
+            MarkCode.counts_as_present.is_(False),
+        )
+    ).all():
+        absent.setdefault(row.student_id, set()).add(row.date)
+
+    result: dict[int, AttendanceRate] = {}
+    for student in students:
+        days = {d for d in submitted[student.study_group_id] if d >= student.enrolled_at}
+        missed = len(absent.get(student.id, set()) & days)
+        result[student.id] = AttendanceRate(
+            days=len(days), absent=missed, percent=round((len(days) - missed) / len(days) * 100, 1) if days else None,
+        )
+    return result
+
+
 def count_manual_exceptions(db: Session, study_group_id: int, date: datetime.date) -> int:
     """Сколько ручных отметок на этот день будет молча стёрто, если вызвать
     submit_day с пустым списком исключений ("Все присутствуют") — см.
@@ -249,6 +311,7 @@ def get_roster(db: Session, study_group_id: int, date: datetime.date) -> dict:
 
     # Серии неуважительных пропусков всех студентов группы — разом, а не по четыре запроса на студента.
     risk_streaks = consecutive_unexcused_counts_bulk(db, active_students, date)
+    rates = attendance_rates_bulk(db, active_students, date)
 
     entries = []
     for student in active_students:
@@ -282,6 +345,8 @@ def get_roster(db: Session, study_group_id: int, date: datetime.date) -> dict:
                 "is_draft_suggestion": source_is_draft,
                 "is_locked": bool(mark and mark.source == MarkSource.PERIOD),
                 "risk_streak": risk_streak,
+                "attendance_percent": rates[student.id].percent,
+                "is_risk": rates[student.id].is_risk,
                 "last_edited_by": last_edited_by,
                 "last_edited_at": last_edited_at,
             }

@@ -41,7 +41,8 @@ class AttentionStudent(BaseModel):
     full_name: str
     group_code: str
     risk_streak: int
-    needs_work: bool  # серия пропусков есть, а записей об индивидуальной работе давно нет
+    attendance_percent: float | None  # посещаемость с начала семестра, %
+    needs_work: bool  # студент в группе риска, а записей об индивидуальной работе давно нет
     last_work_on: datetime.date | None
     follow_up_on: datetime.date | None
     follow_up_overdue: bool

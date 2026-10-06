@@ -32,7 +32,10 @@ class RiskStudentRow(BaseModel):
     full_name: str
     study_group_id: int
     group_code: str
-    streak: int
+    streak: int  # дней подряд «н» — справочно
+    attendance_percent: float  # посещаемость с начала семестра, %
+    days: int  # сданных дней
+    absent: int  # пропущено из них
 
 
 class CuratorDisciplineRow(BaseModel):

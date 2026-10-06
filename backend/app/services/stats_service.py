@@ -567,25 +567,29 @@ def curator_discipline_days(
 def risk_students(
     db: Session,
     as_of_date: datetime.date,
-    threshold: int,
+    threshold: float | None = None,
     department_id: int | None = None,
 ) -> list[dict]:
-    from app.services.attendance_service import consecutive_unexcused_counts_bulk
+    """Группа риска: посещаемость с начала семестра ниже порога (`threshold`, %; по умолчанию —
+    `risk_attendance_percent`), по сданным дням группы; сначала те, у кого посещаемость хуже. Пока в группе сдано
+    меньше `risk_min_days` дней, процент ещё случаен — такие студенты в список не попадают."""
+    from app.core.config import get_settings
+    from app.services.attendance_service import attendance_rates_bulk, consecutive_unexcused_counts_bulk
 
+    settings = get_settings()
+    limit = settings.risk_attendance_percent if threshold is None else threshold
     students = _students_in_scope(db, department_id=department_id)
-    streaks = consecutive_unexcused_counts_bulk(db, students, as_of_date + datetime.timedelta(days=1))
-    rows = []
-    for student in students:
-        streak = streaks[student.id]
-        if streak >= threshold:
-            rows.append(
-                {
-                    "student_id": student.id,
-                    "full_name": student.full_name,
-                    "study_group_id": student.study_group_id,
-                    "group_code": student.study_group.code,
-                    "streak": streak,
-                }
-            )
-    rows.sort(key=lambda r: -r["streak"])
+    rates = attendance_rates_bulk(db, students, as_of_date)
+    risky = [s for s in students if rates[s.id].percent is not None and rates[s.id].days >= settings.risk_min_days
+             and rates[s.id].percent < limit]
+    streaks = consecutive_unexcused_counts_bulk(db, risky, as_of_date + datetime.timedelta(days=1)) if risky else {}
+    rows = [
+        {
+            "student_id": s.id, "full_name": s.full_name, "study_group_id": s.study_group_id, "group_code": s.study_group.code,
+            "streak": streaks.get(s.id, 0), "attendance_percent": rates[s.id].percent,
+            "days": rates[s.id].days, "absent": rates[s.id].absent,
+        }
+        for s in risky
+    ]
+    rows.sort(key=lambda r: (r["attendance_percent"], r["full_name"]))
     return rows

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { formatDateRu } from "../utils/date";
+import { formatPercent } from "../utils/percent";
 import type { IndividualWorkGroup } from "../api/types";
 import SearchSelect from "../components/SearchSelect";
 
@@ -97,7 +98,7 @@ export default function IndividualWorkPage() {
                     {r.full_name}
                   </Link>
                 </td>
-                <td data-label="Пропусков подряд">{r.is_risk ? r.risk_streak : "—"}</td>
+                <td data-label="Посещаемость">{r.attendance_percent === null ? "—" : formatPercent(r.attendance_percent)}</td>
                 <td data-label="Работа">
                   {r.work_count > 0 ? `${r.work_count} зап., последняя ${formatDateRu(r.last_work_on!)}` : "не велась"}
                 </td>

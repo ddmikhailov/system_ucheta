@@ -16,7 +16,7 @@ const get = vi.mocked(api.get);
 
 function row(id: number, name: string, over: Partial<IndividualWorkRow> = {}): IndividualWorkRow {
   return {
-    student_id: id, full_name: name, risk_streak: 0, is_risk: false, work_count: 0, last_work_on: null,
+    student_id: id, full_name: name, risk_streak: 0, is_risk: false, attendance_percent: 100, work_count: 0, last_work_on: null,
     next_follow_up_on: null, follow_up_overdue: false, needs_attention: false, ...over,
   };
 }
@@ -41,18 +41,18 @@ beforeEach(() => {
 });
 
 describe("IndividualWorkPage", () => {
-  it("открывает первую группу и показывает студентов: серия, работа, срок возврата, статус", async () => {
+  it("открывает первую группу и показывает студентов: посещаемость, работа, срок возврата, статус", async () => {
     mock({
       7: group(7, "СА172", [
-        row(1, "Алексеев Пётр", { is_risk: true, risk_streak: 5, needs_attention: true }),
-        row(2, "Андреева Елена", { is_risk: true, risk_streak: 4, work_count: 2, last_work_on: "2026-10-01", next_follow_up_on: "2026-09-30", follow_up_overdue: true }),
+        row(1, "Алексеев Пётр", { is_risk: true, attendance_percent: 62, needs_attention: true }),
+        row(2, "Андреева Елена", { is_risk: true, attendance_percent: 80.5, work_count: 2, last_work_on: "2026-10-01", next_follow_up_on: "2026-09-30", follow_up_overdue: true }),
         row(3, "Борисов Иван", { work_count: 1, last_work_on: "2026-08-20", next_follow_up_on: "2026-10-20" }),
       ]),
     });
     renderPage(<IndividualWorkPage />, { role: "curator" });
     const first = (await screen.findByRole("link", { name: "Алексеев Пётр" })).closest("tr") as HTMLElement;
     expect(get).toHaveBeenCalledWith("/individual-work/groups/7");
-    expect(within(first).getByText("5")).toBeInTheDocument();
+    expect(within(first).getByText("62 %")).toBeInTheDocument();
     expect(within(first).getByText("не велась")).toBeInTheDocument();
     expect(within(first).getByText(/нужна работа: нет записей за 14 дн\./)).toBeInTheDocument();
     expect(first).toHaveClass("risk-row");
