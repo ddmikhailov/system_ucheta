@@ -20,8 +20,13 @@ from app.models import (
     AbsencePeriod,
     AttendanceMark,
     CuratorAssignment,
+    CuratorReport,
     DaySubmission,
     GroupCalendarOverride,
+    GroupEvent,
+    GroupEventAttendee,
+    ParentMeeting,
+    ParentMeetingAttendee,
     Student,
     StudentGroupMembership,
     StudyGroup,
@@ -216,6 +221,16 @@ def _delete_group_completely(db: Session, user: User, group: StudyGroup) -> Dele
         StudentGroupMembership.study_group_id == group_id
     ).delete(synchronize_session=False)
     db.query(DaySubmission).filter(DaySubmission.study_group_id == group_id).delete(synchronize_session=False)
+    # План воспитательной работы, родительские собрания и отчёты куратора группы — вместе с отметками присутствующих.
+    event_ids = [e for (e,) in db.query(GroupEvent.id).filter(GroupEvent.study_group_id == group_id)]
+    if event_ids:
+        db.query(GroupEventAttendee).filter(GroupEventAttendee.event_id.in_(event_ids)).delete(synchronize_session=False)
+    db.query(GroupEvent).filter(GroupEvent.study_group_id == group_id).delete(synchronize_session=False)
+    meeting_ids = [m for (m,) in db.query(ParentMeeting.id).filter(ParentMeeting.study_group_id == group_id)]
+    if meeting_ids:
+        db.query(ParentMeetingAttendee).filter(ParentMeetingAttendee.meeting_id.in_(meeting_ids)).delete(synchronize_session=False)
+    db.query(ParentMeeting).filter(ParentMeeting.study_group_id == group_id).delete(synchronize_session=False)
+    db.query(CuratorReport).filter(CuratorReport.study_group_id == group_id).delete(synchronize_session=False)
     db.query(CuratorAssignment).filter(CuratorAssignment.study_group_id == group_id).delete(synchronize_session=False)
     db.query(GroupCalendarOverride).filter(
         GroupCalendarOverride.study_group_id == group_id

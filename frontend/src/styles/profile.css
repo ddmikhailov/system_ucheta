@@ -2,7 +2,7 @@
    пользователь) с главными цифрами, лента действий. Цвета — только токены из index.css,
    поэтому тёмная тема работает без отдельных правил. */
 
-/* --- Логотип колледжа и название платформы --- */
+/* --- Логотип колледжа --- */
 /* Логотипы — как в брендбуке: только масштаб по высоте с сохранением пропорций. */
 .brand-mark {
   display: inline-grid;
@@ -24,14 +24,6 @@
 
 .college-logo__img--white {
   display: none;
-}
-
-.brand-mark__name {
-  padding-left: 4px;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 14px;
-  letter-spacing: -0.01em;
 }
 
 .brand-mark--compact .college-logo__img {

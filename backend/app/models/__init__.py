@@ -14,6 +14,7 @@ from app.models.enums import (
 from app.models.marks import AbsencePeriod, AttendanceChangeRequest, AttendanceMark, DaySubmission, MarkCode
 from app.models.notifications import InAppNotification
 from app.models.tasks import Task, TaskAssignment, TaskComment, TaskRow, TaskTemplate
+from app.models.my_id import StudentMyId
 from app.models.org import Department, StudyGroup
 from app.models.people import CuratorAssignment, Student, StudentGroupMembership
 
@@ -43,6 +44,7 @@ __all__ = [
     "RoleCode",
     "Student",
     "StudentGuardian",
+    "StudentMyId",
     "StudentNote",
     "StudentProfile",
     "StudentGroupMembership",

@@ -1,5 +1,3 @@
-import { PLATFORM_NAME } from "../constants/brand";
-
 /** Логотип колледжа в двух вариантах из брендбука: цветной — для светлой темы, белый — для
  * тёмной. Файлы вставлены как есть (без обрезки, перекраски и наложений); какой показать,
  * решает CSS по той же теме, что и остальная страница (см. .college-logo в profile.css). */
@@ -12,12 +10,11 @@ export function CollegeLogo({ className = "" }: { className?: string }) {
   );
 }
 
-/** Логотип и под ним — название платформы обычным текстом (сам логотип не меняется). */
+/** Логотип колледжа без подписи (название платформы под ним убрано по решению пользователя). */
 export default function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <span className={`brand-mark${compact ? " brand-mark--compact" : ""}`}>
       <CollegeLogo />
-      {!compact && <span className="brand-mark__name">{PLATFORM_NAME}</span>}
     </span>
   );
 }

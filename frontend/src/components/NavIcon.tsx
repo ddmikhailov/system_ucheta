@@ -1,6 +1,6 @@
 // Значки разделов для меню: тонкая линия, один стиль на все. Подпись всегда рядом — значок её не заменяет.
 
-export type NavIconName = "day" | "groups" | "tasks" | "inbox" | "charts" | "students" | "passport" | "individual" | "plan" | "report" | "admin" | "more";
+export type NavIconName = "day" | "groups" | "tasks" | "inbox" | "charts" | "students" | "passport" | "individual" | "plan" | "report" | "id" | "admin" | "more";
 
 const PATHS: Record<NavIconName, string> = {
   // солнце над линией горизонта
@@ -21,6 +21,8 @@ const PATHS: Record<NavIconName, string> = {
   individual: "M5 5h14v10H10l-4 4v-4H5zM9 9h6M9 12h4",
   // календарь
   plan: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4M8 14h2M12 14h2M8 17h2",
+  // удостоверение с лицом
+  id: "M4 6h16v12H4zM9 12a2 2 0 1 0 0-.01M6.5 16c.5-1.6 1.6-2.4 2.5-2.4s2 .8 2.5 2.4M14 10h4M14 13h3",
   // лист с галочкой
   report: "M6 3h9l4 4v14H6zM14 3v5h5M9 14l2 2 4-4",
   // шестерёнка (упрощённая)
