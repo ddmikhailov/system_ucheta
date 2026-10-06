@@ -11,6 +11,7 @@ import CuratorCabinetPage from "./pages/CuratorCabinetPage";
 import CuratorGroupPage from "./pages/CuratorGroupPage";
 import { DOSSIER_STAFF_ROLES, MANAGEMENT_ROLES, TASK_MANAGER_ROLES, VIEWER_ROLES, inRoles } from "./constants/roles";
 import MyDayPage from "./pages/MyDayPage";
+import MyIdPanel from "./components/MyIdPanel";
 import PlanPage from "./pages/PlanPage";
 import ReportPage from "./pages/ReportPage";
 import MyTasksPage from "./pages/MyTasksPage";
@@ -239,6 +240,16 @@ export default function App() {
                 <RequireAuth>
                   <Layout>
                     <ReportPage />
+                  </Layout>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/my-id"
+              element={
+                <RequireAuth>
+                  <Layout>
+                    <MyIdPanel />
                   </Layout>
                 </RequireAuth>
               }

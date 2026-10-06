@@ -660,3 +660,28 @@ kbd {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* «Мой ID»: изменённая, но ещё не сохранённая строка. */
+.row-dirty td {
+  background: color-mix(in srgb, var(--accent, #7c5cff) 8%, transparent);
+}
+
+.roster-table tfoot td {
+  font-weight: 600;
+}
+
+.my-id-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  margin: 8px 0 12px;
+  font-size: 14px;
+}
+
+/* На телефоне пустую «причину» не показываем — карточка студента и так длинная. */
+@media (max-width: 768px) {
+  .roster-table.compact-cards td.my-id-reason-empty[data-label],
+  .roster-table td.my-id-reason-empty {
+    display: none;
+  }
+}

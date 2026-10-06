@@ -45,6 +45,7 @@ function mockApi(r: RosterResponse, dayType = "study_day") {
     if (path.includes("/month-status")) return [{ date: todayIso(), day_type: dayType, is_submitted: false, is_on_time: null }];
     if (path.includes("/day?")) return r;
     if (path.endsWith("/rhythm")) return RHYTHM;
+    if (path === "/my-id/groups/7") return { group_id: 7, group_code: "СА172", school_year: "2026-2027", can_edit: true, rows: [], totals: { students: 0, biometrics_yes: 0, biometrics_no: 0, biometrics_unset: 0, max_student_yes: 0, max_student_no: 0, max_parent_yes: 0, max_parent_no: 0 } };
     throw new Error(`неожиданный запрос ${path}`);
   });
 }
@@ -330,6 +331,19 @@ describe("CuratorGroupPage — сданный день и правка прош�
     expect(within(studentRow("Алексеев")).getByText("группа риска")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Студенты/ })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tablist", { name: "Разделы группы" })).toHaveTextContent("Соц. паспорт");
+  });
+
+  it("вкладка «Мой ID» — последняя в группе; открывается по ссылке и грузит данные только своей группы", async () => {
+    mockApi(roster([entry(1, "Алексеев Пётр")]));
+    open("my-id");
+    expect(await screen.findByText("В группе СА172 нет студентов.")).toBeInTheDocument();
+    const tabs = screen.getByRole("tablist", { name: "Разделы группы" });
+    expect(within(tabs).getAllByRole("tab").map((t) => t.textContent?.replace(/\d+$/, ""))).toEqual([
+      "Журнал", "Студенты", "Индивидуальная работа", "Соц. паспорт", "План группы", "Отчёт", "Мой ID",
+    ]);
+    expect(within(tabs).getByRole("tab", { name: "Мой ID" })).toHaveAttribute("aria-selected", "true");
+    expect(get).toHaveBeenCalledWith("/my-id/groups/7");
+    expect(get).not.toHaveBeenCalledWith("/individual-work/groups"); // группа задана страницей
   });
 
   it("чужая группа — понятное сообщение", async () => {

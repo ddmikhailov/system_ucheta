@@ -17,6 +17,7 @@ const PAGE_TITLES: [string, string][] = [
   ["/individual-work", "Индивидуальная работа"],
   ["/plan", "План воспитательной работы"],
   ["/report", "Отчёт куратора"],
+  ["/my-id", "Мой ID"],
 ];
 
 export function pageTitle(pathname: string): string {

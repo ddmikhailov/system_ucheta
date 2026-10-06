@@ -928,3 +928,32 @@ export interface UserActivityPage {
   items: UserActivityEntry[];
   next_before_id: number | null;
 }
+
+export interface MyIdRow {
+  student_id: number;
+  full_name: string;
+  biometrics: boolean | null;
+  biometrics_reason: string | null;
+  max_student: boolean | null;
+  max_student_reason: string | null;
+  max_parent: boolean | null;
+  max_parent_reason: string | null;
+}
+
+export interface MyIdData {
+  group_id: number;
+  group_code: string;
+  school_year: string;
+  can_edit: boolean;
+  rows: MyIdRow[];
+  totals: {
+    students: number;
+    biometrics_yes: number;
+    biometrics_no: number;
+    biometrics_unset: number;
+    max_student_yes: number;
+    max_student_no: number;
+    max_parent_yes: number;
+    max_parent_no: number;
+  };
+}

@@ -49,6 +49,7 @@ function navItems(user: MeResponse | null): NavItem[] {
     items.push({ to: "/individual-work", label: "Индивидуальная работа", short: "Работа", icon: "individual" });
     items.push({ to: "/plan", label: "План группы", short: "План", icon: "plan" });
     items.push({ to: "/report", label: "Отчёт куратора", short: "Отчёт", icon: "report" });
+    items.push({ to: "/my-id", label: "Мой ID", short: "ID", icon: "id" });
   }
   if (inRoles(role, MANAGEMENT_ROLES)) items.push({ to: "/admin", label: "Админка", icon: "admin", counter: "journal_changes" });
   return items;

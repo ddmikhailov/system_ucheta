@@ -5,6 +5,7 @@ import { useAuth } from "../auth/useAuth";
 import type { GroupSummary, RosterResponse } from "../api/types";
 import DayJournal from "../components/DayJournal";
 import GroupListModal from "../components/GroupListModal";
+import MyIdPanel from "../components/MyIdPanel";
 import { Kpi, ProfileHero } from "../components/ProfileHero";
 import StudentCardModal from "../components/StudentCardModal";
 import { TabBar, TabPanel } from "../components/Tabs";
@@ -16,14 +17,14 @@ import { GroupPassportPanel } from "./PassportPage";
 import PlanPage from "./PlanPage";
 import ReportPage from "./ReportPage";
 
-const TABS = ["journal", "students", "work", "passport", "plan", "report"] as const;
+const TABS = ["journal", "students", "work", "passport", "plan", "report", "my-id"] as const;
 type GroupTab = (typeof TABS)[number];
 // Параметры вкладок (год, семестр, раздел) — свои у каждой; при смене вкладки они сбрасываются.
 const TAB_SCOPED_PARAMS = ["part", "section", "year", "semester", "date"];
 
 /** Страница группы куратора (интерфейс 3.2): всё, что относится к группе, — во вкладках, а не отдельными
  * разделами меню. «Журнал» (посещаемость по дням), «Студенты» (весь список, карточка — по клику),
- * «Индивидуальная работа», «Соц. паспорт», «План группы», «Отчёт». Вкладка — в адресе (?tab=…). */
+ * «Индивидуальная работа», «Соц. паспорт», «План группы», «Отчёт», «Мой ID». Вкладка — в адресе (?tab=…). */
 export default function CuratorGroupPage() {
   const { groupId: raw } = useParams();
   const groupId = Number(raw);
@@ -106,6 +107,7 @@ export default function CuratorGroupPage() {
           { key: "passport", label: "Соц. паспорт" },
           { key: "plan", label: "План группы" },
           { key: "report", label: "Отчёт" },
+          { key: "my-id", label: "Мой ID" },
         ]}
         active={tab}
         onChange={setTab}
@@ -139,6 +141,9 @@ export default function CuratorGroupPage() {
       </TabPanel>
       <TabPanel idPrefix="group" tabKey="report" active={tab}>
         <ReportPage fixedGroupId={groupId} />
+      </TabPanel>
+      <TabPanel idPrefix="group" tabKey="my-id" active={tab}>
+        <MyIdPanel fixedGroupId={groupId} />
       </TabPanel>
     </div>
   );
