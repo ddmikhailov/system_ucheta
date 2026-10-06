@@ -101,12 +101,17 @@ def collect_files(paths: list[str]) -> list[str]:
 
 def load(db, paths: list[str], commit: bool, overwrite: bool = False) -> dict:
     schedule: dict[tuple[str, datetime.date], int] = {}
-    parts = [read_schedule(path) for path in collect_files(paths)]
+    parts, skipped = [], []
+    for path in collect_files(paths):
+        try:
+            parts.append(read_schedule(path))
+        except (KeyError, IndexError, ValueError, TypeError, openpyxl.utils.exceptions.InvalidFileException):
+            skipped.append(os.path.basename(path))  # не расписание (другой xlsx в той же папке)
     # Выгрузки за разные периоды пересекаются; узкая (например, 3 дня внутри недели) —
     # это уточнение, поэтому применяем её последней.
     for part in sorted(parts, key=lambda x: -len({d for _, d in x})):
         schedule.update(part)
-    report = {"updated": 0, "unchanged": 0, "kept_existing": 0, "not_submitted": 0, "groups_not_found": []}
+    report = {"updated": 0, "unchanged": 0, "kept_existing": 0, "not_submitted": 0, "groups_not_found": [], "skipped_files": skipped}
     groups = {g.code: g for g in db.query(StudyGroup)}
     missing = set()
     for (code, day), pair in sorted(schedule.items()):

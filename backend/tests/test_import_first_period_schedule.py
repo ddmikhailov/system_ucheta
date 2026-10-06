@@ -96,3 +96,14 @@ def test_landscape_layout_and_year_suffix(tmp_path):
 
     assert importer.read_schedule(str(p1)) == {("ИИ112", D1): 3, ("ИИ112", D2): 1}
     assert importer.read_schedule(str(p2)) == {("ИИ112", D1): 2}
+
+
+def test_non_schedule_xlsx_is_skipped(db, tmp_path):
+    other = tmp_path / "other.xlsx"
+    wb = openpyxl.Workbook()
+    wb.active.append(["не расписание"])
+    wb.save(other)
+
+    report = importer.load(db, [str(other)], commit=False)
+
+    assert report["skipped_files"] == ["other.xlsx"] and report["updated"] == 0

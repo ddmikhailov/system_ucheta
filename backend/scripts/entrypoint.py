@@ -192,25 +192,32 @@ def attendance_import_if_enabled(environ: Mapping[str, str]) -> tuple[str, bool]
     return path, mode == "true"
 
 
-def schedule_import_if_enabled(environ: Mapping[str, str]) -> tuple[str, bool] | None:
+def schedule_import_if_enabled(environ: Mapping[str, str]) -> tuple[list[str], bool] | None:
     """Заполнение «к какой паре пришла группа» из выгрузок расписания
-    (scripts.import_first_period_schedule): xlsx лежат в папке schedule рядом с
-    импортом или в /data/schedule. IMPORT_SCHEDULE_ON_START=dry — пробный прогон,
+    (scripts.import_first_period_schedule): xlsx лежат прямо в /data (или в папке
+    импорта), можно и в подпапке schedule; attendance.xlsx и registry.xlsx — не
+    расписание, их пропускаем. IMPORT_SCHEDULE_ON_START=dry — пробный прогон,
     =true — запись (только пустые пары). Разовая: после запуска переменную убрать.
-    Возвращает (папка, записывать ли) или None."""
+    Возвращает (файлы, записывать ли) или None."""
     mode = environ.get("IMPORT_SCHEDULE_ON_START", "false")
     if mode not in ("dry", "true"):
         return None
     import_dir = environ.get("IMPORT_DATA_DIR") or default_import_dir()
-    candidates = [os.path.join(import_dir, "schedule")]
+    folders = [import_dir, os.path.join(import_dir, "schedule")]
     if Path(import_dir) == PERSISTENT_IMPORT_DIR:
-        candidates.append(str(PERSISTENT_IMPORT_DIR.parent / "schedule"))
-    for folder in candidates:
-        if os.path.isdir(folder) and any(n.endswith(".xlsx") for n in os.listdir(folder)):
-            log(f"IMPORT_SCHEDULE_ON_START={mode} — расписание из {folder} ({'запись' if mode == 'true' else 'пробный прогон'})...")
-            return folder, mode == "true"
-    log(f"IMPORT_SCHEDULE_ON_START={mode}, но xlsx-файлов нет в {', '.join(candidates)} — заполнение пар пропущено.")
-    return None
+        folders += [str(PERSISTENT_IMPORT_DIR.parent), str(PERSISTENT_IMPORT_DIR.parent / "schedule")]
+    skip = {ATTENDANCE_FILE, REGISTRY_FILE}
+    files = sorted({
+        os.path.join(folder, name)
+        for folder in folders if os.path.isdir(folder)
+        for name in os.listdir(folder)
+        if name.endswith(".xlsx") and name not in skip and not name.startswith("~$")
+    })
+    if not files:
+        log(f"IMPORT_SCHEDULE_ON_START={mode}, но xlsx-файлов расписания нет в {', '.join(folders)} — заполнение пар пропущено.")
+        return None
+    log(f"IMPORT_SCHEDULE_ON_START={mode} — расписание, файлов: {len(files)} ({'запись' if mode == 'true' else 'пробный прогон'})...")
+    return files, mode == "true"
 
 
 def curator_lists_if_enabled(environ: Mapping[str, str]) -> list[tuple[str, str | None]]:
@@ -287,8 +294,8 @@ def main(environ: Mapping[str, str] = os.environ) -> None:
 
     schedule = schedule_import_if_enabled(environ)
     if schedule is not None:
-        schedule_dir, commit = schedule
-        run_step("-m", "scripts.import_first_period_schedule", schedule_dir, *(["--commit"] if commit else []))
+        schedule_files, commit = schedule
+        run_step("-m", "scripts.import_first_period_schedule", *schedule_files, *(["--commit"] if commit else []))
 
     log("Запуск приложения...")
     port = str(int(environ.get("PORT") or "8000"))

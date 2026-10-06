@@ -331,17 +331,17 @@ def test_attendance_file_found_directly_in_data_dir(tmp_path, monkeypatch):
     assert result == (str(data / entrypoint.ATTENDANCE_FILE), True)
 
 
-def test_schedule_import_modes_and_missing_folder(recorded, tmp_path):
-    folder = tmp_path / "schedule"
-    folder.mkdir()
-    (folder / "r.xlsx").write_text("x", encoding="utf-8")
+def test_schedule_import_takes_xlsx_from_data_dir_skipping_other_imports(recorded, tmp_path):
+    for name in ("a.xlsx", "b.xlsx", entrypoint.ATTENDANCE_FILE, entrypoint.REGISTRY_FILE):
+        (tmp_path / name).write_text("x", encoding="utf-8")
 
     entrypoint.main({"IMPORT_SCHEDULE_ON_START": "dry", "IMPORT_DATA_DIR": str(tmp_path)})
     entrypoint.main({"IMPORT_SCHEDULE_ON_START": "true", "IMPORT_DATA_DIR": str(tmp_path)})
     entrypoint.main({"IMPORT_SCHEDULE_ON_START": "true", "IMPORT_DATA_DIR": str(tmp_path / "нет")})
 
+    files = [str(tmp_path / "a.xlsx"), str(tmp_path / "b.xlsx")]
     steps = [s for s, _ in recorded["steps"] if "scripts.import_first_period_schedule" in s]
     assert steps == [
-        ["-m", "scripts.import_first_period_schedule", str(folder)],
-        ["-m", "scripts.import_first_period_schedule", str(folder), "--commit"],
+        ["-m", "scripts.import_first_period_schedule", *files],
+        ["-m", "scripts.import_first_period_schedule", *files, "--commit"],
     ]
