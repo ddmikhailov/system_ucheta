@@ -4,6 +4,7 @@ import { api, ApiError } from "../api/client";
 import type { GroupEvent, PlanSection } from "../api/types";
 import { EVENT_STATUSES } from "../constants/eventStatuses";
 import { useEscapeKey } from "../hooks/useEscapeKey";
+import TextArea from "./TextArea";
 
 /** Окно мероприятия плана воспитательной работы: создание и правка. Классный час — мероприятие с отметкой
  * присутствующих, из него делается протокол (Word). */
@@ -85,7 +86,7 @@ export default function EventForm({
         </label>
         <label>
           Цель мероприятия (формируемые компетенции, задачи)
-          <textarea rows={2} value={goal} maxLength={2000} onChange={(e) => setGoal(e.target.value)} />
+          <TextArea expandTitle="Цель" rows={2} value={goal} maxLength={2000} onChange={(e) => setGoal(e.target.value)} />
         </label>
         <label>
           Отметка о выполнении
@@ -100,7 +101,7 @@ export default function EventForm({
         {status !== "planned" && (
           <label>
             Результат (краткий анализ, вывод)
-            <textarea rows={2} value={result} maxLength={2000} onChange={(e) => setResult(e.target.value)} />
+            <TextArea expandTitle="Результат" rows={2} value={result} maxLength={2000} onChange={(e) => setResult(e.target.value)} />
           </label>
         )}
         <label className="inline-check">
@@ -110,7 +111,7 @@ export default function EventForm({
         {classHour && (
           <label>
             Формат и описание проведения (для протокола)
-            <textarea rows={3} value={description} maxLength={3000} onChange={(e) => setDescription(e.target.value)} />
+            <TextArea expandTitle="Описание" rows={3} value={description} maxLength={3000} onChange={(e) => setDescription(e.target.value)} />
           </label>
         )}
         {error && <div className="error-text">{error}</div>}

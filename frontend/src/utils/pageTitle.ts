@@ -3,6 +3,7 @@ import { PLATFORM_NAME } from "../constants/brand";
 // Заголовок страницы: невидимый h1 для экранного диктора и название вкладки браузера.
 const PAGE_TITLES: [string, string][] = [
   ["/my-day", "Мой день"],
+  ["/cabinet/groups/", "Группа"],
   ["/cabinet", "Мои группы"],
   ["/my-tasks", "Мои задачи"],
   ["/tasks/assignment", "Задача"],

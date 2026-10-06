@@ -186,8 +186,9 @@ describe("StudentCardPage — просмотр", () => {
 
 describe("StudentCardPage — ссылка «назад» по роли", () => {
   it.each([
-    ["curator", "← К моим группам", "/cabinet"],
-    ["deputy_curator", "← К моим группам", "/cabinet"],
+    // Куратор возвращается к списку своей группы.
+    ["curator", "← К группе СА172", "/cabinet/groups/7?tab=students"],
+    ["deputy_curator", "← К группе СА172", "/cabinet/groups/7?tab=students"],
     ["psychologist", "← К поиску студентов", "/students"],
     ["social_pedagogue", "← К поиску студентов", "/students"],
     ["admin", "← К списку студентов", "/admin?tab=students"],

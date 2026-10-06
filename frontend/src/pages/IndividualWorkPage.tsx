@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
+import { useGroupParams } from "../hooks/useGroupParams";
 import { api, ApiError } from "../api/client";
 import { formatDateRu } from "../utils/date";
 import { formatPercent } from "../utils/percent";
@@ -14,19 +15,23 @@ interface GroupOption {
 
 // Обзор индивидуальной работы по группе: кто в «группе внимания» (серия пропусков, уже ведётся работа),
 // с кем давно не работали и где подошёл срок «вернуться к вопросу». Записи делаются в карточке студента.
-export default function IndividualWorkPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
+/** `fixedGroupId` — вкладка на странице группы куратора: группа задана, выбора группы нет. */
+export default function IndividualWorkPage({ fixedGroupId }: { fixedGroupId?: number } = {}) {
+  const { groupId, update } = useGroupParams(fixedGroupId);
   const [groups, setGroups] = useState<GroupOption[] | null>(null);
   const [data, setData] = useState<IndividualWorkGroup | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const groupId = searchParams.get("group");
 
   useEffect(() => {
+    if (fixedGroupId != null) {
+      setGroups([]);
+      return;
+    }
     api
       .get<GroupOption[]>("/individual-work/groups")
       .then((list) => {
         setGroups(list);
-        if (!groupId && list.length > 0) setSearchParams({ group: String(list[0].id) }, { replace: true });
+        if (!groupId && list.length > 0) update({ group: String(list[0].id) }, { replace: true });
       })
       .catch((err) => {
         setError(err instanceof ApiError ? err.message : "Не удалось загрузить список групп");
@@ -55,24 +60,26 @@ export default function IndividualWorkPage() {
   }, [groupId]);
 
   if (groups === null) return <p className="hint">Загрузка…</p>;
-  if (groups.length === 0) return <p>{error ?? "Нет доступных групп."}</p>;
+  if (fixedGroupId == null && groups.length === 0) return <p>{error ?? "Нет доступных групп."}</p>;
 
   const current = data && String(data.group_id) === groupId ? data : null;
 
   return (
     <div>
-      <div className="toolbar">
-        <SearchSelect
-          value={groupId === null || groupId === undefined ? "" : String(groupId)}
-          options={groups.map((g) => ({ value: String(g.id), label: `${g.code} (курс ${g.course})` }))}
-          onChange={(v) => setSearchParams({ group: v })}
-          ariaLabel="Группа"
-          title="Группа: начните вводить код, например «ГД»"
-        />
-      </div>
+      {fixedGroupId == null && (
+        <div className="toolbar">
+          <SearchSelect
+            value={groupId === null || groupId === undefined ? "" : String(groupId)}
+            options={groups.map((g) => ({ value: String(g.id), label: `${g.code} (курс ${g.course})` }))}
+            onChange={(v) => update({ group: v })}
+            ariaLabel="Группа"
+            title="Группа: начните вводить код, например «ГД»"
+          />
+        </div>
+      )}
       <p className="hint">
         Здесь — студенты с серией неуважительных пропусков и те, с кем уже ведётся индивидуальная работа. Беседы, вызовы
-        родителей, Совет профилактики и визиты записываются в карточке студента («Индивидуальная работа и заметки»).
+        родителей, Совет профилактики и визиты записываются в карточке студента, на вкладке «Индивидуальная работа».
       </p>
       {error && <div className="error-text">{error}</div>}
       {!current ? (
@@ -80,7 +87,7 @@ export default function IndividualWorkPage() {
       ) : current.rows.length === 0 ? (
         <p className="hint">В группе {current.group_code} нет студентов с серией пропусков и записей об индивидуальной работе.</p>
       ) : (
-        <table className="dash-table roster-table">
+        <table className="dash-table roster-table compact-cards">
           <thead>
             <tr>
               <th>Студент</th>

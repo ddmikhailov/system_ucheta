@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { api, ApiError } from "../api/client";
 import type { ParentMeeting } from "../api/types";
 import { useEscapeKey } from "../hooks/useEscapeKey";
+import TextArea from "./TextArea";
 
 /** Окно родительского собрания: повестка, участники, «слушали / постановили». Из него делается протокол в Word. */
 export default function MeetingForm({
@@ -56,15 +57,15 @@ export default function MeetingForm({
         </div>
         <label>
           Повестка (по одному вопросу в строке)
-          <textarea rows={3} value={agenda} maxLength={3000} onChange={(e) => setAgenda(e.target.value)} />
+          <TextArea expandTitle="Повестка" rows={3} value={agenda} maxLength={3000} onChange={(e) => setAgenda(e.target.value)} />
         </label>
         <label>
           Присутствовали сотрудники колледжа (по одному в строке: ФИО, должность)
-          <textarea rows={2} value={staff} maxLength={2000} onChange={(e) => setStaff(e.target.value)} />
+          <TextArea expandTitle="Сотрудники колледжа" rows={2} value={staff} maxLength={2000} onChange={(e) => setStaff(e.target.value)} />
         </label>
         <label>
           Приглашённые спикеры, эксперты (по одному в строке)
-          <textarea rows={2} value={speakers} maxLength={2000} onChange={(e) => setSpeakers(e.target.value)} />
+          <TextArea expandTitle="Приглашённые спикеры" rows={2} value={speakers} maxLength={2000} onChange={(e) => setSpeakers(e.target.value)} />
         </label>
         <div className="inline-form form-fields">
           <label>
@@ -81,11 +82,11 @@ export default function MeetingForm({
         </div>
         <label>
           Слушали
-          <textarea rows={3} value={listened} maxLength={5000} onChange={(e) => setListened(e.target.value)} />
+          <TextArea expandTitle="Слушали" rows={3} value={listened} maxLength={5000} onChange={(e) => setListened(e.target.value)} />
         </label>
         <label>
           Постановили
-          <textarea rows={3} value={resolved} maxLength={5000} onChange={(e) => setResolved(e.target.value)} />
+          <TextArea expandTitle="Постановили" rows={3} value={resolved} maxLength={5000} onChange={(e) => setResolved(e.target.value)} />
         </label>
         {error && <div className="error-text">{error}</div>}
         <div className="actions">

@@ -113,3 +113,31 @@ class AbsencePeriod(Base):
     generated_marks: Mapped[list["AttendanceMark"]] = relationship(
         back_populates="absence_period"
     )
+
+
+class AttendanceChangeRequest(Base):
+    """Правка уже сданного прошлого дня куратором — сначала на проверку зав. отделением.
+
+    Хранит, какой день хотят сделать (полный список исключений, как при сдаче), почему и
+    кто решил. Отметки меняются только при одобрении; до этого в журнале — сданный вариант."""
+
+    __tablename__ = "attendance_change_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    study_group_id: Mapped[int] = mapped_column(ForeignKey("study_groups.id"), nullable=False, index=True)
+    date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    requested_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    # [{student_id, mark_code, comment, basis_reference}] — как в SubmitDayRequest.exceptions.
+    exceptions_json: Mapped[str] = mapped_column(Text, nullable=False)
+    first_period: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    # pending → approved / rejected / cancelled (отозван автором или заменён новым запросом)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending", index=True)
+    reviewed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    reviewed_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
+    review_comment: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    study_group: Mapped["StudyGroup"] = relationship()
+    requested_by: Mapped["User"] = relationship(foreign_keys=[requested_by_user_id])
+    reviewed_by: Mapped["User | None"] = relationship(foreign_keys=[reviewed_by_user_id])

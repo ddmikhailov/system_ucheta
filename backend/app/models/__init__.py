@@ -11,7 +11,7 @@ from app.models.enums import (
     RoleCode,
     StudentStatus,
 )
-from app.models.marks import AbsencePeriod, AttendanceMark, DaySubmission, MarkCode
+from app.models.marks import AbsencePeriod, AttendanceChangeRequest, AttendanceMark, DaySubmission, MarkCode
 from app.models.notifications import InAppNotification
 from app.models.tasks import Task, TaskAssignment, TaskComment, TaskRow, TaskTemplate
 from app.models.org import Department, StudyGroup
@@ -21,6 +21,7 @@ __all__ = [
     "AbsencePeriod",
     "AcademicCalendarDay",
     "AssignmentRole",
+    "AttendanceChangeRequest",
     "AttendanceMark",
     "AuditLog",
     "BasisStatus",

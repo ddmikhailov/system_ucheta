@@ -4,6 +4,7 @@ import { api, ApiError, downloadFile } from "../api/client";
 import { useAuth } from "../auth/useAuth";
 import { COLLEGE_WIDE_ROLES, DOSSIER_AUDIT_ROLES, inRoles } from "../constants/roles";
 import type { DepartmentAdmin } from "../api/types";
+import { TabBar, TabPanel } from "../components/Tabs";
 
 interface SummaryRow {
   group_id: number;
@@ -66,6 +67,49 @@ function SpecialUnavailable({ technical }: { technical: boolean }) {
   );
 }
 
+/** Паспорт одной группы: загрузка и выгрузки. Используется и на странице «Соц. паспорт», и во вкладке группы куратора. */
+export function GroupPassportPanel({ groupId }: { groupId: number }) {
+  const [passport, setPassport] = useState<GroupPassport | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get<GroupPassport>(`/passport/group/${groupId}`)
+      .then((p) => {
+        if (cancelled) return;
+        setPassport(p);
+        setError(null);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof ApiError ? err.message : "Не удалось загрузить паспорт группы");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [groupId]);
+
+  function exportFile(path: string, filename: string) {
+    downloadFile(path, filename).catch((err) => setError(err instanceof ApiError ? err.message : "Не удалось скачать файл"));
+  }
+
+  // Паспорт прошлой группы не показываем, пока грузится новый.
+  const shown = passport && passport.group_id === groupId ? passport : null;
+  return (
+    <>
+      {error && <div className="error-text">{error}</div>}
+      {shown === null && !error && <p className="hint">Загрузка…</p>}
+      {shown && (
+        <GroupView
+          passport={shown}
+          onExport={() => exportFile(`/passport/export?group_id=${groupId}`, "social_passport.xlsx")}
+          onExportWord={() => exportFile(`/passport/group/${groupId}/docx`, `Социальный_паспорт_${shown.group_code}.docx`)}
+        />
+      )}
+    </>
+  );
+}
+
 export default function PassportPage() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -73,7 +117,6 @@ export default function PassportPage() {
   const [departmentId, setDepartmentId] = useState("");
   const [departments, setDepartments] = useState<DepartmentAdmin[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
-  const [passport, setPassport] = useState<GroupPassport | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const canFilterDepartment = inRoles(user?.role, COLLEGE_WIDE_ROLES);
@@ -97,26 +140,12 @@ export default function PassportPage() {
       .catch((err) => setError(err instanceof ApiError ? err.message : "Не удалось загрузить паспорт"));
   }, [departmentId, groupId]);
 
-  useEffect(() => {
-    if (!groupId) return;
-    api
-      .get<GroupPassport>(`/passport/group/${groupId}`)
-      .then((p) => {
-        setPassport(p);
-        setError(null);
-      })
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Не удалось загрузить паспорт группы"));
-  }, [groupId]);
-
   function exportFile(path: string, filename: string) {
     downloadFile(path, filename).catch((err) =>
       setError(err instanceof ApiError ? err.message : "Не удалось скачать файл")
     );
   }
   const exportExcel = (path: string) => exportFile(path, "social_passport.xlsx");
-
-  // Паспорт прошлой группы не показываем, пока грузится новый.
-  const shown = passport && String(passport.group_id) === groupId ? passport : null;
 
   if (groupId) {
     return (
@@ -126,15 +155,7 @@ export default function PassportPage() {
             ← К сводке по группам
           </button>
         </p>
-        {error && <div className="error-text">{error}</div>}
-        {shown === null && !error && <p className="hint">Загрузка…</p>}
-        {shown && (
-          <GroupView
-            passport={shown}
-            onExport={() => exportExcel(`/passport/export?group_id=${groupId}`)}
-            onExportWord={() => exportFile(`/passport/group/${groupId}/docx`, `Социальный_паспорт_${shown.group_code}.docx`)}
-          />
-        )}
+        <GroupPassportPanel groupId={Number(groupId)} />
       </div>
     );
   }
@@ -222,6 +243,8 @@ export default function PassportPage() {
 function GroupView({ passport: p, onExport, onExportWord }: { passport: GroupPassport; onExport: () => void; onExportWord: () => void }) {
   const { user } = useAuth();
   const technical = inRoles(user?.role, DOSSIER_AUDIT_ROLES);
+  const [part, setPart] = useState("info");
+  const marked = p.categories.filter((c) => (c.count ?? 0) > 0).length;
   return (
     <div className="student-card">
       <div className="student-card__header">
@@ -229,14 +252,26 @@ function GroupView({ passport: p, onExport, onExportWord }: { passport: GroupPas
           Социальный паспорт группы {p.group_code}
         </h2>
         <div className="toolbar">
-          <button className="link-btn" onClick={onExportWord} title="Бланк колледжа: направления профиля, шапка и подписи — можно распечатать или править в Word">
+          <button className="btn-secondary" onClick={onExportWord} title="Бланк колледжа: направления профиля, шапка и подписи — можно распечатать или править в Word">
             Экспорт в Word (бланк колледжа)
           </button>
-          <button className="link-btn" onClick={onExport}>
+          <button className="btn-secondary" onClick={onExport}>
             Экспорт в Excel
           </button>
         </div>
       </div>
+      <TabBar
+        tabs={[
+          { key: "info", label: "Сведения о группе" },
+          { key: "categories", label: "Особые категории", badge: marked || undefined },
+        ]}
+        active={part}
+        onChange={setPart}
+        label="Разделы паспорта"
+        idPrefix="passport"
+        variant="sub"
+      />
+      <TabPanel idPrefix="passport" tabKey="info" active={part}>
       <dl className="student-card__grid">
         <Item label="Отделение" value={p.department_name} />
         <Item label="Курс" value={String(p.course)} />
@@ -247,8 +282,9 @@ function GroupView({ passport: p, onExport, onExportWord }: { passport: GroupPas
         <Item label="Досье не заполнено" value={String(p.dossier_empty)} />
         <Item label="Нет даты рождения" value={String(p.birth_date_missing)} />
       </dl>
+      </TabPanel>
 
-      <h3 className="student-card__section">Особые категории</h3>
+      <TabPanel idPrefix="passport" tabKey="categories" active={part}>
       {!p.special_available && (
         <SpecialUnavailable technical={technical} />
       )}
@@ -275,6 +311,7 @@ function GroupView({ passport: p, onExport, onExportWord }: { passport: GroupPas
           У {p.dossier_empty} студентов досье не заполнено — цифры по категориям неполные, пока данные не внесены.
         </p>
       )}
+      </TabPanel>
     </div>
   );
 }

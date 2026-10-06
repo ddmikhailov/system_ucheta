@@ -55,6 +55,9 @@ export const CURATOR_CAPABLE_ROLES: Roles = [...TEACHER_ROLES, ...DOSSIER_STAFF_
 /** Кто правит структуру (группы, студенты, пользователи): админ — по колледжу, остальные — в своём отделении. */
 export const STRUCTURE_EDITOR_ROLES: Roles = [ROLE.ADMIN, ROLE.TUTOR, ROLE.DEPT_HEAD];
 
+/** Кто решает исправления прошлых сданных дней куратором: админ — любые, зав. отделением и тьютор — своего отделения. */
+export const JOURNAL_REVIEWER_ROLES: Roles = [ROLE.ADMIN, ROLE.TUTOR, ROLE.DEPT_HEAD];
+
 /** Кто правит общий календарь и коды отметок. */
 export const REFERENCE_EDITOR_ROLES: Roles = [ROLE.ADMIN, ROLE.EDU_DEPARTMENT];
 

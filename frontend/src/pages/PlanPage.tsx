@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
 import { api, ApiError, downloadFile } from "../api/client";
 import type { GroupEvent, GroupMeetings, GroupPlan, ParentMeeting } from "../api/types";
 import AttendanceModal from "../components/AttendanceModal";
@@ -7,6 +6,8 @@ import EventForm from "../components/EventForm";
 import MeetingForm from "../components/MeetingForm";
 import ParentsAttendanceModal from "../components/ParentsAttendanceModal";
 import SearchSelect from "../components/SearchSelect";
+import { TabBar } from "../components/Tabs";
+import { useGroupParams } from "../hooks/useGroupParams";
 import { EVENT_STATUSES } from "../constants/eventStatuses";
 import { formatDateRu } from "../utils/date";
 import { dialogs } from "../utils/feedback";
@@ -19,8 +20,10 @@ interface GroupOption {
 
 // План воспитательной работы группы: мероприятия по разделам бланка колледжа, отметка о выполнении, классные часы
 // с присутствующими. Выгрузка в Word — план группы, план куратора, протокол классного часа.
-export default function PlanPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
+// Подвкладки «Мероприятия» и «Родительские собрания», мероприятия — с фильтром по разделу бланка, чтобы
+// страница не была одной длинной лентой. `fixedGroupId` — вкладка на странице группы куратора.
+export default function PlanPage({ fixedGroupId }: { fixedGroupId?: number } = {}) {
+  const { params: searchParams, groupId, update } = useGroupParams(fixedGroupId);
   const [groups, setGroups] = useState<GroupOption[] | null>(null);
   const [plan, setPlan] = useState<GroupPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -29,15 +32,20 @@ export default function PlanPage() {
   const [meetings, setMeetings] = useState<GroupMeetings | null>(null);
   const [meetingForm, setMeetingForm] = useState<{ meeting: ParentMeeting | null } | null>(null);
   const [parentsOf, setParentsOf] = useState<ParentMeeting | null>(null);
-  const groupId = searchParams.get("group");
   const year = searchParams.get("year");
+  const part = searchParams.get("part") === "meetings" ? "meetings" : "events";
+  const sectionFilter = searchParams.get("section") ?? "all";
 
   useEffect(() => {
+    if (fixedGroupId != null) {
+      setGroups([]);
+      return;
+    }
     api
       .get<GroupOption[]>("/individual-work/groups")
       .then((list) => {
         setGroups(list);
-        if (!groupId && list.length > 0) setSearchParams({ group: String(list[0].id) }, { replace: true });
+        if (!groupId && list.length > 0) update({ group: String(list[0].id) }, { replace: true });
       })
       .catch((err) => {
         setError(err instanceof ApiError ? err.message : "Не удалось загрузить список групп");
@@ -94,25 +102,27 @@ export default function PlanPage() {
   }
 
   if (groups === null) return <p className="hint">Загрузка…</p>;
-  if (groups.length === 0) return <p>{error ?? "Нет доступных групп."}</p>;
+  if (fixedGroupId == null && groups.length === 0) return <p>{error ?? "Нет доступных групп."}</p>;
 
   const current = plan && String(plan.group_id) === groupId ? plan : null;
 
   return (
     <div>
       <div className="toolbar">
-        <SearchSelect
-          value={groupId ?? ""}
-          options={groups.map((g) => ({ value: String(g.id), label: `${g.code} (курс ${g.course})` }))}
-          onChange={(v) => setSearchParams({ group: v })}
-          ariaLabel="Группа"
-          title="Группа: начните вводить код, например «ГД»"
-        />
+        {fixedGroupId == null && (
+          <SearchSelect
+            value={groupId ?? ""}
+            options={groups.map((g) => ({ value: String(g.id), label: `${g.code} (курс ${g.course})` }))}
+            onChange={(v) => update({ group: v, year: null, section: null })}
+            ariaLabel="Группа"
+            title="Группа: начните вводить код, например «ГД»"
+          />
+        )}
         {current && (
           <select
             aria-label="Учебный год"
             value={current.school_year}
-            onChange={(e) => setSearchParams({ group: String(current.group_id), year: e.target.value })}
+            onChange={(e) => update({ year: e.target.value })}
           >
             {current.years.map((y) => (
               <option key={y} value={y}>
@@ -129,13 +139,13 @@ export default function PlanPage() {
         <>
           <div className="toolbar">
             {current.can_edit && (
-              <button type="button" onClick={() => setEditing({ event: null, section: current.sections[0].key })}>
+              <button type="button" onClick={() => setEditing({ event: null, section: sectionFilter !== "all" ? sectionFilter : current.sections[0].key })}>
                 Добавить мероприятие
               </button>
             )}
             <button
               type="button"
-              className="link-btn"
+              className="btn-secondary"
               title="План воспитательной работы учебной группы — бланк колледжа"
               onClick={() => download(`/events/groups/${current.group_id}/plan.docx?kind=group&year=${current.school_year}`, `План_группы_${current.group_code}.docx`)}
             >
@@ -143,18 +153,62 @@ export default function PlanPage() {
             </button>
             <button
               type="button"
-              className="link-btn"
+              className="btn-secondary"
               title="План воспитательной работы куратора — бланк колледжа с подписями"
               onClick={() => download(`/events/groups/${current.group_id}/plan.docx?kind=curator&year=${current.school_year}`, `План_куратора_${current.group_code}.docx`)}
             >
               План куратора в Word
             </button>
           </div>
-          <p className="hint">
-            Мероприятия по разделам бланка колледжа. Отметьте проведённое и результат — в Word попадёт всё как в бланке; для
-            классного часа отметьте присутствующих и скачайте протокол.
-          </p>
-          {current.sections.map((section) => {
+          <TabBar
+            tabs={[
+              { key: "events", label: "Мероприятия", badge: current.events.length || undefined },
+              { key: "meetings", label: "Родительские собрания", badge: meetings?.meetings.length || undefined },
+            ]}
+            active={part}
+            onChange={(key) => update({ part: key === "events" ? null : key }, { replace: true })}
+            label="Разделы плана"
+            idPrefix="plan"
+            variant="sub"
+          />
+          {part === "events" && (
+            <>
+              <p className="hint">
+                Мероприятия по разделам бланка колледжа. Отметьте проведённое и результат — в Word попадёт всё как в бланке; для
+                классного часа отметьте присутствующих и скачайте протокол.
+              </p>
+              <div className="chip-filter" role="group" aria-label="Раздел бланка">
+                <button
+                  type="button"
+                  className={`chip-filter__item${sectionFilter === "all" ? " is-active" : ""}`}
+                  aria-pressed={sectionFilter === "all"}
+                  onClick={() => update({ section: null }, { replace: true })}
+                >
+                  Все разделы
+                </button>
+                {current.sections.map((section) => {
+                  const count = current.events.filter((e) => e.section === section.key).length;
+                  return (
+                    <button
+                      key={section.key}
+                      type="button"
+                      className={`chip-filter__item${sectionFilter === section.key ? " is-active" : ""}`}
+                      aria-pressed={sectionFilter === section.key}
+                      onClick={() => update({ section: section.key }, { replace: true })}
+                    >
+                      {section.title}
+                      {count > 0 && <span className="chip-filter__count">{count}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+          {part === "events" && current.sections
+            .filter((section) =>
+              sectionFilter === "all" ? current.events.some((e) => e.section === section.key) : section.key === sectionFilter
+            )
+            .map((section) => {
             const items = current.events.filter((e) => e.section === section.key);
             return (
               <section key={section.key} className="plan-section">
@@ -247,6 +301,14 @@ export default function PlanPage() {
               </section>
             );
           })}
+          {part === "events" && sectionFilter === "all" && (
+            <p className="hint plan-empty-sections">
+              {current.events.length === 0
+                ? "Мероприятий в этом учебном году ещё нет — выберите раздел выше или нажмите «Добавить мероприятие»."
+                : `Разделов без мероприятий: ${current.sections.filter((s) => !current.events.some((e) => e.section === s.key)).length} — их можно открыть кнопками выше.`}
+            </p>
+          )}
+          {part === "meetings" && (
           <section className="plan-section">
             <h3 className="student-card__section">
               Родительские собрания <span className="hint">({meetings?.meetings.length ?? 0})</span>
@@ -321,6 +383,7 @@ export default function PlanPage() {
               </>
             )}
           </section>
+          )}
           {meetingForm && (
             <MeetingForm
               groupId={current.group_id}

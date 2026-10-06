@@ -1,3 +1,7 @@
+import { useSearchParams } from "react-router-dom";
+import { useAuth } from "../../auth/useAuth";
+import ChangeReviewList from "../../components/journal/ChangeReviewList";
+import { JOURNAL_REVIEWER_ROLES, inRoles } from "../../constants/roles";
 import { api } from "../../api/client";
 import DayJournal, { type JournalGroup } from "../../components/DayJournal";
 import type { DepartmentAdmin, StudyGroupAdmin } from "../../api/types";
@@ -26,14 +30,32 @@ const fetchGroups = async (): Promise<JournalGroup[]> => {
  * бэкенд уже разграничивает это в assert_can_access_group), для любого дня,
  * с полным правом правки и видимостью, кто и когда вносил отметку. */
 export default function GroupJournalTab() {
+  const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const canReview = inRoles(user?.role, JOURNAL_REVIEWER_ROLES);
   return (
-    <DayJournal
-      fetchGroups={fetchGroups}
-      emptyText="Нет ни одной группы в зоне видимости."
-      notSubmittedText="День не активирован куратором — можно заполнить самостоятельно"
-      submitLabel="Сохранить день"
-      submitErrorText="Не удалось сохранить день"
-      showLastEdited
-    />
+    <>
+      {canReview && (
+        <ChangeReviewList
+          onOpenDay={(groupId, date) => {
+            const next = new URLSearchParams(searchParams);
+            next.set("group", String(groupId));
+            next.set("date", date);
+            setSearchParams(next);
+          }}
+        />
+      )}
+      <DayJournal
+        // Переход к дню из списка исправлений меняет адрес — журнал открывается заново на этом дне.
+        key={`${searchParams.get("group") ?? ""}:${searchParams.get("date") ?? ""}`}
+        fetchGroups={fetchGroups}
+        emptyText="Нет ни одной группы в зоне видимости."
+        notSubmittedText="День не активирован куратором — можно заполнить самостоятельно"
+        submitLabel="Сохранить день"
+        submitErrorText="Не удалось сохранить день"
+        showLastEdited
+        canReview={canReview}
+      />
+    </>
   );
 }

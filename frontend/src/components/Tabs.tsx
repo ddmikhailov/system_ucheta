@@ -16,12 +16,15 @@ export function TabBar({
   onChange,
   label,
   idPrefix,
+  variant = "main",
 }: {
   tabs: TabItem[];
   active: string;
   onChange: (key: string) => void;
   label: string;
   idPrefix: string;
+  /** "sub" — подразделы внутри вкладки: «таблетки» помельче, без общей линии снизу. */
+  variant?: "main" | "sub";
 }) {
   const refs = useRef<Record<string, HTMLButtonElement | null>>({});
 
@@ -51,7 +54,7 @@ export function TabBar({
   }
 
   return (
-    <div className="tabbar" role="tablist" aria-label={label}>
+    <div className={`tabbar${variant === "sub" ? " tabbar--sub" : ""}`} role="tablist" aria-label={label}>
       {tabs.map((t, i) => {
         const selected = t.key === active;
         return (

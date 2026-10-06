@@ -80,7 +80,7 @@ export default function CommandPalette({
   const commands = useMemo<Command[]>(() => {
     const base: Command[] = [
       ...sections.map((s) => ({ id: `s:${s.to}`, label: s.label, hint: "Раздел", to: s.to })),
-      ...user.groups.map((g) => ({ id: `g:${g.id}`, label: `${g.code} · ${g.course} курс`, hint: "Журнал группы", to: `/cabinet?group=${g.id}` })),
+      ...user.groups.map((g) => ({ id: `g:${g.id}`, label: `${g.code} · ${g.course} курс`, hint: "Группа", to: `/cabinet/groups/${g.id}` })),
       ...(inRoles(user.role, MANAGEMENT_ROLES)
         ? ADMIN_PAGES.map((s) => ({ id: `a:${s.to}`, label: s.label, hint: "Админка", to: s.to }))
         : []),

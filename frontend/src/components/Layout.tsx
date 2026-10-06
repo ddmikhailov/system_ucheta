@@ -15,7 +15,7 @@ import NotificationBell from "./NotificationBell";
 import UserMenu from "./UserMenu";
 import { pageTitle } from "../utils/pageTitle";
 
-type CounterKey = "my_day" | "my_tasks" | "review";
+type CounterKey = "my_day" | "my_tasks" | "review" | "journal_changes";
 type Counters = Partial<Record<CounterKey, number>>;
 
 interface NavItem {
@@ -42,13 +42,15 @@ function navItems(user: MeResponse | null): NavItem[] {
     items.push({ to: "/dashboards", label: "Витрины", icon: "charts" });
     items.push({ to: "/students", label: "Студенты", icon: "students" });
   }
-  if (inRoles(role, VIEWER_ROLES) || leadsGroups(user)) {
+  // Куратору соц. паспорт, индивидуальная работа, план и отчёт — во вкладках его группы («Мои группы»);
+  // отдельными разделами меню они остаются у тех, кто смотрит много групп.
+  if (inRoles(role, VIEWER_ROLES)) {
     items.push({ to: "/passport", label: "Соц. паспорт", short: "Паспорт", icon: "passport" });
     items.push({ to: "/individual-work", label: "Индивидуальная работа", short: "Работа", icon: "individual" });
     items.push({ to: "/plan", label: "План группы", short: "План", icon: "plan" });
     items.push({ to: "/report", label: "Отчёт куратора", short: "Отчёт", icon: "report" });
   }
-  if (inRoles(role, MANAGEMENT_ROLES)) items.push({ to: "/admin", label: "Админка", icon: "admin" });
+  if (inRoles(role, MANAGEMENT_ROLES)) items.push({ to: "/admin", label: "Админка", icon: "admin", counter: "journal_changes" });
   return items;
 }
 
@@ -66,6 +68,7 @@ const COUNTER_LABELS: Record<CounterKey, string> = {
   my_day: "дел на сегодня",
   my_tasks: "задач требуют внимания",
   review: "ответов ждут проверки",
+  journal_changes: "исправлений журнала ждут решения",
 };
 
 export default function Layout({ children }: { children: ReactNode }) {

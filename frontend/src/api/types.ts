@@ -200,6 +200,39 @@ export interface RosterResponse {
   is_on_time: boolean | null;
   first_period: number | null;
   entries: RosterEntry[];
+  /** Кто сдал день. */
+  submitted_by_name?: string | null;
+  /** Правка этого дня текущим пользователем уходит на проверку зав. отделением. */
+  edit_requires_review?: boolean;
+  pending_change?: AttendanceChange | null;
+  last_change?: AttendanceChange | null;
+}
+
+/** Что меняется у студента в запросе на исправление: код было → станет (null — присутствовал). */
+export interface MarkChange {
+  student_id: number;
+  full_name: string;
+  from_code: string | null;
+  to_code: string | null;
+  details_changed: boolean;
+}
+
+/** Исправление прошлого сданного дня куратором — на проверке у зав. отделением. */
+export interface AttendanceChange {
+  id: number;
+  study_group_id: number;
+  group_code: string;
+  date: string;
+  requested_by_id: number;
+  requested_by_name: string;
+  created_at: string;
+  reason: string;
+  status: "pending" | "approved" | "rejected" | "cancelled";
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  review_comment: string | null;
+  first_period: number | null;
+  changes: MarkChange[];
 }
 
 export interface GroupSummary {
@@ -207,6 +240,9 @@ export interface GroupSummary {
   code: string;
   course: number;
   is_submitted_today: boolean;
+  students_count: number;
+  risk_count: number;
+  role_type: "curator" | "deputy" | null;
 }
 
 export interface MonthDayStatus {

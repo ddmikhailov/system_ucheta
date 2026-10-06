@@ -86,6 +86,20 @@ def assert_can_view_user(viewer: User, target: User) -> None:
     raise HTTPException(status.HTTP_403_FORBIDDEN, "Недостаточно прав для просмотра профиля")
 
 
+def assert_can_review_attendance_change(user: User, group: StudyGroup) -> None:
+    """Правку прошлого сданного дня куратором одобряет зав. отделением этой группы; тьютор —
+    в своём отделении, администратор — в любом. Воспитательный отдел сам правит журнал, но
+    чужие запросы не решает (так задумано: проверка — за руководителем отделения)."""
+    role = RoleCode(user.role.code)
+    if role == RoleCode.ADMIN:
+        return
+    if role in (RoleCode.DEPT_HEAD, RoleCode.TUTOR):
+        if user.department_id is None or group.department_id != user.department_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Группа не относится к вашему отделению")
+        return
+    raise HTTPException(status.HTTP_403_FORBIDDEN, "Решать запросы на изменение посещаемости может зав. отделением")
+
+
 def assert_can_assign_role(admin: User, new_role_code: str) -> None:
     admin_role = RoleCode(admin.role.code)
     if admin_role == RoleCode.ADMIN:

@@ -389,7 +389,7 @@ def test_nav_counters_for_reviewer_and_login(client, admin_headers, curator_head
     client.put(f"/tasks/assignments/{aid}/answers", headers=curator_headers, json={"group_values": {"f1": True}})
     client.post(f"/tasks/assignments/{aid}/submit", headers=curator_headers)
     counters = client.get("/my-day/counters", headers=admin_headers).json()
-    assert counters == {"my_day": 0, "my_tasks": 0, "review": 1}
+    assert counters == {"my_day": 0, "my_tasks": 0, "review": 1, "journal_changes": 0}
     assert client.get("/my-day/counters").status_code == 401
 
 

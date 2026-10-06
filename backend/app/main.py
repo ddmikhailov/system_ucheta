@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routers import admin, auth, curator, dashboards, dossier, dossier_import, export, individual_work, my_day, notifications, passport, students, tasks, events, meetings, reports
+from app.api.routers import admin, attendance_changes, auth, curator, dashboards, dossier, dossier_import, export, individual_work, my_day, notifications, passport, students, tasks, events, meetings, reports
 from app.core.config import get_settings
 from app.core.observability import init_sentry
 from app.core.rate_limit import client_ip
@@ -34,7 +34,7 @@ app = FastAPI(
     # общий VERSION-файл сюда не даёт выигрыша, см. TODO.md 5), поэтому при
     # бампе версии меняйте все три места;
     # tests/test_versions.py проверяет, что они не разошлись.
-    version="3.1.0",
+    version="3.2.0",
     docs_url="/docs" if _docs_enabled else None,
     redoc_url="/redoc" if _docs_enabled else None,
     openapi_url="/openapi.json" if _docs_enabled else None,
@@ -82,6 +82,7 @@ async def security_headers(request, call_next):
 
 app.include_router(auth.router)
 app.include_router(curator.router)
+app.include_router(attendance_changes.router)
 app.include_router(dashboards.router)
 app.include_router(admin.router)
 app.include_router(export.router)

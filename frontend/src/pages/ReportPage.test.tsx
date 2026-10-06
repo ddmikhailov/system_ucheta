@@ -55,11 +55,11 @@ describe("ReportPage — отчёт куратора", () => {
   it("показывает разделы и то, что насчитала платформа, рядом с полем", async () => {
     mock(report());
     renderPage(<ReportPage />, { role: "curator" });
-    expect(await screen.findByRole("heading", { name: "Общие данные" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /Общие данные/ })).toBeInTheDocument();
     expect(get).toHaveBeenCalledWith("/reports/groups/7");
     const students = screen.getByLabelText("Количество студентов");
     expect(students).toHaveValue("");
-    expect(students).toHaveAttribute("placeholder", "25");
+    expect(students).toHaveAttribute("placeholder", "По платформе: 25");
     expect(screen.getByText("25", { selector: "b" })).toBeInTheDocument();
     expect(screen.getByText(/Период: 01\.09\.2026 — 31\.01\.2027/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Сохранить" })).toBeDisabled();  // менять пока нечего
@@ -70,10 +70,12 @@ describe("ReportPage — отчёт куратора", () => {
     mock(report());
     put.mockResolvedValue(report());
     renderPage(<ReportPage />, { role: "curator" });
-    await screen.findByRole("heading", { name: "Общие данные" });
+    await screen.findByRole("heading", { name: /Общие данные/ });
     await user.click(screen.getByRole("button", { name: "Взять посчитанное: Количество студентов" }));
     expect(screen.getByLabelText("Количество студентов")).toHaveValue("25");
     await user.type(screen.getByLabelText("Переведённых на ИУП"), "2");
+    // Разделы бланка — подвкладки: несохранённое в одном разделе не теряется при переходе в другой.
+    await user.click(screen.getByRole("tab", { name: /Организация самоуправления/ }));
     await user.type(screen.getByLabelText("Актив группы"), "Иванов И.");
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
     expect(put).toHaveBeenCalledWith("/reports/groups/7?year=2026-2027&semester=1", {
@@ -132,7 +134,7 @@ describe("ReportPage — отчёт куратора", () => {
     await user.click(screen.getByRole("button", { name: "Отчёт в Word" }));
     expect(put).not.toHaveBeenCalled();
     expect(download).toHaveBeenCalled();
-    expect(within(screen.getByRole("heading", { name: "Общие данные" }).closest("section") as HTMLElement).getByText(/доля пропусков/)).toBeInTheDocument();
+    expect(within(screen.getByRole("heading", { name: /Общие данные/ }).closest("section") as HTMLElement).getByText(/доля пропусков/)).toBeInTheDocument();
   });
 
   it("ошибка загрузки показывается", async () => {

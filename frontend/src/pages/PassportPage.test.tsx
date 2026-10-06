@@ -148,6 +148,7 @@ describe("PassportPage — паспорт группы", () => {
     await user.click(await screen.findByRole("cell", { name: "СА172" }));
     expect(await screen.findByRole("heading", { name: /Социальный паспорт группы СА172/ })).toBeInTheDocument();
     expect(get).toHaveBeenCalledWith("/passport/group/1");
+    await user.click(screen.getByRole("tab", { name: /Особые категории/ }));
     const orphan = screen.getByRole("cell", { name: "Сироты" }).closest("tr") as HTMLElement;
     expect(within(orphan).getByText("Иванов И., Петров П.")).toBeInTheDocument();
     expect(screen.getByText(/У 3 студентов досье не заполнено/)).toBeInTheDocument();
@@ -188,6 +189,7 @@ describe("PassportPage — паспорт группы", () => {
   it("без ключа шифрования категории в паспорте группы — прочерки с пояснением", async () => {
     mockApi({ group: groupPassport({ special_available: false, categories: [{ key: "orphan", title: "Сироты", count: null, names: [] }] }) });
     renderPage(<PassportPage />, { route: "/passport?group=1", role: "admin" });
+    await userEvent.setup().click(await screen.findByRole("tab", { name: /Особые категории/ }));
     expect(await screen.findByText(/DOSSIER_ENCRYPTION_KEY/)).toBeInTheDocument();
     const r = screen.getByRole("cell", { name: "Сироты" }).closest("tr") as HTMLElement;
     expect(within(r).getAllByText("—")).toHaveLength(2); // число и «кто»

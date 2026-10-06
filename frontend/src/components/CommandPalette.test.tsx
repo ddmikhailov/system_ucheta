@@ -62,11 +62,11 @@ describe("CommandPalette", () => {
     expect(screen.getByTestId("where")).toHaveTextContent("/students/42");
   });
 
-  it("куратор: свои группы ведут в журнал группы, студентов на сервере не ищет", async () => {
+  it("куратор: свои группы ведут на страницу группы, студентов на сервере не ищет", async () => {
     const { user } = open("curator", [{ id: 7, code: "СА172", course: 1 }]);
     await user.type(screen.getByRole("combobox"), "са17");
     await user.click(screen.getByRole("option", { name: /СА172 · 1 курс/ }));
-    expect(screen.getByTestId("where")).toHaveTextContent("/cabinet?group=7");
+    expect(screen.getByTestId("where")).toHaveTextContent("/cabinet/groups/7");
     expect(get).not.toHaveBeenCalled();
     expect(screen.queryByRole("option", { name: /Пользователи/ })).not.toBeInTheDocument();
   });

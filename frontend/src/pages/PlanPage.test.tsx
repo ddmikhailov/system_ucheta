@@ -81,7 +81,13 @@ describe("PlanPage — план воспитательной работы гру
     const legal = screen.getByText("Беседа о праве").closest("tr") as HTMLElement;
     expect(within(legal).getByText("Проведено")).toBeInTheDocument();
     expect(within(legal).getByText("Прошла хорошо")).toBeInTheDocument();
+    // Пустые разделы не занимают место — они в ряду кнопок-разделов, с числом мероприятий у непустых.
+    expect(screen.queryByRole("heading", { name: /Организационные мероприятия в группе/ })).not.toBeInTheDocument();
+    const filter = screen.getByRole("group", { name: "Раздел бланка" });
+    expect(within(filter).getByRole("button", { name: /Организационные мероприятия в группе/ })).toBeInTheDocument();
+    await userEvent.setup().click(within(filter).getByRole("button", { name: /Организационные мероприятия в группе/ }));
     expect(screen.getByRole("heading", { name: /Организационные мероприятия в группе/ })).toBeInTheDocument();
+    expect(screen.queryByText("Урок мужества")).not.toBeInTheDocument();
   });
 
   it("добавляет мероприятие: раздел по умолчанию — тот, где нажали, год без даты — выбранный", async () => {
@@ -89,6 +95,7 @@ describe("PlanPage — план воспитательной работы гру
     mock(plan([]));
     post.mockResolvedValue(event());
     renderPage(<PlanPage />, { role: "curator" });
+    await user.click(await screen.findByRole("button", { name: /Правовое воспитание/ }));
     await screen.findByRole("heading", { name: /Правовое воспитание/ });
     const legal = screen.getByRole("heading", { name: /Правовое воспитание/ }).closest("section") as HTMLElement;
     await user.click(within(legal).getByRole("button", { name: "+ Добавить в раздел" }));
@@ -197,6 +204,7 @@ describe("PlanPage — план воспитательной работы гру
     post.mockResolvedValue(meeting());
     put.mockResolvedValue(meeting());
     renderPage(<PlanPage />, { role: "curator" });
+    await userEvent.setup().click(await screen.findByRole("tab", { name: /Родительские собрания/ }));
 
     const first = (await screen.findByText(/Итоги месяца/)).closest("tr") as HTMLElement;
     expect(within(first).getByText("02.10.2026")).toBeInTheDocument();
@@ -228,6 +236,7 @@ describe("PlanPage — план воспитательной работы гру
     const user = userEvent.setup();
     mock(plan([], { can_edit: false }), { group_id: 7, school_year: "2026-2027", meetings: [meeting()], guardians: [] });
     renderPage(<PlanPage />, { role: "psychologist" });
+    await userEvent.setup().click(await screen.findByRole("tab", { name: /Родительские собрания/ }));
     await screen.findByText(/Итоги месяца/);
     expect(screen.queryByRole("button", { name: "+ Добавить родительское собрание" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Присутствующие родители" })).not.toBeInTheDocument();
@@ -240,10 +249,13 @@ describe("PlanPage — план воспитательной работы гру
     const user = userEvent.setup();
     mock(plan([]));
     renderPage(<PlanPage />, { role: "curator" });
+    await userEvent.setup().click(await screen.findByRole("tab", { name: /Родительские собрания/ }));
     expect(await screen.findByText("В этом учебном году собраний ещё нет.")).toBeInTheDocument();
 
     mock(plan([]), { group_id: 7, school_year: "2026-2027", meetings: [meeting()], guardians: [] });
     renderPage(<PlanPage />, { role: "curator" });
+    await waitFor(() => expect(screen.getAllByRole("tab", { name: /Родительские собрания/ })).toHaveLength(2));
+    await user.click(screen.getAllByRole("tab", { name: /Родительские собрания/ })[1]);
     await user.click(await screen.findByRole("button", { name: "Удалить собрание" }));
     expect(del).toHaveBeenCalledWith("/meetings/3");
   });

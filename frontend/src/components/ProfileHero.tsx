@@ -18,9 +18,12 @@ export function ProfileHero({
   name,
   badge,
   meta,
+  avatar,
   children,
 }: {
   name: string;
+  /** Текст в квадрате слева; по умолчанию — инициалы из имени. */
+  avatar?: string;
   badge?: ReactNode;
   meta: (string | null | undefined)[];
   children?: ReactNode;
@@ -29,7 +32,7 @@ export function ProfileHero({
     <header className="profile-hero">
       <div className="profile-hero__top">
         <div className="profile-hero__avatar" aria-hidden="true">
-          {initials(name)}
+          {avatar ?? initials(name)}
         </div>
         <div className="profile-hero__main">
           <div className="profile-hero__title">

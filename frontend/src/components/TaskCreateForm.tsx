@@ -12,6 +12,7 @@ import type { DepartmentAdmin, DossierTarget, StudyGroupAdmin, TaskDetail, TaskF
 import { DEPARTMENT_SCOPED_ROLES, inRoles } from "../constants/roles";
 import FilterableMultiSelect from "./FilterableMultiSelect";
 import AnswerInput from "./task/AnswerInput";
+import TextArea from "./TextArea";
 
 type ScopeKind = "all" | "departments" | "courses" | "groups";
 type Step = 0 | 1 | 2 | 3;
@@ -336,7 +337,7 @@ export default function TaskCreateForm({ onCreated, afterTask }: { onCreated: (t
             </label>
             <label className="form-field">
               Что нужно сделать и как
-              <textarea rows={4} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Описание увидит куратор над формой ответа" />
+              <TextArea expandTitle="Описание" rows={4} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Описание увидит куратор над формой ответа" />
             </label>
           </div>
         )}
