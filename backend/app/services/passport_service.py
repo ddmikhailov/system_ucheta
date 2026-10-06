@@ -24,7 +24,12 @@ CATEGORIES: list[tuple[str, str, callable]] = [
     ("disability", "Инвалидность", lambda s: bool(s.disability_group)),
     ("ovz", "ОВЗ", lambda s: s.has_ovz),
     ("large_family", "Многодетные семьи", lambda s: s.large_family),
+    ("incomplete_loss", "Неполные семьи: потеря кормильца", lambda s: s.incomplete_family == "loss"),
+    ("incomplete_divorce", "Неполные семьи: родители в разводе", lambda s: s.incomplete_family == "divorce"),
+    ("incomplete_single_mother", "Неполные семьи: мать-одиночка", lambda s: s.incomplete_family == "single_mother"),
     ("low_income", "Малоимущие семьи", lambda s: s.low_income),
+    ("dysfunctional", "Неблагополучные семьи", lambda s: s.dysfunctional_family),
+    ("parent_disabled", "Родители-инвалиды", lambda s: s.parent_disabled),
     ("pdn_kdn", "Учёт ПДН/КДН", lambda s: s.pdn_kdn),
     ("internal_record", "Внутренний учёт", lambda s: s.internal_record),
     ("scholarship", "Стипендия / соцвыплаты", lambda s: bool(s.scholarship)),
@@ -68,15 +73,10 @@ def accessible_groups(db: Session, user: User, department_id: int | None = None)
     return q.order_by(StudyGroup.course, StudyGroup.code).all()
 
 
-def build_passports(
-    db: Session, groups: list[StudyGroup], today: datetime.date, with_names: bool
-) -> list[GroupPassport]:
-    """Паспорта сразу нескольких групп: число запросов не зависит от числа групп (состав групп,
-    студенты, профили и представители грузятся по одному запросу на всю выборку)."""
-    if not groups:
-        return []
+def rosters(db: Session, groups: list[StudyGroup], today: datetime.date) -> dict[int, list[Student]]:
+    """Кто числится в каждой группе на дату — по истории членства, как в журнале посещаемости;
+    студенты по фамилии и имени. Число запросов не зависит от числа групп."""
     group_ids = [g.id for g in groups]
-    # Кто числится в группе сегодня — по истории членства, как в журнале посещаемости.
     member_rows = db.execute(
         select(StudentGroupMembership.study_group_id, StudentGroupMembership.student_id).where(
             StudentGroupMembership.study_group_id.in_(group_ids),
@@ -101,6 +101,18 @@ def build_passports(
             by_group[r.study_group_id].append(students[r.student_id])
     for roster in by_group.values():
         roster.sort(key=lambda s: (s.last_name, s.first_name))
+    return by_group
+
+
+def build_passports(
+    db: Session, groups: list[StudyGroup], today: datetime.date, with_names: bool
+) -> list[GroupPassport]:
+    """Паспорта сразу нескольких групп: число запросов не зависит от числа групп (состав групп,
+    студенты, профили и представители грузятся по одному запросу на всю выборку)."""
+    if not groups:
+        return []
+    by_group = rosters(db, groups, today)
+    students = {s.id: s for roster in by_group.values() for s in roster}
 
     profiles: dict[int, StudentProfile] = {}
     with_guardians: set[int] = set()

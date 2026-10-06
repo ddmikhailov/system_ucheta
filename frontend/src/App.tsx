@@ -10,6 +10,8 @@ import ChangePasswordPage from "./pages/ChangePasswordPage";
 import CuratorCabinetPage from "./pages/CuratorCabinetPage";
 import { DOSSIER_STAFF_ROLES, MANAGEMENT_ROLES, TASK_MANAGER_ROLES, VIEWER_ROLES, inRoles } from "./constants/roles";
 import MyDayPage from "./pages/MyDayPage";
+import PlanPage from "./pages/PlanPage";
+import ReportPage from "./pages/ReportPage";
 import MyTasksPage from "./pages/MyTasksPage";
 import TaskAssignmentPage from "./pages/TaskAssignmentPage";
 
@@ -17,6 +19,7 @@ import TaskAssignmentPage from "./pages/TaskAssignmentPage";
 // скачивать витрины и админку, чтобы открыть «Мой день».
 const DashboardsPage = lazy(() => import("./pages/DashboardsPage"));
 const AdminPage = lazy(() => import("./pages/AdminPage"));
+const UserProfilePage = lazy(() => import("./pages/UserProfilePage"));
 const StudentCardPage = lazy(() => import("./pages/StudentCardPage"));
 const StudentsSearchPage = lazy(() => import("./pages/StudentsSearchPage"));
 const IndividualWorkPage = lazy(() => import("./pages/IndividualWorkPage"));
@@ -146,6 +149,18 @@ export default function App() {
               }
             />
             <Route
+              path="/admin/users/:userId"
+              element={
+                <RequireAuth>
+                  <RequireAdminAccess>
+                    <Layout>
+                      <UserProfilePage />
+                    </Layout>
+                  </RequireAdminAccess>
+                </RequireAuth>
+              }
+            />
+            <Route
               path="/tasks"
               element={
                 <RequireAuth>
@@ -193,6 +208,26 @@ export default function App() {
                 <RequireAuth>
                   <Layout>
                     <IndividualWorkPage />
+                  </Layout>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/plan"
+              element={
+                <RequireAuth>
+                  <Layout>
+                    <PlanPage />
+                  </Layout>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/report"
+              element={
+                <RequireAuth>
+                  <Layout>
+                    <ReportPage />
                   </Layout>
                 </RequireAuth>
               }

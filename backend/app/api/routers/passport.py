@@ -6,6 +6,7 @@
 в журнал просмотров досье запись на каждого студента из категорий; сводка
 по группам — только числа, ей достаточно записи в журнале аудита."""
 import io
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from openpyxl import Workbook
@@ -19,6 +20,7 @@ from app.core.xlsx import append_row
 from app.db.session import get_db
 from app.models import DossierAccessLog, StudyGroup, User
 from app.services import passport_service as svc
+from app.services import passport_sheet_service as sheet
 from app.services.audit_service import log_action
 
 router = APIRouter(prefix="/passport", tags=["passport"])
@@ -221,4 +223,32 @@ def export(
     return Response(
         content=buf.getvalue(), media_type=_XLSX,
         headers={"Content-Disposition": 'attachment; filename="social_passport.xlsx"'},
+    )
+
+
+_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+@router.get("/group/{group_id}/docx")
+def group_passport_docx(group_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Паспорт группы в Word — по образцу колледжа. Читает особые данные досье, поэтому, как поимённый паспорт,
+    пишет в журнал просмотров запись на каждого студента, попавшего в документ."""
+    group = _group_or_403(db, user, group_id)
+    today = today_local()
+    try:
+        directions = sheet.collect(db, group, today)
+    except sheet.SpecialDataUnavailable:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Паспорт недоступен: на сервере не задан ключ шифрования досье")
+    try:
+        content = sheet.build_docx(group_code=group.code, today=today, directions=directions)
+    except sheet.TemplateMismatch as exc:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, f"Образец паспорта повреждён: {exc}")
+    filename = f"Социальный_паспорт_{group.code}_{today.strftime('%d.%m.%Y')}.docx"
+    included = sorted({s.student_id for block in directions for s in block})
+    db.add_all(DossierAccessLog(student_id=sid, user_id=user.id, included_special=True) for sid in included)
+    log_action(db, user, "passport.docx", "study_group", str(group.id))
+    db.commit()
+    return Response(
+        content=content, media_type=_DOCX,
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
     )

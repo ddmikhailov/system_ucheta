@@ -68,6 +68,24 @@ def assert_can_manage_user(admin: User, target: User) -> None:
     raise HTTPException(status.HTTP_403_FORBIDDEN, "Недостаточно прав для управления пользователями")
 
 
+def assert_can_view_user(viewer: User, target: User) -> None:
+    """Профиль пользователя (закрепления, дисциплина, журнал действий) — для чтения.
+    Видят те же, кому виден список пользователей: администратор и воспитательный
+    отдел — всех, зав. отделением и тьютор — людей своего отделения."""
+    if target.id == viewer.id:
+        return
+    viewer_role = RoleCode(viewer.role.code)
+    if viewer_role in (RoleCode.ADMIN, RoleCode.EDU_DEPARTMENT):
+        return
+    if viewer_role in DEPARTMENT_SCOPED_ROLES:
+        if viewer.department_id is None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "У вас не задано отделение — обратитесь к администратору")
+        if target.department_id != viewer.department_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Пользователь не относится к вашему отделению")
+        return
+    raise HTTPException(status.HTTP_403_FORBIDDEN, "Недостаточно прав для просмотра профиля")
+
+
 def assert_can_assign_role(admin: User, new_role_code: str) -> None:
     admin_role = RoleCode(admin.role.code)
     if admin_role == RoleCode.ADMIN:

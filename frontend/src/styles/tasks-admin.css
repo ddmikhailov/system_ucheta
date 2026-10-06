@@ -608,3 +608,55 @@ kbd {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* План группы: пары полей в окне мероприятия/собрания — подпись над полем, поля делят строку поровну. */
+.event-form .inline-form.form-fields {
+  align-items: flex-start;
+  margin-top: 0;
+}
+
+.event-form .inline-form.form-fields > label {
+  display: flex;
+  flex: 1 1 140px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  font-size: inherit;
+  color: inherit;
+  font-weight: inherit;
+}
+
+.plan-section .table-scroll {
+  margin-bottom: 4px;
+}
+
+/* Отчёт куратора: поля показателей сеткой, подпись над полем, подсказка «по платформе» под ним. */
+.report-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px 16px;
+  margin-bottom: 8px;
+}
+
+.report-field label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.report-field input,
+.report-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.report-field .hint {
+  margin: 4px 0 0;
+}
+
+@media (max-width: 600px) {
+  .report-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

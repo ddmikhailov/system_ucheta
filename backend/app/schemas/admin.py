@@ -188,3 +188,78 @@ class GroupCalendarOverrideUpsert(BaseModel):
     study_group_id: int
     date: datetime.date
     day_type: _DayTypeLiteral
+
+
+class UserGroupLink(BaseModel):
+    """Закрепление пользователя за группой (куратор или заместитель), с историей."""
+
+    group_id: int
+    group_code: str
+    course: int
+    department_name: str | None
+    role_type: Literal["curator", "deputy"]
+    start_date: datetime.date
+    end_date: datetime.date | None
+    is_current: bool
+    students_count: int
+
+
+class UserDiscipline(BaseModel):
+    """Сдача дней по группам, которые человек ведёт сейчас, за последние 30 дней (без сегодня)."""
+
+    date_from: datetime.date
+    date_to: datetime.date
+    study_days: int
+    submitted: int
+    on_time: int
+    late: int
+    missed: int
+    percent_on_time: int | None
+
+
+class UserTaskStats(BaseModel):
+    """Задачи администрации по группам человека (срок — не раньше 90 дней назад)."""
+
+    total: int
+    accepted: int
+    submitted: int
+    in_work: int
+    returned: int
+    overdue: int
+
+
+class UserActivityDay(BaseModel):
+    date: datetime.date
+    count: int
+
+
+class UserProfile(BaseModel):
+    user: UserRead
+    department_name: str | None
+    created_at: datetime.datetime
+    last_activity_at: datetime.datetime | None
+    groups: list[UserGroupLink]
+    discipline: UserDiscipline
+    tasks: UserTaskStats
+    marks_created_30d: int
+    days_submitted_30d: int
+    notes_written_30d: int
+    follow_ups_open: int
+    dossier_views_30d: int
+    activity_30d: list[UserActivityDay]
+
+
+class UserActivityEntry(BaseModel):
+    """Строка журнала действий: что сделано и когда. Значения «было/стало» не отдаются —
+    в них бывают ФИО и данные досье, а для обзора работы человека достаточно факта."""
+
+    id: int
+    action: str
+    entity_type: str
+    entity_id: str
+    created_at: datetime.datetime
+
+
+class UserActivityPage(BaseModel):
+    items: list[UserActivityEntry]
+    next_before_id: int | None

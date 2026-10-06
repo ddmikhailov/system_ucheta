@@ -5,6 +5,7 @@ import { api, ApiError, setToken } from "../api/client";
 import { useAuth } from "../auth/useAuth";
 import { MIN_PASSWORD_LENGTH } from "../constants/password";
 import type { MeResponse } from "../api/types";
+import { CollegeLogo } from "../components/BrandMark";
 
 export default function ChangePasswordPage() {
   const { user, refresh } = useAuth();
@@ -58,7 +59,7 @@ export default function ChangePasswordPage() {
 
       <div className="auth-screen__form">
         <form className="auth-card" onSubmit={handleSubmit}>
-          <img src="/kait20-logo.webp" alt="КАИТ №20" className="auth-card__logo" />
+          <CollegeLogo className="auth-card__logo" />
           <h1>{forced ? "Новый пароль" : "Смена пароля"}</h1>
           {user && <p className="subtitle">{user.full_name}</p>}
 

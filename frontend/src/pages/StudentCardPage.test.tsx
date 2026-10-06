@@ -15,8 +15,18 @@ vi.mock("../api/client", async (importOriginal) => {
   return { ...actual, api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn() } };
 });
 // Досье и помесячная посещаемость — отдельные компоненты со своими тестами.
+vi.mock("../hooks/useDossier", async () => ({
+  useDossier: () => ({
+    dossier: { student_id: 10, profile: {}, special: null, special_available: true, guardians: [{ id: 1 }, { id: 2 }], notes: [
+      { id: 1, follow_up_on: "2026-10-10", follow_up_done: false }, { id: 2, follow_up_on: null, follow_up_done: false },
+    ] },
+    error: null, notice: null, setDossier: vi.fn(), setError: vi.fn(), setNotice: vi.fn(), load: vi.fn(),
+  }),
+}));
 vi.mock("../components/StudentDossier", async () => ({
-  default: (p: { studentId: number; isAdmin: boolean }) => <div>досье {p.studentId}, журнал просмотров={String(p.isAdmin)}</div>,
+  DossierSection: (p: { studentId: number; isAdmin: boolean; section: string }) => (
+    <div>досье {p.studentId}, раздел {p.section}, журнал просмотров={String(p.isAdmin)}</div>
+  ),
 }));
 vi.mock("../components/StudentMonthAttendance", async () => ({ default: () => <div>посещаемость по месяцам</div> }));
 
@@ -51,7 +61,7 @@ function Where() {
   return <div data-testid="where">{l.pathname + l.search + JSON.stringify(l.state ?? null)}</div>;
 }
 
-function open(role: string, c: StudentCard = card()) {
+function open(role: string, c: StudentCard = card(), tab?: string) {
   get.mockImplementation(async (path: string) => {
     if (path === "/students/10") return c;
     if (path === "/admin/groups") return GROUPS;
@@ -59,7 +69,7 @@ function open(role: string, c: StudentCard = card()) {
   });
   render(
     <AuthContext.Provider value={{ user: makeUser(role), loading: false, login: vi.fn(), loginWithToken: vi.fn(), logout: vi.fn(), refresh: vi.fn() }}>
-      <MemoryRouter initialEntries={["/students/10"]}>
+      <MemoryRouter initialEntries={[tab ? `/students/10?tab=${tab}` : "/students/10"]}>
         <Routes>
           <Route path="/students/:studentId" element={<StudentCardPage />} />
           <Route path="*" element={<Where />} />
@@ -75,22 +85,58 @@ beforeEach(() => {
 
 describe("StudentCardPage — просмотр", () => {
   it("показывает данные студента, куратора, даты в формате ДД.ММ.ГГГГ, статистику, отметки и историю групп", async () => {
+    const user = userEvent.setup();
     open("admin");
     expect(await screen.findByRole("heading", { name: "Алексеев Пётр Андреевич" })).toBeInTheDocument();
-    expect(screen.getByText("СА172 · 1 курс")).toBeInTheDocument();
+    expect(screen.getAllByText("СА172 · 1 курс").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Иванова А.")).toBeInTheDocument();
     expect(screen.getByText("нет")).toBeInTheDocument(); // заместителя нет
     const enrolled = screen.getByText("Дата зачисления").closest("div") as HTMLElement;
     expect(within(enrolled).getByText("01.09.2026")).toBeInTheDocument();
+    expect(screen.getByText("85%")).toBeInTheDocument(); // в шапке — главные цифры
+
+    await user.click(screen.getByRole("tab", { name: "Посещаемость" }));
     expect(screen.getByText(/05\.09\.2026 — 04\.10\.2026/)).toBeInTheDocument();
-    expect(screen.getByText("85%")).toBeInTheDocument();
     expect(screen.getByText("3 (уваж. 2, неуваж. 1)")).toBeInTheDocument();
     const mark = screen.getByText("Не предупредил").closest("tr") as HTMLElement;
     expect(within(mark).getByText("01.10.2026")).toBeInTheDocument();
+    expect(screen.getByText("посещаемость по месяцам")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "История" }));
     const old = screen.getByText("ИИ111", { selector: "td" }).closest("tr") as HTMLElement; // история групп
     expect(within(old).getByText("15.09.2026")).toBeInTheDocument();
     expect(within(screen.getByText("по настоящее время").closest("tr") as HTMLElement).getByText("16.09.2026")).toBeInTheDocument();
-    expect(screen.getByText("посещаемость по месяцам")).toBeInTheDocument();
+  });
+
+  it("вкладки: досье, представители и индивидуальная работа — отдельно, с числом записей; вкладка в адресе", async () => {
+    const user = userEvent.setup();
+    open("curator");
+    const tablist = await screen.findByRole("tablist", { name: "Разделы карточки студента" });
+    expect(within(tablist).getAllByRole("tab").map((t) => t.textContent)).toEqual([
+      "Обзор", "Досье", "Представители2", "Индивидуальная работа2", "Посещаемость", "История",
+    ]);
+    expect(screen.getByRole("tab", { name: "Обзор" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByText(/раздел profile/)).not.toBeInTheDocument(); // неоткрытая вкладка не рисуется
+
+    await user.click(screen.getByRole("tab", { name: /Представители/ }));
+    expect(screen.getByText("досье 10, раздел guardians, журнал просмотров=false")).toBeVisible();
+    await user.click(screen.getByRole("tab", { name: /Индивидуальная работа/ }));
+    expect(screen.getByText("досье 10, раздел notes, журнал просмотров=false")).toBeVisible();
+    // Открытая раньше вкладка остаётся в документе (ввод не теряется), но скрыта.
+    expect(screen.getByText(/раздел guardians/).closest("[role=tabpanel]")).toHaveAttribute("hidden");
+
+    // Стрелки переключают вкладки, как в обычном списке вкладок.
+    screen.getByRole("tab", { name: /Индивидуальная работа/ }).focus();
+    await user.keyboard("{ArrowRight}");
+    expect(screen.getByRole("tab", { name: "Посещаемость" })).toHaveFocus();
+    expect(screen.getByRole("tab", { name: "Посещаемость" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("открывается сразу на вкладке из адреса; в шапке — число вопросов, к которым надо вернуться", async () => {
+    open("admin", card(), "dossier");
+    expect(await screen.findByText("досье 10, раздел profile, журнал просмотров=true")).toBeInTheDocument();
+    const followUps = screen.getByText("Вернуться к вопросу").closest(".kpi") as HTMLElement;
+    expect(within(followUps).getByText("1")).toBeInTheDocument();
   });
 
   it("в карточке есть кнопка «Сообщение родителям о пропусках» — она запрашивает текст по этому студенту", async () => {
@@ -106,7 +152,7 @@ describe("StudentCardPage — просмотр", () => {
   });
 
   it("нет сданных дней — пояснение вместо цифр; нет отметок — тоже", async () => {
-    open("admin", card({ stats: { ...card().stats, in_list: 0 }, recent_marks: [] }));
+    open("admin", card({ stats: { ...card().stats, in_list: 0 }, recent_marks: [] }), "attendance");
     expect(await screen.findByText(/нет сданных дней по группе/)).toBeInTheDocument();
     expect(screen.getByText("Отметок пока нет.")).toBeInTheDocument();
   });
@@ -116,12 +162,12 @@ describe("StudentCardPage — просмотр", () => {
     await screen.findByRole("heading", { name: "Алексеев Пётр Андреевич" });
     expect(screen.getAllByText("Отчислен").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("25.09.2026")).toBeInTheDocument();
-    expect(document.querySelector(".student-card__header .risk-badge")).not.toBeNull();
+    expect(document.querySelector(".profile-hero .risk-badge")).not.toBeNull();
   });
 
   it("журнал просмотров досье доступен только администратору и тьютору", async () => {
-    open("tutor");
-    expect(await screen.findByText("досье 10, журнал просмотров=true")).toBeInTheDocument();
+    open("tutor", card(), "history");
+    expect(await screen.findByText("досье 10, раздел log, журнал просмотров=true")).toBeInTheDocument();
   });
 
   it("ошибка загрузки (чужая группа) показывается вместо карточки", async () => {
@@ -158,21 +204,21 @@ describe("StudentCardPage — управление", () => {
     async (role) => {
       open(role);
       await screen.findByRole("heading", { name: "Алексеев Пётр Андреевич" });
-      expect(screen.queryByRole("heading", { name: "Управление" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("tab", { name: "Управление" })).not.toBeInTheDocument();
       expect(get).not.toHaveBeenCalledWith("/admin/groups");
     }
   );
 
   it.each(["admin", "tutor", "dept_head"])("%s видит «Управление»", async (role) => {
     open(role);
-    expect(await screen.findByRole("heading", { name: "Управление" })).toBeInTheDocument();
+    expect(await screen.findByRole("tab", { name: "Управление" })).toBeInTheDocument();
   });
 
   it("правка ФИО без перевода: отправляются части ФИО и текущая группа", async () => {
     const user = userEvent.setup();
-    open("admin");
+    open("admin", card(), "manage");
     patch.mockResolvedValue({});
-    await screen.findByRole("heading", { name: "Управление" });
+    await screen.findByRole("button", { name: "Применить" });
     const last = screen.getByPlaceholderText("Фамилия");
     await user.clear(last);
     await user.type(last, "Алексеев-Смирнов");
@@ -185,8 +231,8 @@ describe("StudentCardPage — управление", () => {
 
   it("перевод в другую группу: предупреждение с кодом группы, отказ ничего не отправляет", async () => {
     const user = userEvent.setup();
-    open("admin");
-    await screen.findByRole("heading", { name: "Управление" });
+    open("admin", card(), "manage");
+    await screen.findByRole("button", { name: "Применить" });
     await chooseOption(user, screen.getByRole("combobox", { name: "Группа" }), "ИИ112");
     expect(screen.getByText(/будет выполнен перевод с сегодняшнего дня/)).toBeInTheDocument();
     const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false);
@@ -202,8 +248,8 @@ describe("StudentCardPage — управление", () => {
 
   it("список групп для перевода — только активные; текущая группа есть всегда", async () => {
     const user = userEvent.setup();
-    open("admin");
-    await screen.findByRole("heading", { name: "Управление" });
+    open("admin", card(), "manage");
+    await screen.findByRole("button", { name: "Применить" });
     const box = screen.getByRole("combobox", { name: "Группа" });
     await user.click(box);
     const listbox = screen.getByRole("listbox");
@@ -213,9 +259,9 @@ describe("StudentCardPage — управление", () => {
 
   it("смена статуса: подтверждение, дата выбытия только для не «Учится»", async () => {
     const user = userEvent.setup();
-    open("admin");
+    open("admin", card(), "manage");
     patch.mockResolvedValue({});
-    await screen.findByRole("heading", { name: "Управление" });
+    await screen.findByRole("button", { name: "Применить" });
     expect(screen.queryByText("Дата выбытия", { selector: "label" })).not.toBeInTheDocument();
     const statusSelect = screen.getAllByRole("combobox")[1];
     await user.selectOptions(statusSelect, "expelled");
@@ -234,21 +280,21 @@ describe("StudentCardPage — управление", () => {
   });
 
   it("«Применить» недоступна, пока статус не изменён", async () => {
-    open("admin");
-    await screen.findByRole("heading", { name: "Управление" });
+    open("admin", card(), "manage");
+    await screen.findByRole("button", { name: "Применить" });
     expect(screen.getByRole("button", { name: "Применить" })).toBeDisabled();
   });
 
   it("учащегося удалить нельзя — подсказка вместо кнопки", async () => {
-    open("admin");
-    await screen.findByRole("heading", { name: "Управление" });
+    open("admin", card(), "manage");
+    await screen.findByRole("button", { name: "Применить" });
     expect(screen.getByText(/Удалить студента можно только после перевода в академ/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Удалить студента насовсем" })).not.toBeInTheDocument();
   });
 
   it("отчисленного можно удалить: подтверждение, затем переход к списку с итогом операции", async () => {
     const user = userEvent.setup();
-    open("admin", card({ status: "expelled", left_at: "2026-09-25" }));
+    open("admin", card({ status: "expelled", left_at: "2026-09-25" }), "manage");
     del.mockResolvedValue({ deleted: false, anonymized: true, detail: "Есть история посещаемости — данные обезличены" });
     const button = await screen.findByRole("button", { name: "Удалить студента насовсем" });
     const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false);
@@ -263,9 +309,9 @@ describe("StudentCardPage — управление", () => {
 
   it("ошибки сохранения и удаления показываются, кнопки остаются доступны", async () => {
     const user = userEvent.setup();
-    open("dept_head", card({ status: "academic_leave", left_at: "2026-09-20" }));
+    open("dept_head", card({ status: "academic_leave", left_at: "2026-09-20" }), "manage");
     patch.mockRejectedValue(new ApiError(403, "Студент не из вашего отделения"));
-    await screen.findByRole("heading", { name: "Управление" });
+    await screen.findByRole("button", { name: "Применить" });
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
     expect(await screen.findByText("Студент не из вашего отделения")).toBeInTheDocument();
 

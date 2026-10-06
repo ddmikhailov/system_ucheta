@@ -11,6 +11,7 @@ import { formatServerDateTime, todayIso } from "../utils/date";
 import SearchSelect from "./SearchSelect";
 import { dialogs } from "../utils/feedback";
 import GroupListModal from "./GroupListModal";
+import StudentCardModal from "./StudentCardModal";
 import GroupRhythm from "./GroupRhythm";
 
 // Раньше подсказка точки в полоске месяца была просто ISO-датой (см. TODO.md 4).
@@ -32,6 +33,9 @@ interface PendingMark {
 export interface JournalGroup {
   id: number;
   label: string;
+  /** Отделение группы: если групп из нескольких отделений, сначала выбирается отделение. */
+  departmentId?: number | null;
+  departmentName?: string | null;
 }
 
 export interface DayJournalProps {
@@ -62,6 +66,7 @@ export default function DayJournal({
   const [groups, setGroups] = useState<JournalGroup[]>([]);
   const [groupId, setGroupId] = useState<number | null>(deepLinkGroupId ? Number(deepLinkGroupId) : null);
   const [listOpen, setListOpen] = useState(false);
+  const [cardsOpen, setCardsOpen] = useState(false);
   const [date, setDate] = useState(deepLinkDate ?? todayIso());
   const [roster, setRoster] = useState<RosterResponse | null>(null);
   const [markCodes, setMarkCodes] = useState<MarkCodeOption[]>([]);
@@ -76,6 +81,8 @@ export default function DayJournal({
   const [groupsError, setGroupsError] = useState<string | null>(null);
   const [riskThreshold, setRiskThreshold] = useState(3);
   const [firstPeriod, setFirstPeriod] = useState("");
+  // Выбранное отделение; пока не выбирали — отделение текущей группы.
+  const [departmentChoice, setDepartmentChoice] = useState<number | null>(null);
 
   function loadGroups() {
     fetchGroups()
@@ -150,6 +157,22 @@ export default function DayJournal({
   const selectedDayType = monthStatus.find((d) => d.date === date)?.day_type;
   const isNonWorkingDay = selectedDayType != null && ["weekend", "holiday", "vacation"].includes(selectedDayType);
   const absentCount = Object.values(pending).length;
+
+  // Групп много (весь колледж) — список режется по отделению: сначала отделение, потом группа.
+  const departments = useMemo(() => {
+    const byId = new Map<number, { id: number; name: string; count: number }>();
+    for (const g of groups) {
+      if (g.departmentId == null || !g.departmentName) continue;
+      const d = byId.get(g.departmentId) ?? { id: g.departmentId, name: g.departmentName, count: 0 };
+      d.count += 1;
+      byId.set(g.departmentId, d);
+    }
+    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  }, [groups]);
+  const showDepartments = departments.length > 1;
+  const activeDepartment = departmentChoice ?? groups.find((g) => g.id === groupId)?.departmentId ?? null;
+  const visibleGroups =
+    showDepartments && activeDepartment != null ? groups.filter((g) => g.departmentId === activeDepartment) : groups;
 
   function setStudentMark(studentId: number, code: string | null) {
     setPending((prev) => {
@@ -232,9 +255,29 @@ export default function DayJournal({
     <div>
       <div className="roster-sticky-header">
         <div className="toolbar">
+          {showDepartments && (
+            <select
+              aria-label="Отделение"
+              title="Отделение: группы в списке справа — только из него"
+              value={activeDepartment ?? ""}
+              onChange={async (e) => {
+                const next = Number(e.target.value);
+                if (absentCount > 0 && !(await dialogs.confirm("Несохранённые изменения будут потеряны. Сменить отделение?", { confirmLabel: "Сменить отделение" }))) return;
+                setDepartmentChoice(next);
+                const first = groups.find((g) => g.departmentId === next);
+                if (first) setGroupId(first.id);
+              }}
+            >
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name} ({d.count})
+                </option>
+              ))}
+            </select>
+          )}
           <SearchSelect
             value={groupId === null || groupId === undefined ? "" : String(groupId)}
-            options={groups.map((g) => ({ value: String(g.id), label: g.label }))}
+            options={visibleGroups.map((g) => ({ value: String(g.id), label: g.label }))}
             ariaLabel="Группа"
             title="Группа: начните вводить код, например «ГД»"
             onChange={async (v) => {
@@ -255,6 +298,9 @@ export default function DayJournal({
           />
           <button type="button" className="link-btn" onClick={() => setListOpen(true)} title="Список группы для печати (Word): выберите столбцы">
             Список для печати
+          </button>
+          <button type="button" className="link-btn" onClick={() => setCardsOpen(true)} title="Личные карточки всей группы в Word (бланк колледжа): выберите поля">
+            Личные карточки
           </button>
         </div>
 
@@ -401,6 +447,15 @@ export default function DayJournal({
           groupId={groupId}
           groupCode={(groups.find((g) => g.id === groupId)?.label ?? "").split(" ")[0]}
           onClose={() => setListOpen(false)}
+        />
+      )}
+
+      {cardsOpen && groupId !== null && (
+        <StudentCardModal
+          endpoint={`/curator/groups/${groupId}/cards`}
+          heading={`Личные карточки группы ${(groups.find((g) => g.id === groupId)?.label ?? "").split(" ")[0]}`}
+          filename={`Личные_карточки_${(groups.find((g) => g.id === groupId)?.label ?? "").split(" ")[0]}.docx`}
+          onClose={() => setCardsOpen(false)}
         />
       )}
 

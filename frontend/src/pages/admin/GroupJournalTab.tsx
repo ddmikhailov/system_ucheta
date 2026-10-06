@@ -1,13 +1,24 @@
 import { api } from "../../api/client";
-import DayJournal from "../../components/DayJournal";
-import type { StudyGroupAdmin } from "../../api/types";
+import DayJournal, { type JournalGroup } from "../../components/DayJournal";
+import type { DepartmentAdmin, StudyGroupAdmin } from "../../api/types";
 
-const fetchGroups = () =>
-  api.get<StudyGroupAdmin[]>("/admin/groups").then((all) =>
-    all
-      .filter((g) => g.is_active)
-      .map((g) => ({ id: g.id, label: `${g.code} (курс ${g.course})${g.curator_name ? ` — ${g.curator_name}` : " — нет куратора"}` }))
-  );
+// Группы в порядке сервера, у каждой — отделение: в журнале сначала выбирается отделение, потом группа
+// из него (раньше был один длинный список на весь колледж). Отделения не загрузились — список общий.
+const fetchGroups = async (): Promise<JournalGroup[]> => {
+  const [all, departments] = await Promise.all([
+    api.get<StudyGroupAdmin[]>("/admin/groups"),
+    api.get<DepartmentAdmin[]>("/admin/departments").catch(() => [] as DepartmentAdmin[]),
+  ]);
+  const names = new Map(departments.map((d) => [d.id, d.name]));
+  return all
+    .filter((g) => g.is_active)
+    .map((g) => ({
+      id: g.id,
+      label: `${g.code} (курс ${g.course})${g.curator_name ? ` — ${g.curator_name}` : " — нет куратора"}`,
+      departmentId: g.department_id ?? null,
+      departmentName: names.get(g.department_id) ?? null,
+    }));
+};
 
 /** Журнал группы для администрации (обновление 1.1): та же механика, что и
  * в кабинете куратора, но группа выбирается из всех групп в зоне видимости
