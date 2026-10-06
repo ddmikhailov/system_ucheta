@@ -19,6 +19,7 @@ import TaskAssignmentPage from "./pages/TaskAssignmentPage";
 // скачивать витрины и админку, чтобы открыть «Мой день».
 const DashboardsPage = lazy(() => import("./pages/DashboardsPage"));
 const AdminPage = lazy(() => import("./pages/AdminPage"));
+const UserProfilePage = lazy(() => import("./pages/UserProfilePage"));
 const StudentCardPage = lazy(() => import("./pages/StudentCardPage"));
 const StudentsSearchPage = lazy(() => import("./pages/StudentsSearchPage"));
 const IndividualWorkPage = lazy(() => import("./pages/IndividualWorkPage"));
@@ -142,6 +143,18 @@ export default function App() {
                   <RequireAdminAccess>
                     <Layout>
                       <AdminPage />
+                    </Layout>
+                  </RequireAdminAccess>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/admin/users/:userId"
+              element={
+                <RequireAuth>
+                  <RequireAdminAccess>
+                    <Layout>
+                      <UserProfilePage />
                     </Layout>
                   </RequireAdminAccess>
                 </RequireAuth>

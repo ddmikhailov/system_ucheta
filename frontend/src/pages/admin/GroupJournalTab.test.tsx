@@ -69,6 +69,46 @@ describe("GroupJournalTab — журнал администрации", () => {
     expect(get).toHaveBeenCalledWith(`/curator/groups/7/day?date=${todayIso()}`);
   });
 
+  it("групп из нескольких отделений: сначала отделение, в списке групп — только его группы", async () => {
+    const user = userEvent.setup();
+    const r = roster([entry(1, "Алексеев Пётр")]);
+    get.mockImplementation(async (path: string) => {
+      if (path === "/admin/groups")
+        return [
+          { id: 7, code: "СА172", course: 1, is_active: true, curator_name: "Иванова Анна", department_id: 1 },
+          { id: 8, code: "ИИ212", course: 2, is_active: true, curator_name: null, department_id: 2 },
+          { id: 10, code: "СА173", course: 1, is_active: true, curator_name: null, department_id: 1 },
+        ];
+      if (path === "/admin/departments") return [{ id: 1, name: "Диджитал" }, { id: 2, name: "Моссовет" }];
+      if (path === "/curator/mark-codes") return MARK_CODES;
+      if (path === "/curator/settings") return { risk_threshold_consecutive_unexcused: 3 };
+      if (path.includes("/month-status") || path.includes("/rhythm")) return [];
+      if (path.includes("/day?")) return r;
+      throw new Error(`неожиданный запрос ${path}`);
+    });
+    renderPage(<GroupJournalTab />, { role: "admin" });
+    await screen.findByText("Алексеев Пётр");
+    const department = screen.getByRole("combobox", { name: "Отделение" });
+    expect(department).toHaveValue("1"); // отделение первой группы
+    expect(within(department).getAllByRole("option").map((o) => o.textContent)).toEqual(["Диджитал (2)", "Моссовет (1)"]);
+    await user.click(screen.getByRole("combobox", { name: "Группа" }));
+    expect(within(screen.getByRole("listbox")).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "СА172 (курс 1) — Иванова Анна",
+      "СА173 (курс 1) — нет куратора",
+    ]);
+    await user.keyboard("{Escape}");
+
+    await user.selectOptions(department, "2");
+    expect(get).toHaveBeenCalledWith(`/curator/groups/8/day?date=${todayIso()}`); // открыта первая группа отделения
+  });
+
+  it("группы одного отделения — выбора отделения нет", async () => {
+    mockApi(roster([entry(1, "Алексеев Пётр")]));
+    renderPage(<GroupJournalTab />, { role: "admin" });
+    await screen.findByText("Алексеев Пётр");
+    expect(screen.queryByRole("combobox", { name: "Отделение" })).not.toBeInTheDocument();
+  });
+
   it("нет групп в зоне видимости — подсказка", async () => {
     get.mockImplementation(async () => []);
     renderPage(<GroupJournalTab />, { role: "dept_head" });

@@ -198,3 +198,39 @@ def test_task_manager_sees_matrix(role, user_dept, group_dept, is_author, allowe
         task=SimpleNamespace(created_by=1 if is_author else 2),
     )
     assert task_service.manager_sees(user, assignment) is allowed
+
+
+# --- assert_can_view_user: профиль пользователя и журнал его действий (интерфейс 3.0) ---
+
+VIEW_USER_CASES = [
+    # (роль актёра, отделение актёра, роль цели, отделение цели, можно ли)
+    (ADMIN, None, CURATOR, DEPT_A, True),
+    (ADMIN, None, TUTOR, DEPT_B, True),
+    (EDU_DEPARTMENT, None, CURATOR, DEPT_A, True),  # смотрит, но не управляет
+    (EDU_DEPARTMENT, None, ADMIN, None, True),
+    (DEPT_HEAD, DEPT_A, CURATOR, DEPT_A, True),
+    (DEPT_HEAD, DEPT_A, DEPT_HEAD, DEPT_A, True),  # коллега своего отделения — только просмотр
+    (DEPT_HEAD, DEPT_A, CURATOR, DEPT_B, False),
+    (DEPT_HEAD, DEPT_A, ADMIN, None, False),
+    (DEPT_HEAD, None, CURATOR, DEPT_A, False),
+    (TUTOR, DEPT_A, CURATOR, DEPT_A, True),
+    (TUTOR, DEPT_A, CURATOR, DEPT_B, False),
+    (CURATOR, DEPT_A, CURATOR, DEPT_A, False),
+    (DEPUTY_CURATOR, DEPT_A, CURATOR, DEPT_A, False),
+]
+
+
+@pytest.mark.parametrize("actor_role,actor_dept,target_role,target_dept,allowed", VIEW_USER_CASES)
+def test_assert_can_view_user_matrix(actor_role, actor_dept, target_role, target_dept, allowed):
+    actor = _user(actor_role, actor_dept, user_id=1)
+    target = _user(target_role, target_dept, user_id=2)
+    if allowed:
+        policies.assert_can_view_user(actor, target)
+    else:
+        with pytest.raises(Exception):
+            policies.assert_can_view_user(actor, target)
+
+
+def test_anyone_can_view_own_profile():
+    me = _user(CURATOR, DEPT_A, user_id=7)
+    policies.assert_can_view_user(me, me)

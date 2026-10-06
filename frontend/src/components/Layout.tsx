@@ -1,4 +1,7 @@
 import { Suspense, useEffect, useRef, useState } from "react";
+import BrandMark from "./BrandMark";
+import CommandPalette from "./CommandPalette";
+import { PLATFORM_NAME } from "../constants/brand";
 import type { ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { api } from "../api/client";
@@ -75,7 +78,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   const items = navItems(user);
   const title = pageTitle(pathname);
   useEffect(() => {
-    document.title = title === "КАИТ-20" ? "КАИТ-20 — Учёт посещаемости" : `${title} — КАИТ-20`;
+    document.title = title === PLATFORM_NAME ? `${PLATFORM_NAME} — КАИТ №20` : `${title} — ${PLATFORM_NAME}`;
   }, [title]);
 
   // Счётчики на пунктах меню обновляем при каждом переходе: сдали день, отправили задачу — число уменьшилось.
@@ -93,6 +96,29 @@ export default function Layout({ children }: { children: ReactNode }) {
     setClosedOn(pathname);
     if (moreOpen) setMoreOpen(false);
   }
+  // Быстрый переход: Ctrl+K / ⌘K откуда угодно, «/» — если курсор не в поле ввода.
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      const typing = !!target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+      if ((e.key === "k" || e.key === "K" || e.key === "л" || e.key === "Л") && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      } else if (e.key === "/" && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setPaletteOpen(true);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  const paletteButtonRef = useRef<HTMLButtonElement>(null);
+  function closePalette() {
+    setPaletteOpen(false);
+    paletteButtonRef.current?.focus();
+  }
+
   useEscapeKey(() => {
     if (!moreOpen) return;
     setMoreOpen(false);
@@ -121,7 +147,7 @@ export default function Layout({ children }: { children: ReactNode }) {
     <div className="app-shell">
       <aside className="app-sidebar">
         <div className="app-sidebar__logo">
-          <img src="/kait20-logo.webp" alt="КАИТ №20" />
+          <BrandMark />
         </div>
         <nav className="app-nav" aria-label="Разделы">
           {items.map((i) => link(i, "side"))}
@@ -132,8 +158,27 @@ export default function Layout({ children }: { children: ReactNode }) {
         <div className="brand-accent-line" />
         <header className="app-topbar">
           <div className="app-topbar__logo">
-            <img src="/kait20-logo.webp" alt="КАИТ №20" />
+            <BrandMark compact />
           </div>
+          {user && (
+            <button
+              ref={paletteButtonRef}
+              type="button"
+              className="palette-trigger"
+              aria-haspopup="dialog"
+              aria-keyshortcuts="Control+K"
+              aria-label="Быстрый переход"
+              title="Быстрый переход (Ctrl+K)"
+              onClick={() => setPaletteOpen(true)}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" strokeWidth="2" />
+                <path d="m20 20-3.5-3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+              <span className="palette-trigger__text">Быстрый переход</span>
+              <kbd className="palette-trigger__kbd">Ctrl K</kbd>
+            </button>
+          )}
           <div className="app-header__user">
             {user && (
               <>
@@ -167,6 +212,9 @@ export default function Layout({ children }: { children: ReactNode }) {
             </button>
           )}
         </nav>
+      )}
+      {paletteOpen && user && (
+        <CommandPalette user={user} sections={items.map((i) => ({ to: i.to, label: i.label }))} onClose={closePalette} />
       )}
       {moreOpen && (
         <div className="more-sheet-backdrop" onClick={() => setMoreOpen(false)}>

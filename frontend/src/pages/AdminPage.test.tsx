@@ -15,7 +15,7 @@ vi.mock("./admin/DepartmentsTab", async () => ({ default: ({ canEdit }: { canEdi
 vi.mock("./admin/GroupsTab", async () => ({ default: (p: { canEdit: boolean; canCreate: boolean }) => <div>вкладка групп, правка={String(p.canEdit)}, создание={String(p.canCreate)}</div> }));
 vi.mock("./admin/StudentsTab", async () => ({ default: ({ canCreate }: { canCreate: boolean }) => <div>вкладка студентов, создание={String(canCreate)}</div> }));
 vi.mock("./admin/MarkCodesTab", async () => ({ default: ({ canEdit }: { canEdit: boolean }) => <div>вкладка кодов, правка={String(canEdit)}</div> }));
-vi.mock("./admin/UsersTab", async () => ({ default: (p: { canEdit: boolean; canCreate: boolean }) => <div>вкладка пользователей, правка={String(p.canEdit)}, создание={String(p.canCreate)}</div> }));
+vi.mock("./admin/UsersTab", async () => ({ default: (p: { canCreate: boolean }) => <div>вкладка пользователей, создание={String(p.canCreate)}</div> }));
 vi.mock("./admin/CalendarTab", async () => ({ default: (p: { canEdit: boolean; canEditGroups: boolean }) => <div>вкладка календаря, общий={String(p.canEdit)}, группы={String(p.canEditGroups)}</div> }));
 vi.mock("./admin/GroupJournalTab", async () => ({ default: () => <div>вкладка журнала</div> }));
 
@@ -59,7 +59,7 @@ describe("AdminPage — права вкладкам", () => {
 
   it("воспитательный отдел: группы и пользователи только для чтения", async () => {
     await open("edu_department", "users");
-    expect(screen.getByText("вкладка пользователей, правка=false, создание=false")).toBeInTheDocument();
+    expect(screen.getByText("вкладка пользователей, создание=false")).toBeInTheDocument();
   });
 
   it("отделения правит только администратор", async () => {

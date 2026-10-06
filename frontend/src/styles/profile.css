@@ -1,0 +1,691 @@
+/* Интерфейс 3.0: знак «Цифровой куратор», вкладки, шапка карточки человека (студент,
+   пользователь) с главными цифрами, лента действий. Цвета — только токены из index.css,
+   поэтому тёмная тема работает без отдельных правил. */
+
+/* --- Логотип колледжа и название платформы --- */
+/* Логотипы — как в брендбуке: только масштаб по высоте с сохранением пропорций. */
+.brand-mark {
+  display: inline-grid;
+  justify-items: start;
+  gap: 2px;
+  color: var(--text);
+}
+
+.college-logo {
+  display: inline-block;
+  line-height: 0;
+}
+
+.college-logo__img {
+  display: block;
+  height: 48px;
+  width: auto;
+}
+
+.college-logo__img--white {
+  display: none;
+}
+
+.brand-mark__name {
+  padding-left: 4px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+}
+
+.brand-mark--compact .college-logo__img {
+  height: 40px;
+}
+
+/* Тёмная тема: та же логика, что у токенов в index.css (системная тема или выбранная вручную). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .college-logo__img--color {
+    display: none;
+  }
+
+  :root:not([data-theme="light"]) .college-logo__img--white {
+    display: block;
+  }
+}
+
+:root[data-theme="dark"] .college-logo__img--color {
+  display: none;
+}
+
+:root[data-theme="dark"] .college-logo__img--white {
+  display: block;
+}
+
+/* --- Вкладки --- */
+.tabbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 20px 0 16px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+  /* Прокрутка вбок на телефоне не должна сдвигать страницу. */
+  overscroll-behavior-x: contain;
+}
+
+.tabbar::-webkit-scrollbar {
+  display: none;
+}
+
+.tabbar__tab {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 8px 8px 0 0;
+  margin-bottom: -1px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  scroll-snap-align: start;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.tabbar__tab:hover {
+  color: var(--text);
+  background: var(--sunken);
+}
+
+.tabbar__tab.is-active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.tabbar__tab:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.tabbar__badge {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--sunken);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.tabbar__tab.is-active .tabbar__badge {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.tabpanel:not([hidden]) {
+  animation: tabpanel-in 0.18s ease-out;
+}
+
+@keyframes tabpanel-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* --- Шапка карточки человека --- */
+.profile-hero {
+  position: relative;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 4px);
+  background:
+    radial-gradient(120% 140% at 100% 0%, var(--primary-light) 0%, transparent 55%),
+    var(--card-bg);
+  box-shadow: var(--shadow-sm);
+}
+
+.profile-hero__top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.profile-hero__avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: var(--brand-gradient);
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: 0.02em;
+}
+
+.profile-hero__main {
+  min-width: 0;
+}
+
+.profile-hero__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.profile-hero__title h2 {
+  margin: 0;
+  font-size: 22px;
+  overflow-wrap: anywhere;
+}
+
+.profile-hero__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 0;
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.profile-hero__meta span:not(:last-child)::after {
+  content: "·";
+  margin: 0 8px;
+  color: var(--border-strong);
+}
+
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(124px, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.kpi {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+}
+
+.kpi__value {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.kpi__label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.kpi__hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.kpi--ok .kpi__value {
+  color: var(--ok);
+}
+
+.kpi--warn .kpi__value {
+  color: var(--warn-ink);
+}
+
+.kpi--hot .kpi__value {
+  color: var(--hot);
+}
+
+.kpi--hot {
+  border-color: color-mix(in srgb, var(--hot) 35%, var(--border));
+}
+
+.quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* --- Профиль пользователя --- */
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.profile-section {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+}
+
+.profile-section h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+
+.stat-list {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0 0;
+}
+
+.stat-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed var(--border);
+}
+
+.stat-list > div:last-child {
+  border-bottom: 0;
+}
+
+.stat-list dt {
+  color: var(--muted);
+}
+
+.stat-list dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.split-meter {
+  display: flex;
+  gap: 2px;
+  height: 10px;
+  margin-top: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--sunken);
+}
+
+.split-meter__part--ok {
+  background: var(--ok);
+}
+
+.split-meter__part--warn {
+  background: var(--warn);
+}
+
+.split-meter__part--hot {
+  background: var(--hot);
+}
+
+.split-meter__part--progress {
+  background: var(--seg-progress);
+}
+
+.split-meter__part--idle {
+  background: var(--seg-new);
+}
+
+.activity-bars {
+  margin: 8px 0 0;
+}
+
+.activity-bars__plot {
+  display: grid;
+  grid-template-columns: repeat(30, 1fr);
+  align-items: end;
+  gap: 3px;
+  height: 72px;
+  padding: 6px 0;
+}
+
+.activity-bars__bar {
+  display: block;
+  border-radius: 3px 3px 1px 1px;
+  background: var(--primary-fill);
+  opacity: 0.85;
+}
+
+.activity-bars__bar.is-empty {
+  background: var(--sunken);
+  opacity: 1;
+}
+
+.row-muted td {
+  color: var(--muted);
+}
+
+/* Лента действий */
+.timeline {
+  margin-top: 16px;
+}
+
+.timeline__day {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0 0 6px;
+  padding: 4px 0;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.timeline__list {
+  margin: 0;
+  padding: 0 0 0 14px;
+  list-style: none;
+  border-left: 2px solid var(--border);
+}
+
+.timeline__item {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  padding: 6px 0 6px 10px;
+}
+
+.timeline__item::before {
+  content: "";
+  position: absolute;
+  left: -21px;
+  top: 12px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--card-bg);
+  background: var(--idle);
+}
+
+.timeline__item--mark::before,
+.timeline__item--day::before,
+.timeline__item--period::before {
+  background: var(--ok);
+}
+
+.timeline__item--task::before {
+  background: var(--primary-fill);
+}
+
+.timeline__item--dossier::before,
+.timeline__item--passport::before {
+  background: var(--warn);
+}
+
+.timeline__item--user::before,
+.timeline__item--student::before,
+.timeline__item--group::before {
+  background: var(--brand-blue);
+}
+
+.timeline__item time {
+  flex: none;
+  min-width: 44px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline__text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.activity-feed .secondary-btn {
+  margin-top: 16px;
+}
+
+.secondary-btn {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--card-bg);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.secondary-btn:hover:not(:disabled) {
+  background: var(--sunken);
+}
+
+.manage-panel .add-block label {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+@media (max-width: 640px) {
+  .profile-hero {
+    padding: 16px;
+  }
+
+  .profile-hero__avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    font-size: 16px;
+  }
+
+  .profile-hero__title h2 {
+    font-size: 19px;
+  }
+
+  .kpi-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .kpi__value {
+    font-size: 20px;
+  }
+
+  /* На телефоне — одна строка с прокруткой вбок, как у приложений. */
+  .tabbar {
+    flex-wrap: nowrap;
+    margin-inline: -16px;
+    padding-inline: 16px;
+  }
+
+  .timeline__item {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .activity-bars__plot {
+    gap: 2px;
+  }
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tabpanel:not([hidden]) {
+    animation: none;
+  }
+
+  .tabbar__tab {
+    transition: none;
+  }
+}
+
+/* --- Быстрый переход (Ctrl+K) --- */
+.palette-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  margin-right: auto;
+  padding: 0 10px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--sunken);
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  min-width: 260px;
+}
+
+.palette-trigger:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.palette-trigger__text {
+  flex: 1;
+  text-align: left;
+}
+
+.palette-trigger__kbd,
+.palette__footer kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--card-bg);
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 12vh 16px 16px;
+  background: color-mix(in srgb, #0d0b16 45%, transparent);
+  backdrop-filter: blur(3px);
+}
+
+.palette {
+  width: min(600px, 100%);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card-bg);
+  box-shadow: var(--shadow-md);
+  animation: tabpanel-in 0.14s ease-out;
+}
+
+.palette__input {
+  width: 100%;
+  min-height: 52px;
+  padding: 0 18px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+}
+
+.palette__input:focus {
+  outline: none;
+}
+
+.palette__list {
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.palette__item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.palette__item.is-active {
+  background: var(--primary-light);
+}
+
+.palette__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.palette__hint {
+  flex: none;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.palette__empty {
+  padding: 16px 12px;
+  color: var(--muted);
+}
+
+.palette__footer {
+  margin: 0;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .palette-trigger {
+    flex: none;
+    justify-content: center;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    margin-right: 0;
+    margin-left: auto;
+    padding: 0;
+  }
+
+  .palette-trigger__text,
+  .palette-trigger__kbd,
+  .palette__footer {
+    display: none;
+  }
+
+  .palette-backdrop {
+    padding-top: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .palette {
+    animation: none;
+  }
+}
+
+.auth-card__logo .college-logo__img {
+  height: 64px;
+}

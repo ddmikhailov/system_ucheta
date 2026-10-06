@@ -1,29 +1,21 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { api, ApiError } from "../../api/client";
-import { MIN_PASSWORD_LENGTH } from "../../constants/password";
 import { useAuth } from "../../auth/useAuth";
-import { useEscapeKey } from "../../hooks/useEscapeKey";
 import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
-import type { DeleteResult, DepartmentAdmin, SetPasswordResult, UserAdmin } from "../../api/types";
+import { Link, useLocation } from "react-router-dom";
+import type { DepartmentAdmin, SetPasswordResult, UserAdmin } from "../../api/types";
 import { DEPARTMENT_REQUIRED_ROLES, DEPARTMENT_SCOPED_ROLES, ROLE, ROLE_LABELS, assignableRoles, inRoles, type RoleCode } from "../../constants/roles";
-import { dialogs } from "../../utils/feedback";
+import { userStatusLabel as statusLabel } from "../../utils/userStatus";
 
 function roleDisplay(u: UserAdmin): string {
   return ROLE_LABELS[u.role as RoleCode] || u.role;
 }
 
-function statusLabel(u: UserAdmin): string {
-  if (!u.is_active) return "в архиве";
-  if (u.is_locked) return "заблокирован";
-  if (!u.has_password) return "нет пароля";
-  if (u.must_change_password) return "ждёт смены пароля";
-  return "активен";
-}
 
 const PAGE_SIZE = 15;
 
-export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; canCreate: boolean }) {
+export default function UsersTab({ canCreate }: { canCreate: boolean }) {
   const { user: me } = useAuth();
   const [rows, setRows] = useState<UserAdmin[]>([]);
   const [departments, setDepartments] = useState<DepartmentAdmin[]>([]);
@@ -37,7 +29,6 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
   const [departmentId, setDepartmentId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const [profileId, setProfileId] = useState<number | null>(null);
   // Архивные (удалённые/заблокированные насовсем оставленные в архиве)
   // пользователи не мешаются в основном списке — их можно найти отдельно.
   const [showArchived, setShowArchived] = useState(false);
@@ -49,8 +40,9 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
   const [departmentFilter, setDepartmentFilter] = useState<number | "all">("all");
 
   const [justCreated, setJustCreated] = useState<SetPasswordResult | null>(null);
-  // Итог удаления (например, «пользователь обезличен») показываем в самой вкладке: окно профиля к этому моменту закрыто.
-  const [notice, setNotice] = useState<string | null>(null);
+  // Итог удаления из профиля (например, «пользователь обезличен») приходит сюда через состояние перехода.
+  const location = useLocation();
+  const [notice, setNotice] = useState<string | null>((location.state as { notice?: string } | null)?.notice ?? null);
 
   function load() {
     api.get<UserAdmin[]>("/admin/users").then(setRows).catch((err) => setError(err instanceof ApiError ? err.message : "Ошибка"));
@@ -113,7 +105,6 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
   // Поиск/фильтр сокращают список: без этой поправки, стоя на странице 2, можно было увидеть пустую таблицу.
   const currentPage = Math.min(page, pageCount - 1);
   const pageRows = visibleRows.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);
-  const profileUser = rows.find((u) => u.id === profileId) ?? null;
 
   return (
     <div>
@@ -211,13 +202,9 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
           {pageRows.map((u) => (
             <tr key={u.id}>
               <td>
-                {canEdit ? (
-                  <button className="link-btn" onClick={() => setProfileId(u.id)}>
-                    {u.full_name}
-                  </button>
-                ) : (
-                  u.full_name
-                )}
+                <Link className="link-btn" to={`/admin/users/${u.id}`}>
+                  {u.full_name}
+                </Link>
               </td>
               <td>{u.username}</td>
               <td>{roleDisplay(u)}</td>
@@ -247,17 +234,6 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
         </div>
       )}
 
-      {profileUser && (
-        <UserProfileModal
-          user={profileUser}
-          me={me}
-          departments={departments}
-          onClose={() => setProfileId(null)}
-          onChanged={load}
-          onNotice={setNotice}
-        />
-      )}
-
       {archivedCount > 0 && (
         <p className="hint archive-toggle">
           <button
@@ -271,233 +247,6 @@ export default function UsersTab({ canEdit, canCreate }: { canEdit: boolean; can
           </button>
         </p>
       )}
-    </div>
-  );
-}
-
-function UserProfileModal({
-  user,
-  me,
-  departments,
-  onClose,
-  onChanged,
-  onNotice,
-}: {
-  user: UserAdmin;
-  me: { id: number; role: string } | null | undefined;
-  departments: DepartmentAdmin[];
-  onClose: () => void;
-  onChanged: () => void;
-  onNotice: (detail: string) => void;
-}) {
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-
-  const [editUsername, setEditUsername] = useState(user.username);
-  const [editFullName, setEditFullName] = useState(user.full_name);
-  const [editRole, setEditRole] = useState(user.role);
-  const [editDepartmentId, setEditDepartmentId] = useState(user.department_id);
-
-  const [customPasswordOpen, setCustomPasswordOpen] = useState(false);
-  const [customPasswordValue, setCustomPasswordValue] = useState("");
-  const [issuedPassword, setIssuedPassword] = useState<SetPasswordResult | null>(null);
-
-  const isSelf = user.id === me?.id;
-  const roleOptions = Array.from(new Set([user.role, ...assignableRoles(me?.role)]));
-  useEscapeKey(onClose);
-
-  async function saveProfile() {
-    setError(null);
-    try {
-      await api.patch(`/admin/users/${user.id}`, {
-        username: editUsername,
-        full_name: editFullName,
-        ...(isSelf ? {} : { role: editRole, department_id: editDepartmentId }),
-      });
-      setNotice("Сохранено");
-      onChanged();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось сохранить");
-    }
-  }
-
-  async function generatePassword() {
-    setError(null);
-    try {
-      const res = await api.post<SetPasswordResult>(`/admin/users/${user.id}/set-password`, {});
-      setIssuedPassword(res);
-      setCustomPasswordOpen(false);
-      onChanged();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось задать пароль");
-    }
-  }
-
-  async function submitCustomPassword(e: FormEvent) {
-    e.preventDefault();
-    if (customPasswordValue.length < MIN_PASSWORD_LENGTH) {
-      setError(`Пароль должен быть не короче ${MIN_PASSWORD_LENGTH} символов`);
-      return;
-    }
-    setError(null);
-    try {
-      const res = await api.post<SetPasswordResult>(`/admin/users/${user.id}/set-password`, {
-        password: customPasswordValue,
-      });
-      setIssuedPassword(res);
-      setCustomPasswordOpen(false);
-      setCustomPasswordValue("");
-      onChanged();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось задать пароль");
-    }
-  }
-
-  async function unlock() {
-    setError(null);
-    try {
-      await api.post(`/admin/users/${user.id}/unlock`);
-      onChanged();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось снять блокировку");
-    }
-  }
-
-  async function toggleActive() {
-    setError(null);
-    try {
-      await api.patch(`/admin/users/${user.id}`, { is_active: !user.is_active });
-      onChanged();
-      onClose();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось сохранить");
-    }
-  }
-
-  async function removeUser() {
-    if (!(await dialogs.confirm(`Удалить пользователя «${user.full_name}» насовсем?`, { confirmLabel: "Удалить", danger: true }))) return;
-    setError(null);
-    try {
-      const res = await api.delete<DeleteResult>(`/admin/users/${user.id}`);
-      onNotice(res.detail);
-      onChanged();
-      onClose();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось удалить");
-    }
-  }
-
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={user.full_name} onClick={(e) => e.stopPropagation()}>
-        <h3>{user.full_name}</h3>
-
-        {error && <div className="error-text">{error}</div>}
-        {notice && <div className="day-status submitted">{notice}</div>}
-
-        {issuedPassword && (
-          <div className="day-status submitted">
-            Пароль для <b>{issuedPassword.username}</b>: <code>{issuedPassword.password}</code> — передайте его
-            человеку лично, при первом входе система попросит его сменить.{" "}
-            <button className="link-btn" onClick={() => setIssuedPassword(null)}>
-              Скрыть
-            </button>
-          </div>
-        )}
-
-        <label>
-          ФИО
-          <input value={editFullName} onChange={(e) => setEditFullName(e.target.value)} />
-        </label>
-        <label>
-          Логин
-          <input value={editUsername} onChange={(e) => setEditUsername(e.target.value)} />
-        </label>
-        <label>
-          Роль
-          {isSelf || roleOptions.length <= 1 ? (
-            <input value={ROLE_LABELS[user.role as RoleCode] ?? user.role} disabled />
-          ) : (
-            <select value={editRole} onChange={(e) => setEditRole(e.target.value)}>
-              {roleOptions.map((r) => (
-                <option key={r} value={r}>
-                  {ROLE_LABELS[r as RoleCode] ?? r}
-                </option>
-              ))}
-            </select>
-          )}
-        </label>
-
-        {!isSelf && DEPARTMENT_REQUIRED_ROLES.includes(editRole) && !inRoles(me?.role, DEPARTMENT_SCOPED_ROLES) && (
-          <label>
-            Отделение
-            <select value={editDepartmentId ?? ""} onChange={(e) => setEditDepartmentId(Number(e.target.value))}>
-              {departments.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-
-        <div className="actions">
-          <button onClick={saveProfile}>Сохранить</button>
-        </div>
-
-        <hr />
-
-        <p className="hint">Статус: {statusLabel(user)}</p>
-
-        {customPasswordOpen ? (
-          <form className="inline-form" onSubmit={submitCustomPassword}>
-            <input
-              type="text"
-              placeholder="Свой пароль" aria-label="Свой пароль"
-              value={customPasswordValue}
-              onChange={(e) => setCustomPasswordValue(e.target.value)}
-              minLength={MIN_PASSWORD_LENGTH}
-              required
-            />
-            <button type="submit">Задать</button>
-            <button type="button" className="link-btn" onClick={() => setCustomPasswordOpen(false)}>
-              Отмена
-            </button>
-          </form>
-        ) : (
-          <div className="admin-row-actions">
-            <button className="link-btn" onClick={generatePassword}>
-              {user.has_password ? "Сбросить пароль" : "Выдать пароль"}
-            </button>
-            <button className="link-btn" onClick={() => setCustomPasswordOpen(true)}>
-              Задать свой пароль
-            </button>
-            {user.is_locked && (
-              <button className="link-btn" onClick={unlock}>
-                Разблокировать
-              </button>
-            )}
-          </div>
-        )}
-
-        <hr />
-
-        <div className="actions">
-          <button onClick={onClose}>Закрыть</button>
-          {!isSelf && (
-            <>
-              <button className="link-btn" onClick={toggleActive}>
-                {user.is_active ? "В архив" : "Вернуть из архива"}
-              </button>
-              {!user.is_active && (
-                <button className="link-btn" onClick={removeUser}>
-                  Удалить насовсем
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      </div>
     </div>
   );
 }

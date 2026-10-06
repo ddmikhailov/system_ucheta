@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { ApiError } from "../api/client";
+import { CollegeLogo } from "../components/BrandMark";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
@@ -34,16 +35,19 @@ export default function LoginPage() {
     <div className="auth-screen">
       <div className="auth-screen__visual">
         <div className="auth-screen__visual-content">
-          <h2>Учёт посещаемости без бумажных таблиц</h2>
-          <p>Куратор отмечает исключения за полминуты — проценты, витрины и напоминания считает платформа.</p>
+          <h2>Цифровой куратор</h2>
+          <p>
+            Посещаемость, досье, задачи и индивидуальная работа — в одном месте. Куратор отмечает исключения за
+            полминуты, а проценты, напоминания и отчёты считает платформа.
+          </p>
         </div>
       </div>
 
       <div className="auth-screen__form">
         <form className="auth-card" onSubmit={handleSubmit}>
-          <img src="/kait20-logo.webp" alt="КАИТ №20" className="auth-card__logo" />
+          <CollegeLogo className="auth-card__logo" />
           <h1>Вход в платформу</h1>
-          <p className="subtitle">Учёт посещаемости</p>
+          <p className="subtitle">Цифровой куратор · КАИТ №20</p>
 
           <label>
             Логин
