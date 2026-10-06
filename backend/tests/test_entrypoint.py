@@ -318,3 +318,14 @@ def test_attendance_import_skipped_when_disabled_or_file_missing(recorded, tmp_p
     entrypoint.main({"IMPORT_ATTENDANCE_ON_START": "true", "IMPORT_DATA_DIR": str(tmp_path / "нет")})
 
     assert not any("scripts.import_attendance_xlsx" in s for s, _ in recorded["steps"])
+
+
+def test_attendance_file_found_directly_in_data_dir(tmp_path, monkeypatch):
+    data = tmp_path / "data"
+    (data / "import").mkdir(parents=True)
+    (data / entrypoint.ATTENDANCE_FILE).write_text("x", encoding="utf-8")
+    monkeypatch.setattr(entrypoint, "PERSISTENT_IMPORT_DIR", data / "import")
+
+    result = entrypoint.attendance_import_if_enabled({"IMPORT_ATTENDANCE_ON_START": "true"})
+
+    assert result == (str(data / entrypoint.ATTENDANCE_FILE), True)

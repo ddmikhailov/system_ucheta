@@ -181,9 +181,12 @@ def attendance_import_if_enabled(environ: Mapping[str, str]) -> tuple[str, bool]
     if mode not in ("dry", "true"):
         return None
     import_dir = environ.get("IMPORT_DATA_DIR") or default_import_dir()
-    path = os.path.join(import_dir, ATTENDANCE_FILE)
+    search_dirs = [import_dir]
+    if Path(import_dir) == PERSISTENT_IMPORT_DIR:
+        search_dirs.append(str(PERSISTENT_IMPORT_DIR.parent))  # файл могли положить прямо в /data
+    path = next((c for c in (os.path.join(d, ATTENDANCE_FILE) for d in search_dirs) if os.path.isfile(c)), os.path.join(import_dir, ATTENDANCE_FILE))
     if not os.path.isfile(path):
-        log(f"IMPORT_ATTENDANCE_ON_START={mode}, но файла {path} нет — актуализация посещаемости пропущена.")
+        log(f"IMPORT_ATTENDANCE_ON_START={mode}, но файла {ATTENDANCE_FILE} нет в {', '.join(search_dirs)} — актуализация посещаемости пропущена.")
         return None
     log(f"IMPORT_ATTENDANCE_ON_START={mode} — посещаемость из {path} ({'запись' if mode == 'true' else 'пробный прогон'})...")
     return path, mode == "true"
