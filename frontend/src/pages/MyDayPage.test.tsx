@@ -116,12 +116,16 @@ describe("MyDayPage", () => {
     expect(screen.getByRole("link", { name: "Алексеев Пётр" })).toHaveAttribute("href", "/students/1");
 
     await user.click(screen.getByRole("button", { name: "Записать: Алексеев Пётр" }));
-    const dialog = screen.getByRole("dialog", { name: "Быстрая запись" });
+    const dialog = screen.getByRole("dialog", { name: "Запись индивидуальной работы" });
     expect(within(dialog).getByText("Запись: Алексеев Пётр")).toBeInTheDocument();
-    const save = within(dialog).getByRole("button", { name: "Сохранить" });
-    expect(save).toBeDisabled(); // без текста сохранять нечего
+    const save = within(dialog).getByRole("button", { name: "Сохранить запись" });
+    await user.click(save);
+    expect(post).not.toHaveBeenCalled(); // без содержания сохранять нечего
+    // Для звонка и беседы — поля протокола и «Сохранить и скачать протокол», как в карточке студента.
+    expect(within(dialog).getByRole("heading", { name: "Для протокола беседы в Word" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Сохранить и скачать протокол" })).toBeInTheDocument();
     await user.selectOptions(within(dialog).getByLabelText("Вид записи"), "call");
-    await user.type(within(dialog).getByLabelText("Что было сделано"), "Позвонил матери");
+    await user.type(within(dialog).getByPlaceholderText(/Что произошло/), "Позвонил матери");
     await user.click(save);
 
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
@@ -136,7 +140,7 @@ describe("MyDayPage", () => {
     expect(screen.queryByText(/посещаемость \d/)).not.toBeInTheDocument();
   });
 
-  it("форма быстрой записи: срок возврата уходит на сервер, ошибка показана, окно не закрывается, Отмена закрывает", async () => {
+  it("форма записи из «Моего дня»: срок возврата уходит на сервер, ошибка показана, окно не закрывается, Отмена закрывает", async () => {
     const user = userEvent.setup();
     get.mockResolvedValue(day({
       attention_total: 1,
@@ -145,14 +149,14 @@ describe("MyDayPage", () => {
     post.mockRejectedValueOnce(new ApiError(400, "Вернуться к вопросу нужно не раньше даты события"));
     renderPage(<MyDayPage />, { role: "curator" });
     await user.click(await screen.findByRole("button", { name: "Записать: Алексеев Пётр" }));
-    const dialog = screen.getByRole("dialog", { name: "Быстрая запись" });
-    await user.type(within(dialog).getByLabelText("Что было сделано"), "Беседа");
+    const dialog = screen.getByRole("dialog", { name: "Запись индивидуальной работы" });
+    await user.type(within(dialog).getByPlaceholderText(/Что произошло/), "Беседа");
     const dateInput = within(dialog).getByLabelText(/Вернуться к вопросу/);
     await user.type(dateInput, "2099-01-15");
-    await user.click(within(dialog).getByRole("button", { name: "Сохранить" }));
+    await user.click(within(dialog).getByRole("button", { name: "Сохранить запись" }));
     expect(await within(dialog).findByText("Вернуться к вопросу нужно не раньше даты события")).toBeInTheDocument();
     expect(post.mock.calls[0][1]).toMatchObject({ follow_up_on: "2099-01-15" });
-    expect(within(dialog).getByRole("button", { name: "Сохранить" })).toBeEnabled(); // можно исправить и повторить
+    expect(within(dialog).getByRole("button", { name: "Сохранить запись" })).toBeEnabled(); // можно исправить и повторить
     await user.click(within(dialog).getByRole("button", { name: "Отмена" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });

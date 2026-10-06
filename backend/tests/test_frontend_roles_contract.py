@@ -104,6 +104,10 @@ def test_access_groups_follow_the_backend_dependencies(ts):
     assert allowed(deps.require_structure_editor) == ts["STRUCTURE_EDITOR_ROLES"]
     assert allowed(deps.require_reference_editor) == ts["REFERENCE_EDITOR_ROLES"]
 
+    from app.api.routers import attendance_changes
+
+    assert allowed(attendance_changes.require_reviewer) == ts["JOURNAL_REVIEWER_ROLES"]
+
 
 def test_force_delete_group_roles_match_the_backend(ts):
     """Кому интерфейс показывает «Удалить группу навсегда…» — те же, кого пускает бэкенд."""

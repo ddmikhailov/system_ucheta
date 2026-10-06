@@ -16,6 +16,7 @@ import { plural } from "../utils/plural";
 import { initials, isEmptyValue, localProblem, missingRequired, rowComplete, valueText } from "../utils/taskAnswers";
 import type { AnswerField, Values } from "../utils/taskAnswers";
 import type { AssignmentDetail } from "../api/types";
+import TextArea from "../components/TextArea";
 
 type RowState = { is_included: boolean; values: Values };
 type Filter = "all" | "empty" | "flagged";
@@ -467,7 +468,7 @@ export default function TaskAssignmentPage() {
           <label className="form-field" htmlFor="review-comment">
             Комментарий проверяющего
           </label>
-          <textarea
+          <TextArea
             id="review-comment"
             rows={2}
             placeholder="Что исправить (обязательно, если возвращаете)"

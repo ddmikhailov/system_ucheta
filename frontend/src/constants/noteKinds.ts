@@ -9,3 +9,6 @@ export const NOTE_KINDS: Record<string, string> = {
   agreement: "Договорённость",
   other: "Другое",
 };
+
+// Виды записей, из которых делается протокол беседы (зеркало conversation_protocol_service.PROTOCOL_KINDS).
+export const PROTOCOL_KINDS = ["conversation", "call", "parent_invited", "agreement"];

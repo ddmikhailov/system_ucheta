@@ -65,8 +65,11 @@ export default function StudentCardPage() {
   const isStaff = inRoles(user?.role, DOSSIER_STAFF_ROLES);
   const back = (
     <p>
-      <Link to={isTeacher ? "/cabinet" : isStaff ? "/students" : "/admin?tab=students"} className="link-btn">
-        {isTeacher ? "← К моим группам" : isStaff ? "← К поиску студентов" : "← К списку студентов"}
+      <Link
+        to={isTeacher ? (card ? `/cabinet/groups/${card.group.id}?tab=students` : "/cabinet") : isStaff ? "/students" : "/admin?tab=students"}
+        className="link-btn"
+      >
+        {isTeacher ? (card ? `← К группе ${card.group.code}` : "← К моим группам") : isStaff ? "← К поиску студентов" : "← К списку студентов"}
       </Link>
     </p>
   );

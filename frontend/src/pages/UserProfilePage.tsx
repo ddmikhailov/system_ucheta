@@ -403,7 +403,7 @@ function ActivityFeed({ userId }: { userId: number }) {
         ))
       )}
       {next !== null && (
-        <button type="button" className="secondary-btn" disabled={busy} onClick={loadMore}>
+        <button type="button" className="btn-secondary" disabled={busy} onClick={loadMore}>
           {busy ? "Загрузка…" : "Показать ещё"}
         </button>
       )}

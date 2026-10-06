@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.time import today_local
 from app.models import (
-    AttendanceMark, CuratorAssignment, DaySubmission, MarkCode, RoleCode, Student, StudentProfile, StudyGroup,
+    AttendanceChangeRequest, AttendanceMark, CuratorAssignment, DaySubmission, MarkCode, RoleCode, Student, StudentProfile, StudyGroup,
     TaskAssignment, User,
 )
 from app.schemas.my_day import (
@@ -258,7 +258,25 @@ def nav_counters(db: Session, user: User, today: datetime.date | None = None) ->
         }
         calendar = calendar_service.study_days_by_group(db, today, today, groups)
         pending_days = sum(1 for g in groups if g.id not in submitted and today in calendar[g.id])
-    return {"my_day": pending_days + tasks, "my_tasks": tasks, "review": review_count(db, user)}
+    return {
+        "my_day": pending_days + tasks, "my_tasks": tasks, "review": review_count(db, user),
+        "journal_changes": journal_change_count(db, user),
+    }
+
+
+def journal_change_count(db: Session, user: User) -> int:
+    """Сколько исправлений прошлых дней ждут решения пользователя (зав. отделением, тьютор, админ)."""
+    role = RoleCode(user.role.code)
+    if role == RoleCode.ADMIN:
+        return db.query(AttendanceChangeRequest).filter(AttendanceChangeRequest.status == "pending").count()
+    if role in (RoleCode.DEPT_HEAD, RoleCode.TUTOR) and user.department_id is not None:
+        return (
+            db.query(AttendanceChangeRequest)
+            .join(StudyGroup, StudyGroup.id == AttendanceChangeRequest.study_group_id)
+            .filter(AttendanceChangeRequest.status == "pending", StudyGroup.department_id == user.department_id)
+            .count()
+        )
+    return 0
 
 
 def review_count(db: Session, user: User) -> int:

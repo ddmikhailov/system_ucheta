@@ -8,6 +8,7 @@ import Layout from "./components/Layout";
 import LoginPage from "./pages/LoginPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 import CuratorCabinetPage from "./pages/CuratorCabinetPage";
+import CuratorGroupPage from "./pages/CuratorGroupPage";
 import { DOSSIER_STAFF_ROLES, MANAGEMENT_ROLES, TASK_MANAGER_ROLES, VIEWER_ROLES, inRoles } from "./constants/roles";
 import MyDayPage from "./pages/MyDayPage";
 import PlanPage from "./pages/PlanPage";
@@ -120,6 +121,16 @@ export default function App() {
                 <RequireAuth>
                   <Layout>
                     <CuratorCabinetPage />
+                  </Layout>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/cabinet/groups/:groupId"
+              element={
+                <RequireAuth>
+                  <Layout>
+                    <CuratorGroupPage />
                   </Layout>
                 </RequireAuth>
               }

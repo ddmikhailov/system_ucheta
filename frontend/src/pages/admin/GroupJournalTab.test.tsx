@@ -167,7 +167,8 @@ describe("GroupJournalTab — журнал администрации", () => {
       exceptions: [{ student_id: 1, mark_code: "н", comment: null, basis_reference: null }],
       first_period: null,
     });
-    expect(await screen.findByText("День сдан (задним числом)")).toBeInTheDocument();
+    const summary = await screen.findByRole("region", { name: "Итоги дня" });
+    expect(within(summary).getByText(/задним числом/)).toBeInTheDocument();
   });
 });
 
@@ -251,5 +252,64 @@ describe("GroupJournalTab — окно «Период» (длительное о
     await user.click(within(dialog).getByRole("button", { name: "Отмена" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(post).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("GroupJournalTab — исправления прошлых дней на проверке", () => {
+  const CHANGE = {
+    id: 5, study_group_id: 7, group_code: "СА172", date: "2026-10-02", requested_by_id: 3, requested_by_name: "Иванова Анна",
+    created_at: "2026-10-05T07:00:00", reason: "Принесли справку", status: "pending", reviewed_by_name: null, reviewed_at: null,
+    review_comment: null, first_period: null,
+    changes: [{ student_id: 1, full_name: "Алексеев Пётр", from_code: "н", to_code: "б", details_changed: false }],
+  };
+
+  function withChanges(changes: unknown[]) {
+    const base = get.getMockImplementation()!;
+    get.mockImplementation(async (path: string) => (path === "/attendance-changes" ? changes : base(path)));
+  }
+
+  it("зав. отделением видит запрос: группа, дата, кто, причина, что меняется; одобряет после подтверждения", async () => {
+    const user = userEvent.setup();
+    mockApi(roster([entry(1, "Алексеев Пётр")]));
+    withChanges([CHANGE]);
+    renderPage(<GroupJournalTab />, { role: "dept_head" });
+    const list = await screen.findByRole("region", { name: "Исправления на проверке" });
+    expect(within(list).getByText(/СА172 · 02\.10\.2026 — Иванова Анна/)).toBeInTheDocument();
+    expect(within(list).getByText("Принесли справку")).toBeInTheDocument();
+    expect(within(list).getByText("Алексеев Пётр").closest("li")).toHaveTextContent("Н → Б");
+
+    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false);
+    await user.click(within(list).getByRole("button", { name: "Одобрить" }));
+    expect(confirm).toHaveBeenCalled();
+    expect(post).not.toHaveBeenCalled();
+
+    confirm.mockReturnValueOnce(true);
+    post.mockResolvedValue({ ...CHANGE, status: "approved" });
+    await user.click(within(list).getByRole("button", { name: "Одобрить" }));
+    expect(post).toHaveBeenCalledWith("/attendance-changes/5/approve", { comment: null });
+  });
+
+  it("отклонение — только с комментарием", async () => {
+    const user = userEvent.setup();
+    mockApi(roster([entry(1, "Алексеев Пётр")]));
+    withChanges([CHANGE]);
+    renderPage(<GroupJournalTab />, { role: "dept_head" });
+    const list = await screen.findByRole("region", { name: "Исправления на проверке" });
+    vi.spyOn(window, "prompt").mockReturnValueOnce("").mockReturnValueOnce("Нет справки");
+    await user.click(within(list).getByRole("button", { name: "Отклонить" }));
+    expect(post).not.toHaveBeenCalled();
+    expect(within(list).getByText("Напишите, почему исправление отклонено")).toBeInTheDocument();
+    post.mockResolvedValue({ ...CHANGE, status: "rejected" });
+    await user.click(within(list).getByRole("button", { name: "Отклонить" }));
+    expect(post).toHaveBeenCalledWith("/attendance-changes/5/reject", { comment: "Нет справки" });
+  });
+
+  it("воспитательный отдел исправления не решает — списка нет и запроса за ним тоже", async () => {
+    mockApi(roster([entry(1, "Алексеев Пётр")]));
+    withChanges([CHANGE]);
+    renderPage(<GroupJournalTab />, { role: "edu_department" });
+    await screen.findByText("Алексеев Пётр");
+    expect(screen.queryByRole("region", { name: "Исправления на проверке" })).not.toBeInTheDocument();
+    expect(get).not.toHaveBeenCalledWith("/attendance-changes");
   });
 });

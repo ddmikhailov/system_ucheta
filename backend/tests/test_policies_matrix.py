@@ -234,3 +234,30 @@ def test_assert_can_view_user_matrix(actor_role, actor_dept, target_role, target
 def test_anyone_can_view_own_profile():
     me = _user(CURATOR, DEPT_A, user_id=7)
     policies.assert_can_view_user(me, me)
+
+
+# --- assert_can_review_attendance_change: кто решает правку прошлого дня куратором (интерфейс 3.2) ---
+
+REVIEW_CHANGE_CASES = [
+    # (роль, отделение роли, отделение группы, можно ли)
+    (ADMIN, None, DEPT_A, True),
+    (DEPT_HEAD, DEPT_A, DEPT_A, True),
+    (DEPT_HEAD, DEPT_A, DEPT_B, False),
+    (DEPT_HEAD, None, DEPT_A, False),
+    (TUTOR, DEPT_A, DEPT_A, True),
+    (TUTOR, DEPT_A, DEPT_B, False),
+    (EDU_DEPARTMENT, None, DEPT_A, False),
+    (CURATOR, DEPT_A, DEPT_A, False),
+    (DEPUTY_CURATOR, DEPT_A, DEPT_A, False),
+]
+
+
+@pytest.mark.parametrize("role,user_dept,group_dept,allowed", REVIEW_CHANGE_CASES)
+def test_assert_can_review_attendance_change_matrix(role, user_dept, group_dept, allowed):
+    user = _user(role, user_dept)
+    group = SimpleNamespace(department_id=group_dept)
+    if allowed:
+        policies.assert_can_review_attendance_change(user, group)
+    else:
+        with pytest.raises(Exception):
+            policies.assert_can_review_attendance_change(user, group)

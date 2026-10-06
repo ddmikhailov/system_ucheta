@@ -30,6 +30,13 @@ class RosterResponse(BaseModel):
     is_on_time: bool | None
     first_period: int | None = None
     entries: list[RosterEntry]
+    # Кто сдал день — для итогов сданного дня.
+    submitted_by_name: str | None = None
+    # Правка этого дня текущим пользователем пойдёт на проверку зав. отделением.
+    edit_requires_review: bool = False
+    # Запрос на изменение, который ждёт решения, и последнее решение по этому дню.
+    pending_change: "AttendanceChangeRead | None" = None
+    last_change: "AttendanceChangeRead | None" = None
 
 
 class MarkExceptionInput(BaseModel):
@@ -51,6 +58,10 @@ class GroupSummary(BaseModel):
     code: str
     course: int
     is_submitted_today: bool
+    # Для карточек «Мои группы»: сколько студентов сейчас и сколько в группе риска; кем ведёт.
+    students_count: int = 0
+    risk_count: int = 0
+    role_type: str | None = None
 
 
 class MonthDayStatus(BaseModel):
@@ -75,3 +86,43 @@ class AbsencePeriodRead(BaseModel):
     date_from: datetime.date
     date_to: datetime.date
     basis_reference: str | None
+
+
+class MarkChange(BaseModel):
+    """Что меняется у студента: код было → станет (None — «присутствовал»)."""
+
+    student_id: int
+    full_name: str
+    from_code: str | None
+    to_code: str | None
+    details_changed: bool = False  # тот же код, но другой комментарий или основание
+
+
+class AttendanceChangeRead(BaseModel):
+    id: int
+    study_group_id: int
+    group_code: str
+    date: datetime.date
+    requested_by_id: int
+    requested_by_name: str
+    created_at: datetime.datetime
+    reason: str
+    status: str
+    reviewed_by_name: str | None
+    reviewed_at: datetime.datetime | None
+    review_comment: str | None
+    first_period: int | None
+    changes: list[MarkChange]
+
+
+class ChangeRequestInput(BaseModel):
+    exceptions: list[MarkExceptionInput]
+    first_period: int | None = Field(default=None, ge=1, le=10)
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class ReviewDecision(BaseModel):
+    comment: str | None = Field(default=None, max_length=500)
+
+
+RosterResponse.model_rebuild()

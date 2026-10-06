@@ -1,0 +1,610 @@
+/* Досье, представители и индивидуальная работа в карточке студента (интерфейс 3.2): разделы с заголовком
+   и пояснением, поля сеткой с подписью сверху (на телефоне — в один столбец), признаки — плитками,
+   записи — карточками. Только токены из index.css. */
+
+.dossier-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 16px;
+}
+
+.dossier-toolbar .hint {
+  margin: 0;
+}
+
+.dossier-form {
+  display: grid;
+  gap: 16px;
+}
+
+.dossier-section {
+  display: grid;
+  gap: 14px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 2px);
+  background: var(--card-bg);
+}
+
+.dossier-section--private {
+  border-left: 4px solid var(--brand-violet);
+}
+
+.dossier-section__head h4 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.dossier-section__head p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.dossier-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px 16px;
+  align-items: start;
+}
+
+.dossier-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dossier-field--wide {
+  grid-column: 1 / -1;
+}
+
+.dossier-field__label {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.dossier-field__hint {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.dossier-field input,
+.dossier-field select,
+.dossier-field textarea {
+  width: 100%;
+  font-weight: 400;
+}
+
+.dossier-inline-action {
+  justify-self: start;
+  padding: 0;
+}
+
+/* Признаки «да / нет» — плитками: видно сразу, что отмечено, и в них легко попасть пальцем. */
+.toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.toggle-tile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--control-radius, 8px);
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.toggle-tile:hover {
+  border-color: var(--border-strong);
+}
+
+.toggle-tile.is-on {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  font-weight: 600;
+}
+
+.toggle-tile input[type="checkbox"] {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.toggle-tile:focus-within {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.dossier-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.dossier-actions .toggle-tile {
+  margin-right: auto;
+}
+
+/* Сохранение досье — внизу экрана, пока форма видна: не надо искать кнопку после длинной формы. */
+.dossier-savebar {
+  position: sticky;
+  bottom: calc(var(--bottom-nav-offset, 0px) + 12px);
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 2px);
+  background: var(--card-bg);
+  box-shadow: var(--shadow-md);
+}
+
+.dossier-savebar__state {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.dossier-savebar.is-dirty {
+  border-color: var(--primary);
+}
+
+.dossier-savebar.is-dirty .dossier-savebar__state {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* Представители */
+.person-list {
+  display: grid;
+  gap: 8px;
+}
+
+.person-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--control-radius, 8px);
+}
+
+.person-card__main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.person-card__main .hint {
+  width: 100%;
+  margin: 0;
+}
+
+.person-card__call {
+  text-decoration: none;
+}
+
+/* Индивидуальная работа */
+.note-form__protocol {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--control-radius, 8px);
+  background: var(--sunken);
+}
+
+.note-form__protocol h5 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.note-form__protocol .hint {
+  margin: 0;
+  font-weight: 400;
+}
+
+.note-list {
+  display: grid;
+  gap: 10px;
+}
+
+.note-card {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--control-radius, 8px);
+}
+
+.note-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.note-card__head .hint {
+  margin-left: auto;
+  font-weight: 400;
+}
+
+.note-card__kind {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--primary-light);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.note-card__head time {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.note-card__text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.note-card__details {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--sunken);
+}
+
+.note-card__details > div {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.note-card__details dt {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.note-card__details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.note-card__follow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.note-card__follow.is-overdue {
+  color: var(--danger);
+}
+
+.note-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.note-card__actions .danger-link {
+  margin-left: auto;
+}
+
+@media (max-width: 640px) {
+  .dossier-section {
+    padding: 14px;
+  }
+
+  .dossier-grid,
+  .toggle-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dossier-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dossier-actions > button {
+    width: 100%;
+  }
+
+  .dossier-savebar {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+
+  .person-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .person-card__phone {
+    grid-column: 1 / -1;
+  }
+
+  .person-card__call {
+    width: 100%;
+  }
+
+  .note-card__details > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .note-card__head .hint {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .note-card__actions > .btn-secondary {
+    flex: 1;
+  }
+}
+
+/* Окно записи из «Моего дня» — шире обычного: в нём поля протокола беседы. */
+.modal.modal--wide {
+  max-width: 640px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
+.modal--wide .note-form {
+  display: grid;
+  gap: 14px;
+}
+
+.note-form {
+  display: grid;
+  gap: 14px;
+}
+
+/* Отчёт куратора: показатели — плитками, длинные — во всю ширину; «по платформе» и «Взять» — под полем. */
+.report-section {
+  margin-top: 0;
+}
+
+.report-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.report-card {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--control-radius, 8px);
+  background: var(--input-bg);
+  transition: border-color 0.15s ease;
+}
+
+.report-card:focus-within {
+  border-color: var(--primary);
+}
+
+.report-card.is-filled {
+  border-left: 3px solid var(--ok);
+}
+
+.report-card--wide {
+  grid-column: 1 / -1;
+}
+
+.report-card__label {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.report-card input,
+.report-card textarea {
+  width: 100%;
+}
+
+.report-card__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.report-card__auto b {
+  color: var(--text);
+}
+
+.report-card__take {
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--primary);
+  border-radius: 999px;
+  background: var(--primary-light);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.report-card__hint {
+  flex-basis: 100%;
+}
+
+.report-section__next {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.report-savebar__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .report-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .report-savebar__buttons {
+    flex-direction: column;
+  }
+
+  .report-section__next > button {
+    width: 100%;
+    white-space: normal;
+  }
+}
+
+/* Поля в ряду плиток — на одной линии, даже если подпись у соседа длиннее: подпись забирает лишнее место. */
+.report-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.report-card__label {
+  flex: 1 0 auto;
+}
+
+.report-card--wide .report-card__label {
+  flex: 0 0 auto;
+}
+
+/* Режим просмотра: заполненные сведения — готовой информацией (подпись мелко, значение крупно), правка — по кнопке. */
+.dossier-section__head--row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.dossier-section.is-editing {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px 24px;
+  margin: 0;
+}
+
+.info-item {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.info-item--wide {
+  grid-column: 1 / -1;
+}
+
+.info-item dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.info-item dd {
+  margin: 0;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.info-item dd.info-empty {
+  color: var(--muted);
+  font-style: italic;
+  font-size: 14px;
+}
+
+.info-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.info-chip {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--primary-light);
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.toggle-tile--inline {
+  justify-self: start;
+  width: fit-content;
+}
+
+.person-card__actions {
+  display: inline-flex;
+  gap: 4px 12px;
+}
+
+.person-card--edit {
+  grid-template-columns: minmax(0, 1fr);
+  border-color: var(--primary);
+}
+
+@media (max-width: 640px) {
+  .info-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dossier-section__head--row > button {
+    width: 100%;
+  }
+
+  .person-card__actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+}
+
+.info-item dd a.link-btn {
+  padding: 0;
+  font-size: 15px;
+}

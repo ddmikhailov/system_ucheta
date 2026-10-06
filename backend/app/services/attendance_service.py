@@ -30,6 +30,11 @@ class BackdateNotAllowed(Exception):
     pass
 
 
+class ReviewRequired(Exception):
+    """Куратор правит уже сданный прошлый день — правка идёт запросом на проверку зав. отделением
+    (attendance_change_service), а не сразу в журнал."""
+
+
 class InvalidSubmission(Exception):
     """Неизвестный код отметки или студент не из этой группы — раньше и то,
     и другое молча отбрасывалось, и пользователь думал, что сохранил (см.
@@ -75,6 +80,34 @@ def can_edit_date(user: User, target_date: datetime.date, today: datetime.date) 
     же docstring обещал это, а код давал admin/tutor/dept_head/edu_department
     исключение и молча пропускал проверку)."""
     return target_date <= today
+
+
+def edit_requires_review(
+    db: Session, user: User, study_group_id: int, date: datetime.date, today: datetime.date | None = None,
+) -> bool:
+    """Правка идёт через проверку, если её делает куратор (тот, кто ведёт группу, а не
+    администрация), день уже прошёл и он уже сдан. Сегодняшний день куратор правит сам, как
+    и прошлый несданный (это просто сдача задним числом — о ней по-прежнему уведомляется
+    зав. отделением, см. notify_if_late_edit)."""
+    if user.role.code not in policies.CURATOR_CAPABLE_ROLES:
+        return False
+    today = today or today_local()
+    if date >= today:
+        return False
+    return db.execute(
+        select(DaySubmission.id).where(DaySubmission.study_group_id == study_group_id, DaySubmission.date == date)
+    ).first() is not None
+
+
+def validate_exceptions(db: Session, study_group_id: int, date: datetime.date, exceptions: list[dict]) -> None:
+    """Те же проверки, что при сдаче дня: студент из группы на эту дату, код отметки известен."""
+    mark_codes = get_mark_codes(db)
+    active_ids = {s.id for s in get_active_students(db, study_group_id, date)}
+    for entry in exceptions:
+        if entry["student_id"] not in active_ids:
+            raise InvalidSubmission(f"Студент {entry['student_id']} не из этой группы на {date}")
+        if entry["mark_code"] not in mark_codes:
+            raise InvalidSubmission(f"Неизвестный код отметки: {entry['mark_code']!r}")
 
 
 def notify_if_late_edit(
@@ -359,6 +392,7 @@ def get_roster(db: Session, study_group_id: int, date: datetime.date) -> dict:
         "submitted_at": submission.submitted_at if submission else None,
         "is_on_time": submission.is_on_time if submission else None,
         "first_period": submission.first_period if submission else None,
+        "submitted_by_name": submission.submitted_by.full_name if submission else None,
         "entries": entries,
     }
 
@@ -371,7 +405,11 @@ def submit_day(
     user: User,
     today: datetime.date | None = None,
     first_period: int | None = None,
+    applying_approved_change: bool = False,
 ) -> DaySubmission:
+    """Сдать (или пересдать) день. `applying_approved_change` — применение одобренной правки
+    прошлого дня: проверка «нужна ли проверка» пропускается, а кто и когда сдал день и «вовремя
+    ли» остаются прежними — правка не делает сданный вовремя день опоздавшим."""
     if first_period is not None and not (MIN_FIRST_PERIOD <= first_period <= MAX_FIRST_PERIOD):
         raise InvalidSubmission(
             f"Пара должна быть от {MIN_FIRST_PERIOD} до {MAX_FIRST_PERIOD}, получено {first_period}"
@@ -379,6 +417,11 @@ def submit_day(
     today = today or today_local()
     if not can_edit_date(user, date, today):
         raise BackdateNotAllowed(f"Правка за {date} недоступна: это ещё не наступивший день.")
+
+    if not applying_approved_change and edit_requires_review(db, user, study_group_id, date, today):
+        raise ReviewRequired(
+            "День уже сдан. Правка прошлого дня уходит на проверку зав. отделением — отправьте её с причиной."
+        )
 
     group = db.get(StudyGroup, study_group_id)
     if group is not None and not calendar_service.is_study_day(
@@ -474,6 +517,10 @@ def submit_day(
         )
         db.add(submission)
         log_action(db, user, "day.submit", "day_submission", f"{study_group_id}:{date}")
+    elif applying_approved_change:
+        if first_period is not None:
+            submission.first_period = first_period
+        log_action(db, user, "day.change_applied", "day_submission", f"{study_group_id}:{date}")
     else:
         submission.submitted_by_user_id = user.id
         submission.submitted_at = utcnow()
@@ -485,7 +532,7 @@ def submit_day(
         log_action(db, user, "day.resubmit", "day_submission", f"{study_group_id}:{date}")
 
     group = db.get(StudyGroup, study_group_id)
-    if group is not None:
+    if group is not None and not applying_approved_change:
         notify_if_late_edit(db, group, user, date, today=today)
 
     db.commit()

@@ -55,10 +55,30 @@ beforeEach(() => {
 });
 
 describe("StudentDossier — профиль", () => {
-  it("загружает досье студента", async () => {
-    open(dossier({ profile: { ...dossier().profile, phone: "+7 900 000" } }));
-    expect(await screen.findByLabelText("Телефон")).toHaveValue("+7 900 000");
+  it("загружает досье: заполненный раздел — готовой информацией, правка по кнопке «Редактировать»", async () => {
+    const user = userEvent.setup();
+    open(dossier({ profile: { ...dossier().profile, phone: "+7 900 000-00-00", email: "st@example.ru" } }));
+    expect(await screen.findByRole("link", { name: "+7 900 000-00-00" })).toHaveAttribute("href", "tel:+79000000000");
+    expect(screen.getByRole("link", { name: "st@example.ru" })).toHaveAttribute("href", "mailto:st@example.ru");
+    expect(screen.queryByLabelText("Телефон")).not.toBeInTheDocument(); // не поле ввода
+    expect(screen.getAllByText("не указано").length).toBeGreaterThan(0); // мессенджер пуст
     expect(get).toHaveBeenCalledWith("/students/10/dossier");
+
+    await user.click(screen.getByRole("button", { name: "Редактировать: Контакты студента" }));
+    expect(screen.getByLabelText("Телефон")).toHaveValue("+7 900 000-00-00");
+    await user.click(screen.getByRole("button", { name: "Свернуть" }));
+    expect(screen.queryByLabelText("Телефон")).not.toBeInTheDocument();
+  });
+
+  it("пустые разделы сразу открыты для ввода; «Сохранить досье» появляется, только когда есть что сохранять", async () => {
+    const user = userEvent.setup();
+    open(dossier());
+    expect(await screen.findByLabelText("Телефон")).toHaveValue("");
+    expect(screen.queryByRole("button", { name: /Редактировать/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Сохранить досье" })).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("Телефон"), "1");
+    expect(screen.getByRole("button", { name: "Сохранить досье" })).toBeInTheDocument();
+    expect(screen.getByText("Есть несохранённые изменения")).toBeInTheDocument();
   });
 
   it("сохраняет контакты и особые данные одним запросом", async () => {
@@ -116,16 +136,23 @@ describe("StudentDossier — профиль", () => {
   it("пол: показывается сохранённый, выбирается из двух значений и уходит на сервер; «не указан» — null", async () => {
     const user = userEvent.setup();
     open(dossier({ profile: { ...dossier().profile, gender: "female" } }));
-    const select = await screen.findByLabelText("Пол");
+    expect(await screen.findByText("Женский")).toBeInTheDocument(); // сохранённый — готовой информацией
+    await user.click(screen.getByRole("button", { name: "Редактировать: Основные сведения" }));
+    const select = screen.getByLabelText("Пол");
     expect(select).toHaveValue("female");
     expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["не указан", "Мужской", "Женский"]);
 
-    put.mockResolvedValue(dossier());
+    // Сервер вернул сохранённое — раздел снова показывается готовой информацией.
+    put.mockResolvedValue(dossier({ profile: { ...dossier().profile, gender: "male" } }));
     await user.selectOptions(select, "male");
     await user.click(screen.getByRole("button", { name: "Сохранить досье" }));
     expect(put.mock.calls[0][1]).toMatchObject({ gender: "male" });
+    expect(await screen.findByText("Мужской")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Пол")).not.toBeInTheDocument();
 
-    await user.selectOptions(select, "");
+    await user.click(screen.getByRole("button", { name: "Редактировать: Основные сведения" }));
+    put.mockResolvedValue(dossier());
+    await user.selectOptions(screen.getByLabelText("Пол"), "");
     await user.click(screen.getByRole("button", { name: "Сохранить досье" }));
     expect(put.mock.calls[1][1]).toMatchObject({ gender: null });
   });
@@ -133,7 +160,8 @@ describe("StudentDossier — профиль", () => {
   it("очищенное поле уходит как null, а не пустая строка", async () => {
     const user = userEvent.setup();
     open(dossier({ profile: { ...dossier().profile, phone: "123" } }));
-    await user.clear(await screen.findByLabelText("Телефон"));
+    await user.click(await screen.findByRole("button", { name: "Редактировать: Контакты студента" }));
+    await user.clear(screen.getByLabelText("Телефон"));
     put.mockResolvedValue(dossier());
     await user.click(screen.getByRole("button", { name: "Сохранить досье" }));
     expect(put.mock.calls[0][1]).toMatchObject({ phone: null });
@@ -178,7 +206,7 @@ describe("StudentDossier — представители", () => {
     await user.type(screen.getByPlaceholderText("Телефон"), "+7 900 111");
     await user.click(screen.getByLabelText(/Основной/));
     post.mockResolvedValue({});
-    await user.click(within(guardianForm()).getByRole("button", { name: "Добавить" }));
+    await user.click(within(guardianForm()).getByRole("button", { name: "Добавить представителя" }));
     expect(post).toHaveBeenCalledWith("/students/10/dossier/guardians", {
       full_name: "Иванова А.", relation: "мать", phone: "+7 900 111", is_primary: true,
     });
@@ -198,7 +226,7 @@ describe("StudentDossier — представители", () => {
     expect(call).toHaveTextContent("+7 (900) 111-22-33");
     expect(screen.getAllByRole("link", { name: /Позвонить/ })).toHaveLength(1);
     expect(screen.getByText("не знаю")).toBeInTheDocument();
-    expect((screen.getByText("Петрова В.").closest("tr") as HTMLElement)).toHaveTextContent("—");
+    expect((screen.getByText("Петрова В.").closest("article") as HTMLElement)).toHaveTextContent("—");
   });
 
   it("при ошибке сервера введённое не теряется", async () => {
@@ -208,15 +236,34 @@ describe("StudentDossier — представители", () => {
     await user.type(screen.getByPlaceholderText("ФИО"), "Иванова А.");
     await user.type(screen.getByPlaceholderText(/Кем приходится/), "мать");
     post.mockRejectedValue(new ApiError(404, "Студент не найден"));
-    await user.click(within(guardianForm()).getByRole("button", { name: "Добавить" }));
+    await user.click(within(guardianForm()).getByRole("button", { name: "Добавить представителя" }));
     expect(await screen.findByText("Студент не найден")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("ФИО")).toHaveValue("Иванова А.");
+  });
+
+  it("есть представители — форма добавления по кнопке; «Изменить» правит карточку", async () => {
+    const user = userEvent.setup();
+    open(dossier({ guardians: [{ id: 4, full_name: "Иванов Б.", relation: "отец", phone: null, is_primary: false }] }));
+    const card = (await screen.findByText("Иванов Б.")).closest("article") as HTMLElement;
+    expect(screen.queryByRole("button", { name: "Добавить представителя" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "+ Добавить представителя" }));
+    expect(screen.getByRole("button", { name: "Добавить представителя" })).toBeInTheDocument();
+
+    await user.click(within(card).getByRole("button", { name: "Изменить" }));
+    const form = screen.getByRole("form", { name: "Изменить: Иванов Б." });
+    const phone = within(form).getByLabelText("Телефон представителя");
+    await user.type(phone, "+7 900 222-33-44");
+    put.mockResolvedValue({});
+    await user.click(within(form).getByRole("button", { name: "Сохранить" }));
+    expect(put).toHaveBeenCalledWith("/students/10/dossier/guardians/4", {
+      full_name: "Иванов Б.", relation: "отец", phone: "+7 900 222-33-44", is_primary: false,
+    });
   });
 
   it("удаляет представителя только после подтверждения", async () => {
     const user = userEvent.setup();
     open(dossier({ guardians: [{ id: 4, full_name: "Иванов Б.", relation: "отец", phone: null, is_primary: true }] }));
-    const row = (await screen.findByText("Иванов Б.")).closest("tr") as HTMLElement;
+    const row = (await screen.findByText("Иванов Б.")).closest("article") as HTMLElement;
     expect(within(row).getByText("основной")).toBeInTheDocument();
 
     const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false);
@@ -240,7 +287,7 @@ describe("StudentDossier — заметки и журнал", () => {
     await user.selectOptions(within(noteForm()).getByRole("combobox"), "incident");
     await user.type(screen.getByPlaceholderText(/Что произошло/), "Конфликт на паре");
     post.mockResolvedValue({});
-    await user.click(within(noteForm()).getByRole("button", { name: "Добавить" }));
+    await user.click(within(noteForm()).getByRole("button", { name: "Сохранить запись" }));
     expect(post).toHaveBeenCalledWith("/students/10/dossier/notes", { kind: "incident", text: "Конфликт на паре", occurred_on: todayIso() });
   });
 
@@ -257,7 +304,7 @@ describe("StudentDossier — заметки и журнал", () => {
     fireEvent.change(within(form).getByLabelText("Дата"), { target: { value: "2026-10-02" } });
     fireEvent.change(within(form).getByLabelText(/Вернуться к вопросу/), { target: { value: "2026-10-09" } });
     post.mockResolvedValue({});
-    await user.click(within(form).getByRole("button", { name: "Добавить" }));
+    await user.click(within(form).getByRole("button", { name: "Сохранить запись" }));
     expect(post).toHaveBeenCalledWith("/students/10/dossier/notes", {
       kind: "parent_invited", text: "Пригласили маму", occurred_on: "2026-10-02", follow_up_on: "2026-10-09",
     });
@@ -271,33 +318,62 @@ describe("StudentDossier — заметки и журнал", () => {
     await user.selectOptions(within(form).getByRole("combobox"), "incident");
     expect(within(form).queryByText(/Для протокола беседы/)).not.toBeInTheDocument();
     await user.selectOptions(within(form).getByRole("combobox"), "conversation");
-    await user.click(within(form).getByText(/Для протокола беседы/));
+    expect(within(form).getByRole("heading", { name: "Для протокола беседы в Word" })).toBeInTheDocument(); // поля видны сразу
     await user.type(screen.getByPlaceholderText(/Что произошло/), "Обсудили пропуски");
     await user.type(within(form).getByLabelText("Цель беседы"), "Выяснить причины");
     await user.type(within(form).getByLabelText(/Присутствовали/), "Мать, Иванова М.{Enter}Куратор");
     await user.type(within(form).getByLabelText("Итог беседы"), "Договорились");
     post.mockResolvedValue({});
-    await user.click(within(form).getByRole("button", { name: "Добавить" }));
+    await user.click(within(form).getByRole("button", { name: "Сохранить запись" }));
     expect(post).toHaveBeenCalledWith("/students/10/dossier/notes", {
       kind: "conversation", text: "Обсудили пропуски", occurred_on: todayIso(),
       goal: "Выяснить причины", participants: "Мать, Иванова М.\nКуратор", result: "Договорились",
     });
   });
 
-  it("«Протокол в Word» есть у беседы и скачивает файл; у инцидента кнопки нет", async () => {
+  it("«Протокол беседы (Word)» есть у беседы и скачивает файл; у инцидента кнопки нет", async () => {
     const user = userEvent.setup();
     download.mockResolvedValue(undefined);
     const talk = { ...NOTE, id: 21, kind: "conversation", text: "Беседа с мамой", occurred_on: "2026-10-01", goal: "Пропуски", participants: "Мать\nКуратор", result: "Справки" };
     const incident = { ...NOTE, id: 22, kind: "incident", text: "Конфликт", occurred_on: "2026-10-02" };
     open(dossier({ notes: [talk, incident] }));
-    const row = (await screen.findByText("Беседа с мамой")).closest("tr") as HTMLElement;
-    expect(within(row).getByText("Цель: Пропуски")).toBeInTheDocument();
-    expect(within(row).getByText("Присутствовали: Мать; Куратор")).toBeInTheDocument();
-    expect(within(row).getByText("Итог: Справки")).toBeInTheDocument();
-    await user.click(within(row).getByRole("button", { name: "Протокол в Word" }));
+    const row = (await screen.findByText("Беседа с мамой")).closest("article") as HTMLElement;
+    expect(within(row).getByText("Цель").nextSibling).toHaveTextContent("Пропуски");
+    expect(within(row).getByText("Присутствовали").nextSibling).toHaveTextContent("Мать; Куратор");
+    expect(within(row).getByText("Итог").nextSibling).toHaveTextContent("Справки");
+    await user.click(within(row).getByRole("button", { name: "Протокол беседы (Word)" }));
     expect(download).toHaveBeenCalledWith("/students/10/dossier/notes/21/protocol", "Протокол_беседы_2026-10-01.docx");
-    const incidentRow = screen.getByText("Конфликт").closest("tr") as HTMLElement;
-    expect(within(incidentRow).queryByRole("button", { name: "Протокол в Word" })).not.toBeInTheDocument();
+    const incidentRow = screen.getByText("Конфликт").closest("article") as HTMLElement;
+    expect(within(incidentRow).queryByRole("button", { name: /Протокол/ })).not.toBeInTheDocument();
+  });
+
+  it("«Сохранить и скачать протокол»: запись сохраняется, затем сразу скачивается её протокол", async () => {
+    const user = userEvent.setup();
+    download.mockResolvedValue(undefined);
+    open(dossier());
+    await screen.findByText("Заметок пока нет.");
+    const form = noteForm();
+    await user.type(screen.getByPlaceholderText(/Что произошло/), "Беседа с мамой о пропусках");
+    post.mockResolvedValue({ ...NOTE, id: 31, kind: "conversation", occurred_on: todayIso() });
+    await user.click(within(form).getByRole("button", { name: "Сохранить и скачать протокол" }));
+    expect(post).toHaveBeenCalledWith("/students/10/dossier/notes", { kind: "conversation", text: "Беседа с мамой о пропусках", occurred_on: todayIso() });
+    await waitFor(() => expect(download).toHaveBeenCalledWith("/students/10/dossier/notes/31/protocol", `Протокол_беседы_${todayIso()}.docx`));
+  });
+
+  it("без содержания запись не отправляется (поле обязательное)", async () => {
+    const user = userEvent.setup();
+    open(dossier());
+    await screen.findByText("Заметок пока нет.");
+    await user.click(within(noteForm()).getByRole("button", { name: "Сохранить и скачать протокол" }));
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("у инцидента кнопки протокола в форме нет", async () => {
+    const user = userEvent.setup();
+    open(dossier());
+    await screen.findByText("Заметок пока нет.");
+    await user.selectOptions(within(noteForm()).getByRole("combobox"), "incident");
+    expect(within(noteForm()).queryByRole("button", { name: "Сохранить и скачать протокол" })).not.toBeInTheDocument();
   });
 
   it("в списке: дата события, срок возврата с пометкой просрочки, «Выполнено» и «Вернуть в работу»", async () => {
@@ -305,13 +381,13 @@ describe("StudentDossier — заметки и журнал", () => {
     const overdue = { ...NOTE, id: 11, text: "Беседа", kind: "conversation", occurred_on: "2026-09-20", follow_up_on: "2026-09-27" };
     const done = { ...NOTE, id: 12, text: "Совет", kind: "prevention_council", occurred_on: "2026-09-21", follow_up_on: "2026-09-30", follow_up_done: true };
     open(dossier({ notes: [overdue, done] }));
-    const row = (await screen.findByText("20.09.2026")).closest("tr") as HTMLElement;
+    const row = (await screen.findByText("20.09.2026")).closest("article") as HTMLElement;
     expect(within(row).getByText("20.09.2026")).toBeInTheDocument();
     expect(within(row).getByText(/Вернуться к вопросу до 27\.09\.2026 \(просрочено\)/)).toBeInTheDocument();
     put.mockResolvedValue({});
     await user.click(within(row).getByRole("button", { name: "Выполнено" }));
     expect(put).toHaveBeenCalledWith("/students/10/dossier/notes/11/follow-up", { done: true });
-    const doneRow = screen.getByText("21.09.2026").closest("tr") as HTMLElement;
+    const doneRow = screen.getByText("21.09.2026").closest("article") as HTMLElement;
     expect(within(doneRow).getByText(/выполнено/)).toBeInTheDocument();
     await user.click(within(doneRow).getByRole("button", { name: "Вернуть в работу" }));
     expect(put).toHaveBeenCalledWith("/students/10/dossier/notes/12/follow-up", { done: false });
@@ -319,8 +395,8 @@ describe("StudentDossier — заметки и журнал", () => {
 
   it("кнопка «Удалить» у заметки только там, где разрешено", async () => {
     open(dossier({ notes: [NOTE, { ...NOTE, id: 10, text: "Чужая заметка", can_delete: false }] }));
-    const own = (await screen.findByText("Звонок маме")).closest("tr") as HTMLElement;
-    const foreign = screen.getByText("Чужая заметка").closest("tr") as HTMLElement;
+    const own = (await screen.findByText("Звонок маме")).closest("article") as HTMLElement;
+    const foreign = screen.getByText("Чужая заметка").closest("article") as HTMLElement;
     expect(within(own).getByRole("button", { name: "Удалить" })).toBeInTheDocument();
     expect(within(foreign).queryByRole("button", { name: "Удалить" })).not.toBeInTheDocument();
     expect(within(own).getByText("Звонок")).toBeInTheDocument();

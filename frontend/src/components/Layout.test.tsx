@@ -26,8 +26,9 @@ function menu(role: string, groups: { id: number; code: string; course: number }
 
 describe("Layout — меню по ролям", () => {
   it.each([
-    ["curator", ["Мой день", "Мои группы", "Мои задачи", "Соц. паспорт", "Индивидуальная работа", "План группы", "Отчёт куратора"]],
-    ["deputy_curator", ["Мой день", "Мои группы", "Мои задачи", "Соц. паспорт", "Индивидуальная работа", "План группы", "Отчёт куратора"]],
+    // Куратору паспорт, работа, план и отчёт — во вкладках его группы, не в меню (интерфейс 3.2).
+    ["curator", ["Мой день", "Мои группы", "Мои задачи"]],
+    ["deputy_curator", ["Мой день", "Мои группы", "Мои задачи"]],
     ["dept_head", ["Задачи", "Витрины", "Студенты", "Соц. паспорт", "Индивидуальная работа", "План группы", "Отчёт куратора", "Админка"]],
     ["tutor", ["Задачи", "Витрины", "Студенты", "Соц. паспорт", "Индивидуальная работа", "План группы", "Отчёт куратора", "Админка"]],
     ["edu_department", ["Задачи", "Витрины", "Студенты", "Соц. паспорт", "Индивидуальная работа", "План группы", "Отчёт куратора", "Админка"]],
@@ -76,13 +77,17 @@ describe("Layout — нижняя панель и счётчики", () => {
     return screen.getByRole("navigation", { name: "Быстрые разделы" });
   }
 
-  it("куратор: три раздела и «Ещё» с остальными", async () => {
-    const user = userEvent.setup();
+  it("куратор: три раздела в панели, «Ещё» не нужно", () => {
     const bar = tabbar("curator");
     expect(within(bar).getAllByRole("link").map((a) => a.textContent)).toEqual(["Мой день", "Группы", "Задачи"]);
+    expect(within(bar).queryByRole("button", { name: "Ещё" })).not.toBeInTheDocument();
+  });
+
+  it("лист «Ещё» закрывается по Esc", async () => {
+    const user = userEvent.setup();
+    const bar = tabbar("admin");
     await user.click(within(bar).getByRole("button", { name: "Ещё" }));
-    const sheet = screen.getByRole("dialog", { name: "Все разделы" });
-    expect(within(sheet).getAllByRole("link").map((a) => a.textContent)).toEqual(["Соц. паспорт", "Индивидуальная работа", "План группы", "Отчёт куратора"]);
+    expect(screen.getByRole("dialog", { name: "Все разделы" })).toBeInTheDocument();
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog", { name: "Все разделы" })).not.toBeInTheDocument();
   });

@@ -13,14 +13,18 @@ export default function MarkCodeButtons({
 }) {
   return (
     <div className="mark-code-buttons">
+      {/* «Присутствует» — зелёная галочка вместо буквы «Я»: читается сразу, без расшифровки. */}
       <button
         type="button"
-        className={`mark-code-btn ${value === null ? "active" : ""}`}
+        className={`mark-code-btn mark-code-btn--present ${value === null ? "active" : ""}`}
         onClick={() => onChange(null)}
         title="Присутствует"
+        aria-label="Присутствует"
         aria-pressed={value === null}
       >
-        Я
+        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </button>
       {markCodes.map((m) => (
         <button

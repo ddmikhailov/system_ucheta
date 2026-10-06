@@ -266,9 +266,9 @@ export default function MyDayPage() {
           studentId={noteFor.student_id}
           studentName={noteFor.full_name}
           onClose={() => setNoteFor(null)}
-          onSaved={() => {
+          onSaved={(withProtocol) => {
             setNoteFor(null);
-            toast(`Запись сохранена: ${noteFor.full_name}.`);
+            toast(`Запись сохранена: ${noteFor.full_name}.${withProtocol ? " Протокол беседы скачивается." : ""}`);
             load();
           }}
         />

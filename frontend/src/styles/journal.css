@@ -1,0 +1,675 @@
+/* Журнал группы (интерфейс 3.2): слева — навигация по дням и календарь месяца, справа — итоги
+   сданного дня или форма отметок. Только токены из index.css — тёмная тема работает сама. */
+
+.journal__toolbar {
+  margin-bottom: 16px;
+}
+
+.journal__tools {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.journal__layout {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.journal__side {
+  display: grid;
+  gap: 16px;
+  position: sticky;
+  top: 16px;
+}
+
+.journal__main {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.journal__main > .roster-table {
+  width: 100%;
+}
+
+.journal__main > .day-status,
+.journal__main > .error-text {
+  margin: 0;
+}
+
+/* --- Навигация по дням --- */
+.day-nav {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+}
+
+.day-nav__bar {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: 8px;
+}
+
+.day-nav__current {
+  display: grid;
+  gap: 4px;
+  text-align: center;
+}
+
+.day-nav__weekday {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.day-nav__current input[type="date"] {
+  width: 100%;
+  min-height: 36px;
+  text-align: center;
+}
+
+.day-nav__arrow {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.day-nav__arrow:hover:not(:disabled) {
+  background: var(--sunken);
+}
+
+.day-nav__arrow:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.day-nav__arrow--small {
+  width: 32px;
+  height: 32px;
+  font-size: 18px;
+}
+
+.day-nav__quick {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+}
+
+.day-nav__quick > button {
+  flex: 1;
+}
+
+.day-nav__cal-toggle {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .day-nav__cal-toggle {
+    display: inline-flex;
+  }
+
+  .day-nav:not(.is-calendar-open) .month-cal {
+    display: none;
+  }
+}
+
+.month-cal {
+  display: grid;
+  gap: 8px;
+}
+
+.month-cal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.month-cal__title {
+  font-weight: 600;
+}
+
+.month-cal__grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.month-cal__weekday {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.month-cal__day {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  min-height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.month-cal__day.is-ok {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.month-cal__day.is-late {
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+}
+
+.month-cal__day.is-missing {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.month-cal__day.is-off {
+  background: transparent;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.month-cal__day.is-future {
+  background: transparent;
+  color: var(--border-strong);
+  cursor: default;
+}
+
+.month-cal__day.is-today::after {
+  content: "";
+  position: absolute;
+  bottom: 3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.month-cal__day.is-selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-light);
+}
+
+.month-cal__day:focus-visible,
+.day-nav__arrow:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.month-cal__legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.legend-chip {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: -6px;
+  border-radius: 3px;
+  vertical-align: -1px;
+}
+
+.legend-chip.is-ok {
+  background: var(--ok);
+}
+
+.legend-chip.is-late {
+  background: var(--warn);
+}
+
+.legend-chip.is-missing {
+  background: var(--danger);
+}
+
+.legend-chip.is-off {
+  background: var(--border-strong);
+}
+
+.journal__side .journal-rhythm {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+}
+
+/* --- Итоги сданного дня --- */
+.day-summary {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 2px);
+  background: var(--card-bg);
+}
+
+.day-summary__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.day-summary__head h3 {
+  margin: 0 0 4px;
+}
+
+.day-summary__head .hint {
+  margin: 0;
+}
+
+.day-summary .kpi-row {
+  margin-top: 0;
+}
+
+.day-summary__all {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: var(--ok-bg);
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.mark-chip {
+  display: inline-grid;
+  place-items: center;
+  min-width: 26px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--sunken);
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.mark-chip.is-excused {
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+}
+
+.mark-chip.is-unexcused {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.day-status__action {
+  margin-left: 12px;
+}
+
+/* --- Исправления прошлых дней --- */
+.change-card {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--seg-progress);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+}
+
+.change-card.is-rejected {
+  border-left-color: var(--danger);
+}
+
+.change-card.is-approved {
+  border-left-color: var(--ok);
+}
+
+.change-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.change-card__reason,
+.change-card .hint {
+  margin: 0;
+}
+
+.change-card__list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.change-card__list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--sunken);
+}
+
+.change-card__codes {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.change-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--tile-progress);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status-pill.is-approved {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.status-pill.is-rejected {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.status-pill.is-cancelled {
+  background: var(--sunken);
+  color: var(--muted);
+}
+
+.change-review {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.change-review h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.change-review__list {
+  display: grid;
+  gap: 10px;
+}
+
+/* Таблица отметок широкая: две колонки — только на широком экране, иначе календарь сверху. */
+@media (max-width: 1240px) {
+  .journal__layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .journal__side {
+    position: static;
+    grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+@media (max-width: 720px) {
+  .journal__side {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .journal__tools {
+    margin-left: 0;
+  }
+
+  .day-summary {
+    padding: 14px;
+  }
+
+  .day-summary__head > button {
+    width: 100%;
+  }
+
+  .change-card__list li {
+    flex-direction: column;
+    gap: 2px;
+  }
+}
+
+/* --- Мои группы и страница группы --- */
+.group-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.group-card {
+  display: grid;
+  gap: 6px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 4px);
+  background: var(--card-bg);
+  color: var(--text);
+  text-decoration: none;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.group-card:hover {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.group-card:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.group-card__code {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.group-card__meta,
+.group-card__stats {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.group-card__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.group-card__risk {
+  color: var(--hot);
+  font-weight: 600;
+}
+
+.group-card__today {
+  justify-self: start;
+  margin-top: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.group-card__today.is-ok {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.group-card__today.is-pending {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.group-students__search {
+  flex: 1 1 260px;
+  max-width: 360px;
+}
+
+/* --- Подвкладки и фильтр разделов --- */
+.tabbar--sub {
+  gap: 6px;
+  margin: 4px 0 16px;
+  border-bottom: 0;
+}
+
+.tabbar--sub .tabbar__tab {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  margin-bottom: 0;
+  font-size: 14px;
+}
+
+.tabbar--sub .tabbar__tab.is-active {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+
+.chip-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 16px;
+}
+
+.chip-filter__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.chip-filter__item:hover {
+  background: var(--sunken);
+}
+
+.chip-filter__item.is-active {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.chip-filter__count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--sunken);
+  font-size: 11px;
+  text-align: center;
+}
+
+.plan-empty-sections {
+  margin-top: 8px;
+}
+
+@media (max-width: 640px) {
+  .chip-filter {
+    flex-wrap: nowrap;
+    margin-inline: -16px;
+    padding: 0 16px 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .chip-filter__item {
+    flex: none;
+  }
+
+  .group-students__search {
+    max-width: none;
+  }
+}
+
+/* «Присутствует» — зелёная галочка вместо «Я»: выбрана — залита зелёным, не выбрана — бледная зелёная. */
+.mark-code-btn--present {
+  display: inline-grid;
+  place-items: center;
+  color: var(--ok);
+}
+
+.mark-code-btn--present:hover {
+  border-color: var(--ok);
+}
+
+.mark-code-btn--present.active {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: var(--on-fill);
+}
+
+/* Журнал на телефоне: ФИО — заголовком карточки, коды отметок — во всю ширину, пустые ячейки не показываются. */
+@media (max-width: 640px) {
+  .roster-table.journal-roster td[data-label="Статус"] {
+    display: block;
+  }
+
+  .roster-table.journal-roster td[data-label="Статус"]::before,
+  .roster-table.journal-roster td[data-label="Комментарий"]::before {
+    display: none;
+  }
+
+  .roster-table.journal-roster td:empty {
+    display: none;
+  }
+
+  .roster-table.journal-roster td:last-child {
+    display: flex;
+    justify-content: flex-end;
+  }
+}

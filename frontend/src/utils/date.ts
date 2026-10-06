@@ -70,3 +70,20 @@ export function formatWeekdayLong(iso: string): string {
 export function formatTimeRu(d: Date): string {
   return d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 }
+
+// Сдвиг даты на n дней в ISO-формате (без часовых поясов: считаем по календарю).
+export function addDaysIso(iso: string, n: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return toIso(new Date(y, m - 1, d + n));
+}
+
+const MONTHS_NOMINATIVE = [
+  "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+  "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
+];
+
+// «2026-10-02» → «Октябрь 2026» — заголовок календаря месяца.
+export function formatMonthTitle(iso: string): string {
+  const [y, m] = iso.split("-").map(Number);
+  return `${MONTHS_NOMINATIVE[m - 1]} ${y}`;
+}
