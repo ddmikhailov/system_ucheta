@@ -16,6 +16,9 @@ class ProfileFields(BaseModel):
     registration_address: str | None = Field(default=None, max_length=512)
     residence_address: str | None = Field(default=None, max_length=512)
     additional_education: str | None = Field(default=None, max_length=1000)
+    birth_place: str | None = Field(default=None, max_length=255)
+    previous_education: str | None = Field(default=None, max_length=500)
+    enrollment_order: str | None = Field(default=None, max_length=128)
 
 
 class SpecialData(BaseModel):
@@ -26,7 +29,10 @@ class SpecialData(BaseModel):
     disability_group: str | None = Field(default=None, max_length=32)
     has_ovz: bool = False
     large_family: bool = False
+    incomplete_family: Literal["loss", "divorce", "single_mother"] | None = None  # потеря кормильца / развод / мать-одиночка
     low_income: bool = False
+    dysfunctional_family: bool = False
+    parent_disabled: bool = False  # хотя бы один из родителей — инвалид
     pdn_kdn: bool = False
     internal_record: bool = False
     scholarship: str | None = Field(default=None, max_length=128)
@@ -54,6 +60,10 @@ class NoteIn(BaseModel):
     text: str = Field(min_length=1, max_length=5000)
     occurred_on: datetime.date | None = None  # когда это было; по умолчанию — сегодня
     follow_up_on: datetime.date | None = None  # когда вернуться к вопросу
+    # Для протокола беседы: цель, присутствовавшие (по одному в строке: «ФИО, должность»), итог.
+    goal: str | None = Field(default=None, max_length=500)
+    participants: str | None = Field(default=None, max_length=2000)
+    result: str | None = Field(default=None, max_length=2000)
 
 
 class FollowUpIn(BaseModel):
@@ -71,6 +81,9 @@ class NoteRead(BaseModel):
     occurred_on: datetime.date | None = None
     follow_up_on: datetime.date | None = None
     follow_up_done: bool = False
+    goal: str | None = None
+    participants: str | None = None
+    result: str | None = None
 
 
 class DossierRead(BaseModel):

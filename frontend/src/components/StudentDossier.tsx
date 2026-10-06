@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
-import { api, ApiError } from "../api/client";
+import { api, ApiError, downloadFile } from "../api/client";
 import { NOTE_KINDS } from "../constants/noteKinds";
 import { formatDateRu, formatServerDateTimeFull, todayIso } from "../utils/date";
 import { telHref } from "../utils/phone";
-import type { Dossier, DossierAccessEntry, DossierProfile, DossierSpecial } from "../api/types";
+import type { Dossier, DossierAccessEntry, DossierNote, DossierProfile, DossierSpecial } from "../api/types";
 import { dialogs } from "../utils/feedback";
+import StudentCardModal from "./StudentCardModal";
+
+// Виды заметок, из которых делается протокол беседы (зеркало conversation_protocol_service.PROTOCOL_KINDS).
+const PROTOCOL_KINDS = ["conversation", "call", "parent_invited", "agreement"];
 
 const EMPTY_SPECIAL: DossierSpecial = {
   is_orphan: false,
@@ -13,7 +17,10 @@ const EMPTY_SPECIAL: DossierSpecial = {
   disability_group: null,
   has_ovz: false,
   large_family: false,
+  incomplete_family: null,
   low_income: false,
+  dysfunctional_family: false,
+  parent_disabled: false,
   pdn_kdn: false,
   internal_record: false,
   scholarship: null,
@@ -26,6 +33,8 @@ type SpecialFlag =
   | "has_ovz"
   | "large_family"
   | "low_income"
+  | "dysfunctional_family"
+  | "parent_disabled"
   | "pdn_kdn"
   | "internal_record";
 
@@ -35,6 +44,8 @@ const SPECIAL_FLAGS: [SpecialFlag, string][] = [
   ["has_ovz", "ОВЗ"],
   ["large_family", "Многодетная семья"],
   ["low_income", "Малоимущая семья"],
+  ["dysfunctional_family", "Неблагополучная семья"],
+  ["parent_disabled", "Родитель — инвалид"],
   ["pdn_kdn", "Учёт ПДН/КДН"],
   ["internal_record", "Внутренний учёт"],
 ];
@@ -45,6 +56,7 @@ export default function StudentDossier({ studentId, isAdmin }: { studentId: numb
   const [dossier, setDossier] = useState<Dossier | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [cardOpen, setCardOpen] = useState(false);
 
   const load = useCallback(() => {
     api
@@ -65,6 +77,19 @@ export default function StudentDossier({ studentId, isAdmin }: { studentId: numb
     <div>
       {error && <div className="error-text">{error}</div>}
       {notice && <div className="day-status submitted">{notice}</div>}
+      <p>
+        <button type="button" className="link-btn" onClick={() => setCardOpen(true)} title="Бланк колледжа в Word: выберите, какие поля заполнить">
+          Личная карточка в Word
+        </button>
+      </p>
+      {cardOpen && (
+        <StudentCardModal
+          endpoint={`/students/${studentId}/dossier/card`}
+          heading="Личная карточка обучающегося"
+          filename={`Личная_карточка_${studentId}.docx`}
+          onClose={() => setCardOpen(false)}
+        />
+      )}
       <ProfileForm
         // Форма берёт значения из досье один раз; после сохранения key пересоздаёт её.
         key={JSON.stringify([dossier.profile, dossier.special])}
@@ -163,6 +188,17 @@ function ProfileForm({
         </Field>
       </div>
       <div className="inline-form form-fields">
+        <Field label="Место рождения">
+          <input value={profile.birth_place ?? ""} maxLength={255} onChange={(e) => set("birth_place", e.target.value)} />
+        </Field>
+        <Field label="Приказ о зачислении (номер и дата)">
+          <input value={profile.enrollment_order ?? ""} maxLength={128} onChange={(e) => set("enrollment_order", e.target.value)} />
+        </Field>
+        <Field label="Образование до поступления (класс, год, школа)">
+          <input value={profile.previous_education ?? ""} maxLength={500} onChange={(e) => set("previous_education", e.target.value)} />
+        </Field>
+      </div>
+      <div className="inline-form form-fields">
         <Field label="Дополнительное образование (кружки, секции)">
           <input
             value={profile.additional_education ?? ""}
@@ -193,6 +229,17 @@ function ProfileForm({
             ))}
           </div>
           <div className="inline-form form-fields">
+            <Field label="Неполная семья">
+              <select
+                value={special?.incomplete_family ?? ""}
+                onChange={(e) => patchSpecial({ incomplete_family: (e.target.value || null) as DossierSpecial["incomplete_family"] })}
+              >
+                <option value="">нет</option>
+                <option value="loss">потеря одного из кормильцев</option>
+                <option value="divorce">родители в разводе</option>
+                <option value="single_mother">мать-одиночка</option>
+              </select>
+            </Field>
             <Field label="Группа инвалидности">
               <input
                 value={special?.disability_group ?? ""}
@@ -349,20 +396,35 @@ function Notes({
   const [text, setText] = useState("");
   const [occurredOn, setOccurredOn] = useState(todayIso());
   const [followUpOn, setFollowUpOn] = useState("");
+  const [goal, setGoal] = useState("");
+  const [participants, setParticipants] = useState("");
+  const [result, setResult] = useState("");
   const base = `/students/${studentId}/dossier/notes`;
 
   async function add(e: FormEvent) {
     e.preventDefault();
     onError(null);
     try {
-      await api.post(base, { kind, text, occurred_on: occurredOn || null, ...(followUpOn ? { follow_up_on: followUpOn } : {}) });
+      await api.post(base, {
+        kind, text, occurred_on: occurredOn || null, ...(followUpOn ? { follow_up_on: followUpOn } : {}),
+        ...(goal.trim() ? { goal } : {}), ...(participants.trim() ? { participants } : {}), ...(result.trim() ? { result } : {}),
+      });
       setText("");
+      setGoal("");
+      setParticipants("");
+      setResult("");
       setFollowUpOn("");
       setOccurredOn(todayIso());
       onChanged();
     } catch (err) {
       onError(err instanceof ApiError ? err.message : "Не удалось добавить заметку");
     }
+  }
+
+  function protocol(n: DossierNote) {
+    downloadFile(`${base}/${n.id}/protocol`, `Протокол_беседы_${n.occurred_on ?? ""}.docx`).catch((err) =>
+      onError(err instanceof ApiError ? err.message : "Не удалось сформировать протокол")
+    );
   }
 
   async function setDone(id: number, done: boolean) {
@@ -415,6 +477,25 @@ function Notes({
           </label>
           <button type="submit">Добавить</button>
         </div>
+        {PROTOCOL_KINDS.includes(kind) && (
+          <details className="note-protocol">
+            <summary>Для протокола беседы в Word (необязательно)</summary>
+            <div className="inline-form form-fields">
+              <label>
+                Цель беседы
+                <input value={goal} maxLength={500} onChange={(e) => setGoal(e.target.value)} />
+              </label>
+              <label>
+                Присутствовали (по одному в строке: ФИО, должность или статус)
+                <textarea rows={3} value={participants} maxLength={2000} onChange={(e) => setParticipants(e.target.value)} />
+              </label>
+              <label>
+                Итог беседы
+                <textarea rows={2} value={result} maxLength={2000} onChange={(e) => setResult(e.target.value)} />
+              </label>
+            </div>
+          </details>
+        )}
       </form>
       {dossier.notes.length === 0 ? (
         <p className="hint">Заметок пока нет.</p>
@@ -436,6 +517,9 @@ function Notes({
                 <td data-label="Тип">{NOTE_KINDS[n.kind] ?? n.kind}</td>
                 <td data-label="Заметка" style={{ whiteSpace: "pre-wrap" }}>
                   {n.text}
+                  {n.goal && <div className="hint">Цель: {n.goal}</div>}
+                  {n.participants && <div className="hint">Присутствовали: {n.participants.split("\n").join("; ")}</div>}
+                  {n.result && <div className="hint">Итог: {n.result}</div>}
                   {n.follow_up_on && (
                     <div className="hint">
                       {n.follow_up_done ? (
@@ -454,6 +538,11 @@ function Notes({
                 </td>
                 <td data-label="Автор">{n.author_name ?? "—"}</td>
                 <td>
+                  {PROTOCOL_KINDS.includes(n.kind) && (
+                    <button className="link-btn" onClick={() => protocol(n)} title="Протокол беседы по образцу колледжа — можно распечатать или править в Word">
+                      Протокол в Word
+                    </button>
+                  )}{" "}
                   {n.can_delete && (
                     <button className="link-btn" onClick={() => remove(n.id)}>
                       Удалить

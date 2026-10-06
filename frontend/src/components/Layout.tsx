@@ -42,6 +42,8 @@ function navItems(user: MeResponse | null): NavItem[] {
   if (inRoles(role, VIEWER_ROLES) || leadsGroups(user)) {
     items.push({ to: "/passport", label: "Соц. паспорт", short: "Паспорт", icon: "passport" });
     items.push({ to: "/individual-work", label: "Индивидуальная работа", short: "Работа", icon: "individual" });
+    items.push({ to: "/plan", label: "План группы", short: "План", icon: "plan" });
+    items.push({ to: "/report", label: "Отчёт куратора", short: "Отчёт", icon: "report" });
   }
   if (inRoles(role, MANAGEMENT_ROLES)) items.push({ to: "/admin", label: "Админка", icon: "admin" });
   return items;

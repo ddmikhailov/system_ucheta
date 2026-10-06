@@ -1,23 +1,24 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, api } from "../api/client";
+import { ApiError, api, downloadFile } from "../api/client";
 import type { Dossier, DossierSpecial } from "../api/types";
 import { todayIso } from "../utils/date";
 import StudentDossier from "./StudentDossier";
 
 vi.mock("../api/client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api/client")>();
-  return { ...actual, api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn() } };
+  return { ...actual, api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn() }, downloadFile: vi.fn() };
 });
 
 const get = vi.mocked(api.get);
 const put = vi.mocked(api.put);
 const post = vi.mocked(api.post);
 const del = vi.mocked(api.delete);
+const download = vi.mocked(downloadFile);
 
 const SPECIAL: DossierSpecial = {
-  is_orphan: false, under_guardianship: false, disability_group: null, has_ovz: false, large_family: false,
+  is_orphan: false, under_guardianship: false, disability_group: null, has_ovz: false, large_family: false, incomplete_family: null, dysfunctional_family: false, parent_disabled: false,
   low_income: false, pdn_kdn: false, internal_record: false, scholarship: null, health_note: null,
 };
 
@@ -26,7 +27,7 @@ function dossier(over: Partial<Dossier> = {}): Dossier {
     student_id: 10,
     profile: {
       birth_date: null, gender: null, funding: null, phone: null, email: null, messenger: null,
-      registration_address: null, residence_address: null, additional_education: null,
+      registration_address: null, residence_address: null, additional_education: null, birth_place: null, previous_education: null, enrollment_order: null,
     },
     special: { ...SPECIAL },
     special_available: true,
@@ -79,6 +80,37 @@ describe("StudentDossier — профиль", () => {
       special: expect.objectContaining({ is_orphan: true, disability_group: "3", health_note: "астма" }),
     }));
     expect(await screen.findByText("Досье сохранено")).toBeInTheDocument();
+  });
+
+  it("признаки семьи для социального паспорта: неполная семья выбирается из списка, «нет» — null", async () => {
+    const user = userEvent.setup();
+    open(dossier());
+    await user.selectOptions(await screen.findByLabelText("Неполная семья"), "divorce");
+    await user.click(screen.getByLabelText("Неблагополучная семья"));
+    await user.click(screen.getByLabelText("Родитель — инвалид"));
+    put.mockResolvedValue(dossier());
+    await user.click(screen.getByRole("button", { name: "Сохранить досье" }));
+    expect((put.mock.calls[0][1] as { special: object }).special).toMatchObject({ incomplete_family: "divorce", dysfunctional_family: true, parent_disabled: true });
+
+    await user.selectOptions(screen.getByLabelText("Неполная семья"), "");
+    await user.click(screen.getByRole("button", { name: "Сохранить досье" }));
+    expect((put.mock.calls[1][1] as { special: { incomplete_family: unknown } }).special.incomplete_family).toBeNull();
+  });
+
+  it("поля личной карточки сохраняются в досье, а кнопка открывает окно выбора полей карточки", async () => {
+    const user = userEvent.setup();
+    open(dossier());
+    await user.type(await screen.findByLabelText("Место рождения"), "г. Тестоград");
+    await user.type(screen.getByLabelText(/Приказ о зачислении/), "№ 5 от 25.08.2025");
+    await user.type(screen.getByLabelText(/Образование до поступления/), "11 классов, 2025 год");
+    put.mockResolvedValue(dossier());
+    await user.click(screen.getByRole("button", { name: "Сохранить досье" }));
+    expect(put).toHaveBeenCalledWith("/students/10/dossier/profile", expect.objectContaining({
+      birth_place: "г. Тестоград", enrollment_order: "№ 5 от 25.08.2025", previous_education: "11 классов, 2025 год",
+    }));
+
+    await user.click(await screen.findByRole("button", { name: "Личная карточка в Word" }));
+    expect(await screen.findByRole("dialog", { name: "Личная карточка в Word" })).toBeInTheDocument();
   });
 
   it("пол: показывается сохранённый, выбирается из двух значений и уходит на сервер; «не указан» — null", async () => {
@@ -199,7 +231,7 @@ describe("StudentDossier — представители", () => {
 });
 
 describe("StudentDossier — заметки и журнал", () => {
-  const NOTE = { id: 9, kind: "call", text: "Звонок маме", author_id: 2, author_name: "Куратор К.", created_at: "2026-10-01T09:00:00", can_delete: true, occurred_on: null, follow_up_on: null, follow_up_done: false };
+  const NOTE = { id: 9, kind: "call", text: "Звонок маме", author_id: 2, author_name: "Куратор К.", created_at: "2026-10-01T09:00:00", can_delete: true, occurred_on: null, follow_up_on: null, follow_up_done: false, goal: null, participants: null, result: null };
 
   it("добавляет заметку выбранного типа", async () => {
     const user = userEvent.setup();
@@ -229,6 +261,43 @@ describe("StudentDossier — заметки и журнал", () => {
     expect(post).toHaveBeenCalledWith("/students/10/dossier/notes", {
       kind: "parent_invited", text: "Пригласили маму", occurred_on: "2026-10-02", follow_up_on: "2026-10-09",
     });
+  });
+
+  it("для беседы можно указать цель, присутствовавших и итог — они уходят на сервер; для инцидента этих полей нет", async () => {
+    const user = userEvent.setup();
+    open(dossier());
+    await screen.findByText("Заметок пока нет.");
+    const form = noteForm();
+    await user.selectOptions(within(form).getByRole("combobox"), "incident");
+    expect(within(form).queryByText(/Для протокола беседы/)).not.toBeInTheDocument();
+    await user.selectOptions(within(form).getByRole("combobox"), "conversation");
+    await user.click(within(form).getByText(/Для протокола беседы/));
+    await user.type(screen.getByPlaceholderText(/Что произошло/), "Обсудили пропуски");
+    await user.type(within(form).getByLabelText("Цель беседы"), "Выяснить причины");
+    await user.type(within(form).getByLabelText(/Присутствовали/), "Мать, Иванова М.{Enter}Куратор");
+    await user.type(within(form).getByLabelText("Итог беседы"), "Договорились");
+    post.mockResolvedValue({});
+    await user.click(within(form).getByRole("button", { name: "Добавить" }));
+    expect(post).toHaveBeenCalledWith("/students/10/dossier/notes", {
+      kind: "conversation", text: "Обсудили пропуски", occurred_on: todayIso(),
+      goal: "Выяснить причины", participants: "Мать, Иванова М.\nКуратор", result: "Договорились",
+    });
+  });
+
+  it("«Протокол в Word» есть у беседы и скачивает файл; у инцидента кнопки нет", async () => {
+    const user = userEvent.setup();
+    download.mockResolvedValue(undefined);
+    const talk = { ...NOTE, id: 21, kind: "conversation", text: "Беседа с мамой", occurred_on: "2026-10-01", goal: "Пропуски", participants: "Мать\nКуратор", result: "Справки" };
+    const incident = { ...NOTE, id: 22, kind: "incident", text: "Конфликт", occurred_on: "2026-10-02" };
+    open(dossier({ notes: [talk, incident] }));
+    const row = (await screen.findByText("Беседа с мамой")).closest("tr") as HTMLElement;
+    expect(within(row).getByText("Цель: Пропуски")).toBeInTheDocument();
+    expect(within(row).getByText("Присутствовали: Мать; Куратор")).toBeInTheDocument();
+    expect(within(row).getByText("Итог: Справки")).toBeInTheDocument();
+    await user.click(within(row).getByRole("button", { name: "Протокол в Word" }));
+    expect(download).toHaveBeenCalledWith("/students/10/dossier/notes/21/protocol", "Протокол_беседы_2026-10-01.docx");
+    const incidentRow = screen.getByText("Конфликт").closest("tr") as HTMLElement;
+    expect(within(incidentRow).queryByRole("button", { name: "Протокол в Word" })).not.toBeInTheDocument();
   });
 
   it("в списке: дата события, срок возврата с пометкой просрочки, «Выполнено» и «Вернуть в работу»", async () => {

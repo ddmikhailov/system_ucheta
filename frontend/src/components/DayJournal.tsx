@@ -11,6 +11,7 @@ import { formatServerDateTime, todayIso } from "../utils/date";
 import SearchSelect from "./SearchSelect";
 import { dialogs } from "../utils/feedback";
 import GroupListModal from "./GroupListModal";
+import StudentCardModal from "./StudentCardModal";
 import GroupRhythm from "./GroupRhythm";
 
 // Раньше подсказка точки в полоске месяца была просто ISO-датой (см. TODO.md 4).
@@ -62,6 +63,7 @@ export default function DayJournal({
   const [groups, setGroups] = useState<JournalGroup[]>([]);
   const [groupId, setGroupId] = useState<number | null>(deepLinkGroupId ? Number(deepLinkGroupId) : null);
   const [listOpen, setListOpen] = useState(false);
+  const [cardsOpen, setCardsOpen] = useState(false);
   const [date, setDate] = useState(deepLinkDate ?? todayIso());
   const [roster, setRoster] = useState<RosterResponse | null>(null);
   const [markCodes, setMarkCodes] = useState<MarkCodeOption[]>([]);
@@ -256,6 +258,9 @@ export default function DayJournal({
           <button type="button" className="link-btn" onClick={() => setListOpen(true)} title="Список группы для печати (Word): выберите столбцы">
             Список для печати
           </button>
+          <button type="button" className="link-btn" onClick={() => setCardsOpen(true)} title="Личные карточки всей группы в Word (бланк колледжа): выберите поля">
+            Личные карточки
+          </button>
         </div>
 
         <div className="month-strip">
@@ -401,6 +406,15 @@ export default function DayJournal({
           groupId={groupId}
           groupCode={(groups.find((g) => g.id === groupId)?.label ?? "").split(" ")[0]}
           onClose={() => setListOpen(false)}
+        />
+      )}
+
+      {cardsOpen && groupId !== null && (
+        <StudentCardModal
+          endpoint={`/curator/groups/${groupId}/cards`}
+          heading={`Личные карточки группы ${(groups.find((g) => g.id === groupId)?.label ?? "").split(" ")[0]}`}
+          filename={`Личные_карточки_${(groups.find((g) => g.id === groupId)?.label ?? "").split(" ")[0]}.docx`}
+          onClose={() => setCardsOpen(false)}
         />
       )}
 

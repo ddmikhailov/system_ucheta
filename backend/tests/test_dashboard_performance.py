@@ -58,6 +58,7 @@ def busy(imported, db, today):
 
 def test_day_stats_bulk_matches_per_group_calculation(busy, db, today):
     groups, days = busy
+    had_data = False
     for day in (days[0], days[2], days[4]):
         bulk = stats_service.compute_day_stats_bulk(db, day, [g.id for g in groups])
         for group in groups:
@@ -66,7 +67,9 @@ def test_day_stats_bulk_matches_per_group_calculation(busy, db, today):
             assert (fast.in_list, fast.absent_total, fast.absent_excused, fast.absent_unexcused, fast.late, fast.by_code) == (
                 slow.in_list, slow.absent_total, slow.absent_excused, slow.absent_unexcused, slow.late, slow.by_code,
             ), f"{group.code} {day}"
-        assert any(b.in_list for b in bulk.values()) and any(b.absent_total for b in bulk.values())  # данные не пустые
+        had_data = had_data or any(b.absent_total for b in bulk.values())
+    # данные не пустые хотя бы в один из дней (какие из трёх дней выходные — зависит от дня недели запуска)
+    assert had_data
 
 
 def test_dynamics_fast_path_matches_per_day_for_college_department_and_course(busy, db, today):

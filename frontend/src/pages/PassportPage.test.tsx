@@ -162,6 +162,15 @@ describe("PassportPage — паспорт группы", () => {
     expect(download).toHaveBeenCalledWith("/passport/export?group_id=1", "social_passport.xlsx");
   });
 
+  it("паспорт группы выгружается в Word по бланку колледжа", async () => {
+    const user = userEvent.setup();
+    mockApi();
+    renderPage(<PassportPage />, { route: "/passport?group=1", role: "curator" });
+    await screen.findByRole("heading", { name: /Социальный паспорт группы СА172/ });
+    await user.click(screen.getByRole("button", { name: /Экспорт в Word/ }));
+    expect(download).toHaveBeenCalledWith("/passport/group/1/docx", "Социальный_паспорт_СА172.docx");
+  });
+
   it("не показывает чужой паспорт, пока грузится нужный", async () => {
     mockApi({ group: groupPassport({ group_id: 99, group_code: "ЧУЖАЯ" }) });
     renderPage(<PassportPage />, { route: "/passport?group=1", role: "admin" });

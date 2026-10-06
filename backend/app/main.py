@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routers import admin, auth, curator, dashboards, dossier, dossier_import, export, individual_work, my_day, notifications, passport, students, tasks
+from app.api.routers import admin, auth, curator, dashboards, dossier, dossier_import, export, individual_work, my_day, notifications, passport, students, tasks, events, meetings, reports
 from app.core.config import get_settings
 from app.core.observability import init_sentry
 from app.core.rate_limit import client_ip
@@ -88,6 +88,9 @@ app.include_router(export.router)
 app.include_router(notifications.router)
 app.include_router(students.router)
 app.include_router(dossier.router)
+app.include_router(events.router)
+app.include_router(meetings.router)
+app.include_router(reports.router)
 app.include_router(dossier_import.router)
 app.include_router(individual_work.router)
 app.include_router(my_day.router)

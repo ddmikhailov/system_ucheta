@@ -14,6 +14,9 @@ export interface DossierProfile {
   registration_address: string | null;
   residence_address: string | null;
   additional_education: string | null;
+  birth_place: string | null;
+  previous_education: string | null;
+  enrollment_order: string | null;
 }
 
 export interface DossierSpecial {
@@ -22,7 +25,10 @@ export interface DossierSpecial {
   disability_group: string | null;
   has_ovz: boolean;
   large_family: boolean;
+  incomplete_family: "loss" | "divorce" | "single_mother" | null;
   low_income: boolean;
+  dysfunctional_family: boolean;
+  parent_disabled: boolean;
   pdn_kdn: boolean;
   internal_record: boolean;
   scholarship: string | null;
@@ -48,6 +54,9 @@ export interface DossierNote {
   occurred_on: string | null;
   follow_up_on: string | null;
   follow_up_done: boolean;
+  goal: string | null;
+  participants: string | null;
+  result: string | null;
 }
 
 export interface IndividualWorkRow {
@@ -717,4 +726,100 @@ export interface TaskSummary {
   groups: number;
   answers: number;
   fields: TaskSummaryField[];
+}
+
+export interface PlanSection {
+  key: string;
+  title: string;
+}
+
+export interface PlanStudent {
+  id: number;
+  full_name: string;
+}
+
+export interface GroupEvent {
+  id: number;
+  study_group_id: number;
+  school_year: string;
+  section: string;
+  title: string;
+  event_date: string | null;
+  time_text: string | null;
+  responsible: string | null;
+  goal: string | null;
+  status: string;
+  result: string | null;
+  is_class_hour: boolean;
+  description: string | null;
+  attendee_ids: number[];
+}
+
+export interface GroupPlan {
+  group_id: number;
+  group_code: string;
+  school_year: string;
+  years: string[];
+  sections: PlanSection[];
+  events: GroupEvent[];
+  students: PlanStudent[];
+  can_edit: boolean;
+}
+
+export interface ParentMeeting {
+  id: number;
+  study_group_id: number;
+  school_year: string;
+  number: number;
+  meeting_date: string | null;
+  agenda: string | null;
+  staff: string | null;
+  speakers: string | null;
+  meeting_format: string;
+  parents_count: number | null;
+  listened: string | null;
+  resolved: string | null;
+  attendee_ids: number[];
+}
+
+export interface MeetingGuardian {
+  id: number;
+  full_name: string;
+  relation: string;
+  student_name: string;
+}
+
+export interface GroupMeetings {
+  group_id: number;
+  school_year: string;
+  meetings: ParentMeeting[];
+  guardians: MeetingGuardian[];
+}
+
+export interface ReportField {
+  key: string;
+  label: string;
+  hint: string | null;
+  long: boolean;
+  auto: string | null;
+  value: string | null;
+}
+
+export interface ReportSection {
+  key: string;
+  title: string;
+  fields: ReportField[];
+}
+
+export interface CuratorReport {
+  group_id: number;
+  group_code: string;
+  school_year: string;
+  semester: number;
+  period_from: string;
+  period_to: string;
+  years: string[];
+  sections: ReportSection[];
+  updated_at: string | null;
+  can_edit: boolean;
 }

@@ -78,6 +78,19 @@ describe("CuratorCabinetPage — журнал дня", () => {
     expect(within(dialog).getByRole("button", { name: "Скачать .docx" })).toBeEnabled();
   });
 
+  it("«Личные карточки» открывают окно выбора полей для карточек всей группы", async () => {
+    const user = userEvent.setup();
+    mockApi(roster([entry(1, "Алексеев Пётр")]));
+    renderPage(<CuratorCabinetPage />, { role: "curator" });
+    await screen.findByText("День ещё не сдан — можно заполнить");
+
+    await user.click(screen.getByRole("button", { name: "Личные карточки" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Личная карточка в Word" });
+    expect(within(dialog).getByRole("heading", { name: "Личные карточки группы СА172" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Скачать .docx" })).toBeEnabled();
+  });
+
   it("нет закреплённых групп — подсказка", async () => {
     get.mockImplementation(async (path: string) => (path === "/curator/groups" ? [] : []));
     renderPage(<CuratorCabinetPage />, { role: "curator" });

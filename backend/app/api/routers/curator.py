@@ -16,7 +16,7 @@ from app.schemas.curator import (
     RosterResponse,
     SubmitDayRequest,
 )
-from app.services import attendance_service, calendar_service, group_list_service, my_day_service
+from app.services import attendance_service, calendar_service, group_list_service, my_day_service, student_card_service
 from app.services.audit_service import log_action
 from app.schemas.my_day import RhythmDay
 from app.services.access_service import get_curator_group_ids
@@ -276,3 +276,38 @@ def create_absence_period(
         db, student.id, mark_code.id, payload.date_from, payload.date_to, payload.basis_reference, user
     )
     return {"id": period.id}
+
+
+@router.get("/groups/{study_group_id}/cards")
+def group_cards(
+    study_group_id: int,
+    fields: str = Query(..., description="Поля карточки через запятую, например full_name,group,birth_date"),
+    blank_sections: bool = True,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Личные карточки всех студентов группы в одном Word-файле (каждая с новой страницы) по образцу колледжа.
+    Куратор выбирает поля, остальные остаются пустыми строками бланка. Доступ — как у журнала группы."""
+    today = today_local()
+    assert_can_view_group(db, user, study_group_id, today)
+    group = db.get(StudyGroup, study_group_id)
+    if group is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Группа не найдена")
+    try:
+        chosen = student_card_service.parse_fields(fields)
+    except student_card_service.UnknownField as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+    cards = student_card_service.collect(db, group, today)
+    if not cards:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "В группе нет студентов")
+    try:
+        content = student_card_service.build_docx(cards, chosen, blank_sections=blank_sections)
+    except student_card_service.TemplateMismatch as exc:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, f"Образец карточки повреждён: {exc}")
+    log_action(db, user, "group.student_cards", "study_group", str(group.id), new_value=",".join(chosen))
+    db.commit()
+    filename = f"Личные_карточки_{group.code}_{today.strftime('%d.%m.%Y')}.docx"
+    return Response(
+        content=content, media_type=DOCX_MEDIA_TYPE,
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    )

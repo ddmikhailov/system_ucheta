@@ -4,7 +4,9 @@
 отделением — своего отделения, воспитательный отдел/админ/тьютор — всех.
 Каждое открытие досье пишется в журнал просмотров; особые поля шифруются
 (app/core/field_crypto.py), журнал смотрят только admin/tutor."""
-from fastapi import APIRouter, Depends, HTTPException, status
+from urllib.parse import quote
+
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_dept_editor
@@ -33,7 +35,7 @@ from app.schemas.dossier import (
     ProfileUpdate,
     SpecialData,
 )
-from app.services import individual_work_service
+from app.services import conversation_protocol_service, individual_work_service, student_card_service
 from app.services.audit_service import log_action
 
 router = APIRouter(prefix="/students/{student_id}/dossier", tags=["dossier"])
@@ -61,7 +63,7 @@ def _note_read(n: StudentNote, user: User) -> NoteRead:
         id=n.id, kind=n.kind, text=n.text, author_id=n.author_id,
         author_name=n.author.full_name if n.author else None, created_at=n.created_at,
         can_delete=is_admin or n.author_id == user.id, occurred_on=n.occurred_on, follow_up_on=n.follow_up_on,
-        follow_up_done=n.follow_up_done,
+        follow_up_done=n.follow_up_done, goal=n.goal, participants=n.participants, result=n.result,
     )
 
 
@@ -210,6 +212,8 @@ def add_note(
     note = StudentNote(
         student_id=student.id, author_id=user.id, kind=payload.kind, text=payload.text.strip(),
         occurred_on=payload.occurred_on or today, follow_up_on=payload.follow_up_on,
+        goal=(payload.goal or "").strip() or None, participants=(payload.participants or "").strip() or None,
+        result=(payload.result or "").strip() or None,
     )
     db.add(note)
     db.commit()
@@ -268,3 +272,68 @@ def access_log(
                       created_at=r.created_at)
         for r in rows
     ]
+
+
+@router.get("/notes/{note_id}/protocol")
+def note_protocol(
+    student_id: int, note_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db),
+):
+    """Протокол беседы в Word по образцу колледжа — из заметки журнала индивидуальной работы.
+    Видят те, кому открыто досье студента (как и сами заметки); выгрузка пишется в журнал аудита."""
+    student = _student(db, user, student_id)
+    note = db.get(StudentNote, note_id)
+    if note is None or note.student_id != student.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Запись не найдена")
+    if note.kind not in conversation_protocol_service.PROTOCOL_KINDS:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Протокол составляется для беседы, звонка, приглашения родителей и договорённости")
+    today = today_local()
+    group = student.study_group
+    curator_name = next(
+        (a.user.full_name for a in group.curator_assignments
+         if a.role_type.value == "curator" and a.is_active_on(today) and a.user.is_active), None,
+    )
+    try:
+        content = conversation_protocol_service.build_docx(
+            note=note, student_name=student.full_name, group_code=group.code, curator_name=curator_name,
+        )
+    except conversation_protocol_service.TemplateMismatch as exc:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, f"Образец протокола повреждён: {exc}")
+    when = (note.occurred_on or note.created_at.date()).strftime("%d.%m.%Y")
+    filename = f"Протокол_беседы_{student.last_name}_{when}.docx"
+    log_action(db, user, "dossier.note_protocol", "student", str(student.id), new_value=str(note.id))
+    db.commit()
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    )
+
+
+@router.get("/card")
+def student_card(
+    student_id: int, fields: str, blank_sections: bool = True,
+    user: User = Depends(get_current_user), db: Session = Depends(get_db),
+):
+    """Личная карточка студента в Word по образцу колледжа: куратор выбирает поля (`fields`), остальные остаются
+    пустыми строками бланка; `blank_sections` — оставить ли разделы учебной части (оценки, практики, ГИА).
+    Особые категории досье в карточку не входят."""
+    student = _student(db, user, student_id)
+    try:
+        chosen = student_card_service.parse_fields(fields)
+    except student_card_service.UnknownField as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+    cards = student_card_service.collect(db, student.study_group, today_local(), only_student_id=student.id)
+    if not cards:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Студент не числится в группе")
+    try:
+        content = student_card_service.build_docx(cards, chosen, blank_sections=blank_sections)
+    except student_card_service.TemplateMismatch as exc:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, f"Образец карточки повреждён: {exc}")
+    filename = f"Личная_карточка_{student.last_name}.docx"
+    log_action(db, user, "dossier.student_card", "student", str(student.id), new_value=",".join(chosen))
+    db.commit()
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    )

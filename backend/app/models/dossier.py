@@ -23,6 +23,9 @@ class StudentProfile(Base):
     messenger: Mapped[str | None] = mapped_column(String(128), nullable=True)
     registration_address: Mapped[str | None] = mapped_column(String(512), nullable=True)
     residence_address: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    birth_place: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    previous_education: Mapped[str | None] = mapped_column(String(500), nullable=True)  # «11 классов, 2025 год, школа»
+    enrollment_order: Mapped[str | None] = mapped_column(String(128), nullable=True)  # «№ 133-5/лу от 25.08.2023»
     additional_education: Mapped[str | None] = mapped_column(String(1000), nullable=True)  # заполняют задачи
     special_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
@@ -54,6 +57,10 @@ class StudentNote(Base):
     occurred_on: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
     follow_up_on: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
     follow_up_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    # Для протокола беседы (Word): цель, кто присутствовал (по одному в строке: «ФИО, должность»), итог.
+    goal: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    participants: Mapped[str | None] = mapped_column(Text, nullable=True)
+    result: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     author: Mapped["User"] = relationship()
 

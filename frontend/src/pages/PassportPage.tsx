@@ -108,11 +108,12 @@ export default function PassportPage() {
       .catch((err) => setError(err instanceof ApiError ? err.message : "Не удалось загрузить паспорт группы"));
   }, [groupId]);
 
-  function exportExcel(path: string) {
-    downloadFile(path, "social_passport.xlsx").catch((err) =>
+  function exportFile(path: string, filename: string) {
+    downloadFile(path, filename).catch((err) =>
       setError(err instanceof ApiError ? err.message : "Не удалось скачать файл")
     );
   }
+  const exportExcel = (path: string) => exportFile(path, "social_passport.xlsx");
 
   // Паспорт прошлой группы не показываем, пока грузится новый.
   const shown = passport && String(passport.group_id) === groupId ? passport : null;
@@ -127,7 +128,13 @@ export default function PassportPage() {
         </p>
         {error && <div className="error-text">{error}</div>}
         {shown === null && !error && <p className="hint">Загрузка…</p>}
-        {shown && <GroupView passport={shown} onExport={() => exportExcel(`/passport/export?group_id=${groupId}`)} />}
+        {shown && (
+          <GroupView
+            passport={shown}
+            onExport={() => exportExcel(`/passport/export?group_id=${groupId}`)}
+            onExportWord={() => exportFile(`/passport/group/${groupId}/docx`, `Социальный_паспорт_${shown.group_code}.docx`)}
+          />
+        )}
       </div>
     );
   }
@@ -212,7 +219,7 @@ export default function PassportPage() {
   );
 }
 
-function GroupView({ passport: p, onExport }: { passport: GroupPassport; onExport: () => void }) {
+function GroupView({ passport: p, onExport, onExportWord }: { passport: GroupPassport; onExport: () => void; onExportWord: () => void }) {
   const { user } = useAuth();
   const technical = inRoles(user?.role, DOSSIER_AUDIT_ROLES);
   return (
@@ -221,9 +228,14 @@ function GroupView({ passport: p, onExport }: { passport: GroupPassport; onExpor
         <h2>
           Социальный паспорт группы {p.group_code}
         </h2>
-        <button className="link-btn" onClick={onExport}>
-          Экспорт в Excel
-        </button>
+        <div className="toolbar">
+          <button className="link-btn" onClick={onExportWord} title="Бланк колледжа: направления профиля, шапка и подписи — можно распечатать или править в Word">
+            Экспорт в Word (бланк колледжа)
+          </button>
+          <button className="link-btn" onClick={onExport}>
+            Экспорт в Excel
+          </button>
+        </div>
       </div>
       <dl className="student-card__grid">
         <Item label="Отделение" value={p.department_name} />
