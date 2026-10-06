@@ -296,3 +296,25 @@ def test_groups_are_hidden_after_registry_or_curators_but_not_otherwise(recorded
     recorded["steps"].clear()
     entrypoint.main({"IMPORT_DATA_DIR": str(tmp_path)})
     assert not any("scripts.hide_groups" in s for s, _ in recorded["steps"])
+
+
+def test_attendance_import_dry_and_commit_modes(recorded, tmp_path):
+    (tmp_path / entrypoint.ATTENDANCE_FILE).write_text("x", encoding="utf-8")
+    path = str(tmp_path / entrypoint.ATTENDANCE_FILE)
+
+    entrypoint.main({"IMPORT_ATTENDANCE_ON_START": "dry", "IMPORT_DATA_DIR": str(tmp_path)})
+    entrypoint.main({"IMPORT_ATTENDANCE_ON_START": "true", "IMPORT_DATA_DIR": str(tmp_path)})
+
+    steps = [s for s, _ in recorded["steps"] if "scripts.import_attendance_xlsx" in s]
+    assert steps == [
+        ["-m", "scripts.import_attendance_xlsx", path],
+        ["-m", "scripts.import_attendance_xlsx", path, "--commit"],
+    ]
+
+
+def test_attendance_import_skipped_when_disabled_or_file_missing(recorded, tmp_path):
+    (tmp_path / entrypoint.ATTENDANCE_FILE).write_text("x", encoding="utf-8")
+    entrypoint.main({"IMPORT_ATTENDANCE_ON_START": "false", "IMPORT_DATA_DIR": str(tmp_path)})
+    entrypoint.main({"IMPORT_ATTENDANCE_ON_START": "true", "IMPORT_DATA_DIR": str(tmp_path / "нет")})
+
+    assert not any("scripts.import_attendance_xlsx" in s for s, _ in recorded["steps"])

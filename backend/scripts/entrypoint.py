@@ -31,6 +31,7 @@ IS_WINDOWS = os.name == "nt"
 PERSISTENT_IMPORT_DIR = Path("/data/import")
 IMPORT_FILES = ("students.csv", "curators.csv", "groups.csv")
 REGISTRY_FILE = "registry.xlsx"
+ATTENDANCE_FILE = "attendance.xlsx"
 CURATORS_FILE_PREFIX = "curators_"  # curators_<Отделение>.tsv
 CURATORS_UNIFIED_FILE = "curators.tsv"  # ФИО, группа, отделение
 PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
@@ -171,6 +172,23 @@ def registry_file_if_enabled(environ: Mapping[str, str]) -> str | None:
     return path
 
 
+def attendance_import_if_enabled(environ: Mapping[str, str]) -> tuple[str, bool] | None:
+    """Актуализация посещаемости из attendance.xlsx (scripts.import_attendance_xlsx):
+    IMPORT_ATTENDANCE_ON_START=dry — пробный прогон (отчёт в логах, ничего не пишется),
+    =true — запись со стиранием старых отметок. Разовая: после запуска переменную убрать.
+    Возвращает (путь, записывать ли) или None."""
+    mode = environ.get("IMPORT_ATTENDANCE_ON_START", "false")
+    if mode not in ("dry", "true"):
+        return None
+    import_dir = environ.get("IMPORT_DATA_DIR") or default_import_dir()
+    path = os.path.join(import_dir, ATTENDANCE_FILE)
+    if not os.path.isfile(path):
+        log(f"IMPORT_ATTENDANCE_ON_START={mode}, но файла {path} нет — актуализация посещаемости пропущена.")
+        return None
+    log(f"IMPORT_ATTENDANCE_ON_START={mode} — посещаемость из {path} ({'запись' if mode == 'true' else 'пробный прогон'})...")
+    return path, mode == "true"
+
+
 def curator_lists_if_enabled(environ: Mapping[str, str]) -> list[tuple[str, str | None]]:
     """Списки кураторов (scripts.import_curators): единый curators.tsv с
     колонкой отделения и/или файлы curators_<Отделение>.tsv рядом с выгрузками
@@ -237,6 +255,11 @@ def main(environ: Mapping[str, str] = os.environ) -> None:
     if registry_path is not None or curator_lists:
         log("Скрытие групп со строчной «о» в коде...")
         run_step("-m", "scripts.hide_groups", "--apply")
+
+    attendance = attendance_import_if_enabled(environ)
+    if attendance is not None:
+        attendance_path, commit = attendance
+        run_step("-m", "scripts.import_attendance_xlsx", attendance_path, *(["--commit"] if commit else []))
 
     log("Запуск приложения...")
     port = str(int(environ.get("PORT") or "8000"))
