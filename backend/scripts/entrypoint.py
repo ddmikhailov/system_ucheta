@@ -192,6 +192,27 @@ def attendance_import_if_enabled(environ: Mapping[str, str]) -> tuple[str, bool]
     return path, mode == "true"
 
 
+def schedule_import_if_enabled(environ: Mapping[str, str]) -> tuple[str, bool] | None:
+    """Заполнение «к какой паре пришла группа» из выгрузок расписания
+    (scripts.import_first_period_schedule): xlsx лежат в папке schedule рядом с
+    импортом или в /data/schedule. IMPORT_SCHEDULE_ON_START=dry — пробный прогон,
+    =true — запись (только пустые пары). Разовая: после запуска переменную убрать.
+    Возвращает (папка, записывать ли) или None."""
+    mode = environ.get("IMPORT_SCHEDULE_ON_START", "false")
+    if mode not in ("dry", "true"):
+        return None
+    import_dir = environ.get("IMPORT_DATA_DIR") or default_import_dir()
+    candidates = [os.path.join(import_dir, "schedule")]
+    if Path(import_dir) == PERSISTENT_IMPORT_DIR:
+        candidates.append(str(PERSISTENT_IMPORT_DIR.parent / "schedule"))
+    for folder in candidates:
+        if os.path.isdir(folder) and any(n.endswith(".xlsx") for n in os.listdir(folder)):
+            log(f"IMPORT_SCHEDULE_ON_START={mode} — расписание из {folder} ({'запись' if mode == 'true' else 'пробный прогон'})...")
+            return folder, mode == "true"
+    log(f"IMPORT_SCHEDULE_ON_START={mode}, но xlsx-файлов нет в {', '.join(candidates)} — заполнение пар пропущено.")
+    return None
+
+
 def curator_lists_if_enabled(environ: Mapping[str, str]) -> list[tuple[str, str | None]]:
     """Списки кураторов (scripts.import_curators): единый curators.tsv с
     колонкой отделения и/или файлы curators_<Отделение>.tsv рядом с выгрузками
@@ -263,6 +284,11 @@ def main(environ: Mapping[str, str] = os.environ) -> None:
     if attendance is not None:
         attendance_path, commit = attendance
         run_step("-m", "scripts.import_attendance_xlsx", attendance_path, *(["--commit"] if commit else []))
+
+    schedule = schedule_import_if_enabled(environ)
+    if schedule is not None:
+        schedule_dir, commit = schedule
+        run_step("-m", "scripts.import_first_period_schedule", schedule_dir, *(["--commit"] if commit else []))
 
     log("Запуск приложения...")
     port = str(int(environ.get("PORT") or "8000"))

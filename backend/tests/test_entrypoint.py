@@ -329,3 +329,19 @@ def test_attendance_file_found_directly_in_data_dir(tmp_path, monkeypatch):
     result = entrypoint.attendance_import_if_enabled({"IMPORT_ATTENDANCE_ON_START": "true"})
 
     assert result == (str(data / entrypoint.ATTENDANCE_FILE), True)
+
+
+def test_schedule_import_modes_and_missing_folder(recorded, tmp_path):
+    folder = tmp_path / "schedule"
+    folder.mkdir()
+    (folder / "r.xlsx").write_text("x", encoding="utf-8")
+
+    entrypoint.main({"IMPORT_SCHEDULE_ON_START": "dry", "IMPORT_DATA_DIR": str(tmp_path)})
+    entrypoint.main({"IMPORT_SCHEDULE_ON_START": "true", "IMPORT_DATA_DIR": str(tmp_path)})
+    entrypoint.main({"IMPORT_SCHEDULE_ON_START": "true", "IMPORT_DATA_DIR": str(tmp_path / "нет")})
+
+    steps = [s for s, _ in recorded["steps"] if "scripts.import_first_period_schedule" in s]
+    assert steps == [
+        ["-m", "scripts.import_first_period_schedule", str(folder)],
+        ["-m", "scripts.import_first_period_schedule", str(folder), "--commit"],
+    ]
