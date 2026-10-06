@@ -63,5 +63,36 @@ def test_dry_run_and_unknown_group_write_nothing(db, curator_group, curator_user
 
     report = importer.load(db, [str(path)], commit=False)
 
-    assert report["groups_not_found"] == ["НЕТ-00"]
+    assert report["groups_not_found"] == ["НЕТ"]
     assert db.query(DaySubmission).filter_by(study_group_id=curator_group.id).one().first_period is None
+
+
+def _write_landscape(path, group_code, lessons_by_day):
+    """Вторая форма выгрузки: дни по строкам, группы по колонкам (блок — 4 колонки)."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "01.09.2026-06.09.2026"
+    for _ in range(3):
+        ws.append([])
+    ws.append(["День недели", "Занятие", "Урок", "Дисциплина"])
+    ws.append([])
+    ws.append([None, "№", "№", group_code])
+    ws.append([])
+    for day in sorted(lessons_by_day):
+        for lesson in range(1, 13):
+            row = [None, None, str(lesson), None]
+            if lesson == 1:
+                row[0] = f"{day:%d.%m.%Y}  ВТОР"
+            if (lesson + 1) // 2 in lessons_by_day[day]:
+                row[3] = "Дисциплина"
+            ws.append(row)
+    wb.save(path)
+
+
+def test_landscape_layout_and_year_suffix(tmp_path):
+    p1, p2 = tmp_path / "a.xlsx", tmp_path / "b.xlsx"
+    _write_landscape(p1, "ИИ112", {D1: {3}, D2: {1, 2}})
+    _write_schedule(p2, "ИИ112-26", {D1: {2}})
+
+    assert importer.read_schedule(str(p1)) == {("ИИ112", D1): 3, ("ИИ112", D2): 1}
+    assert importer.read_schedule(str(p2)) == {("ИИ112", D1): 2}

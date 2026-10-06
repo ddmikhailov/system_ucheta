@@ -27,13 +27,18 @@ from app.models import DaySubmission, StudyGroup
 SHEET = "Текущее расписание"
 HEADER_ROW = 3  # индекс строки с датами (нумерация с нуля)
 FIRST_DATA_ROW = 8
+GROUP_ROW = 5  # во второй форме: строка с кодами групп
+LANDSCAPE_BLOCK = 4  # колонок на группу: подгруппа 1, 2, пустая, «Ауд.»
 DISCIPLINE_COLUMNS = 3  # в блоке дня: подгруппа 1, подгруппа 2, затем «Ауд.» — её не считаем
 
 
-def read_schedule(path: str) -> dict[tuple[str, datetime.date], int]:
-    """(код группы, дата) -> первая пара дня, на которой есть занятие."""
-    ws = openpyxl.load_workbook(path, data_only=True)[SHEET]
-    rows = list(ws.iter_rows(values_only=True))
+def normalize_group_code(raw: str) -> str:
+    """В поздних выгрузках к коду добавлен год набора («ИИ112-26») — в базе код без него."""
+    return re.sub(r"-\d{2}$", "", str(raw).strip())
+
+
+def _first_pair_portrait(rows) -> dict[tuple[str, datetime.date], int]:
+    """Группы по строкам, дни по колонкам (лист «Текущее расписание»)."""
     days = []
     for col, value in enumerate(rows[HEADER_ROW]):
         m = re.match(r"(\d{2})\.(\d{2})\.(\d{4})", str(value or ""))
@@ -44,7 +49,7 @@ def read_schedule(path: str) -> dict[tuple[str, datetime.date], int]:
     group = None
     for row in rows[FIRST_DATA_ROW:]:
         if row[0]:
-            group = str(row[0]).strip()
+            group = normalize_group_code(row[0])
         if not group or row[2] is None:
             continue
         pair = (int(row[2]) + 1) // 2  # урок 1–2 — первая пара, 3–4 — вторая…
@@ -53,6 +58,38 @@ def read_schedule(path: str) -> dict[tuple[str, datetime.date], int]:
                 key = (group, day)
                 first[key] = min(pair, first.get(key, pair))
     return first
+
+
+def _first_pair_landscape(rows) -> dict[tuple[str, datetime.date], int]:
+    """Дни по строкам, группы по колонкам (первый лист, коды групп в 6-й строке)."""
+    starts = [
+        (col, normalize_group_code(v)) for col, v in enumerate(rows[GROUP_ROW])
+        if col >= 3 and v and str(v).strip() != "Группа:"
+    ]
+    width = starts[1][0] - starts[0][0] if len(starts) > 1 else LANDSCAPE_BLOCK
+    first: dict[tuple[str, datetime.date], int] = {}
+    day = None
+    for row in rows[FIRST_DATA_ROW - 1:]:
+        m = re.match(r"(\d{2})\.(\d{2})\.(\d{4})", str(row[0] or ""))
+        if m:
+            day = datetime.date(int(m[3]), int(m[2]), int(m[1]))
+        if day is None or row[2] is None:
+            continue
+        pair = (int(row[2]) + 1) // 2
+        for col, group in starts:
+            if any(col + k < len(row) and row[col + k] not in (None, "") for k in range(min(DISCIPLINE_COLUMNS, width))):
+                key = (group, day)
+                first[key] = min(pair, first.get(key, pair))
+    return first
+
+
+def read_schedule(path: str) -> dict[tuple[str, datetime.date], int]:
+    """(код группы, дата) -> первая пара дня, на которой есть занятие.
+    Понимает обе формы выгрузки: «группы по строкам» и «группы по колонкам»."""
+    wb = openpyxl.load_workbook(path, data_only=True)
+    if SHEET in wb.sheetnames:
+        return _first_pair_portrait(list(wb[SHEET].iter_rows(values_only=True)))
+    return _first_pair_landscape(list(wb.worksheets[0].iter_rows(values_only=True)))
 
 
 def collect_files(paths: list[str]) -> list[str]:
@@ -64,8 +101,11 @@ def collect_files(paths: list[str]) -> list[str]:
 
 def load(db, paths: list[str], commit: bool, overwrite: bool = False) -> dict:
     schedule: dict[tuple[str, datetime.date], int] = {}
-    for path in collect_files(paths):
-        schedule.update(read_schedule(path))  # более поздний файл важнее
+    parts = [read_schedule(path) for path in collect_files(paths)]
+    # Выгрузки за разные периоды пересекаются; узкая (например, 3 дня внутри недели) —
+    # это уточнение, поэтому применяем её последней.
+    for part in sorted(parts, key=lambda x: -len({d for _, d in x})):
+        schedule.update(part)
     report = {"updated": 0, "unchanged": 0, "kept_existing": 0, "not_submitted": 0, "groups_not_found": []}
     groups = {g.code: g for g in db.query(StudyGroup)}
     missing = set()
