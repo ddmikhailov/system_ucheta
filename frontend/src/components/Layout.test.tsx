@@ -155,7 +155,7 @@ describe("Layout — заголовок страницы", () => {
   it("на каждой странице есть один заголовок первого уровня для экранного диктора и название вкладки", () => {
     renderPage(<Layout><div>содержимое</div></Layout>, { role: "curator", route: "/cabinet" });
     expect(screen.getByRole("heading", { level: 1, name: "Мои группы" })).toBeInTheDocument();
-    expect(document.title).toBe("Мои группы — КАИТ-20");
+    expect(document.title).toBe("Мои группы — Цифровой куратор");
   });
 
   it("названия по адресам, включая вложенные", async () => {
@@ -166,6 +166,6 @@ describe("Layout — заголовок страницы", () => {
     expect(pageTitle("/students")).toBe("Студенты");
     expect(pageTitle("/students/12")).toBe("Карточка студента");
     expect(pageTitle("/passport")).toBe("Социальный паспорт");
-    expect(pageTitle("/что-то-другое")).toBe("КАИТ-20");
+    expect(pageTitle("/что-то-другое")).toBe("Цифровой куратор");
   });
 });

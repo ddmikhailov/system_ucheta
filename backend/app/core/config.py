@@ -18,7 +18,7 @@ _INSECURE_JWT_SECRETS = {
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    app_name: str = "КАИТ-20 Учёт посещаемости"
+    app_name: str = "Цифровой куратор"
     # По умолчанию — "production" (fail-safe): если забыть выставить
     # переменную окружения на проде, Swagger/OpenAPI останутся выключены,
     # а не наоборот. Для локальной разработки задайте ENVIRONMENT=development

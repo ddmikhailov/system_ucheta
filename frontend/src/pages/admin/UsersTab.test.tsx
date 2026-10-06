@@ -52,7 +52,7 @@ const row = (name: string) => screen.getByText(name).closest("tr") as HTMLElemen
 describe("UsersTab — список", () => {
   it("показывает ФИО, логин, роль, отделение и статус; архивные скрыты под кнопкой", async () => {
     const user = userEvent.setup();
-    renderPage(<UsersTab canEdit canCreate />, { role: "admin", user: { id: 1 } });
+    renderPage(<UsersTab canCreate />, { role: "admin", user: { id: 1 } });
     await screen.findByText("Иванова Анна");
     const r = row("Иванова Анна");
     expect(within(r).getByText("user2")).toBeInTheDocument();
@@ -71,7 +71,7 @@ describe("UsersTab — список", () => {
       user(3, "Ждёт Смены", { must_change_password: true }),
       user(4, "Заблокирован Зуев", { is_locked: true }),
     ];
-    renderPage(<UsersTab canEdit canCreate />, { role: "admin" });
+    renderPage(<UsersTab canCreate />, { role: "admin" });
     await screen.findByText("Без Пароля");
     expect(within(row("Без Пароля")).getByText("нет пароля")).toBeInTheDocument();
     expect(within(row("Ждёт Смены")).getByText("ждёт смены пароля")).toBeInTheDocument();
@@ -80,7 +80,7 @@ describe("UsersTab — список", () => {
 
   it("поиск по ФИО, фильтры по роли и по отделению", async () => {
     const u = userEvent.setup();
-    renderPage(<UsersTab canEdit canCreate />, { role: "admin" });
+    renderPage(<UsersTab canCreate />, { role: "admin" });
     await screen.findByText("Иванова Анна");
     await u.type(screen.getByPlaceholderText("Поиск по ФИО"), "петров");
     expect(screen.getByText("Петров Пётр")).toBeInTheDocument();
@@ -100,7 +100,7 @@ describe("UsersTab — список", () => {
   it("страницы по 15: переключение и возврат на допустимую страницу, когда фильтр сократил список", async () => {
     const u = userEvent.setup();
     users = Array.from({ length: 20 }, (_, i) => user(100 + i, `Пользователь ${String(i).padStart(2, "0")}`));
-    renderPage(<UsersTab canEdit canCreate />, { role: "admin" });
+    renderPage(<UsersTab canCreate />, { role: "admin" });
     await screen.findByText("Пользователь 00");
     expect(screen.getByText("Страница 1 из 2")).toBeInTheDocument();
     expect(screen.queryByText("Пользователь 15")).not.toBeInTheDocument();
@@ -116,7 +116,7 @@ describe("UsersTab — список", () => {
   });
 
   it("без права правки ФИО — не кнопка и формы добавления нет", async () => {
-    renderPage(<UsersTab canEdit={false} canCreate={false} />, { role: "edu_department" });
+    renderPage(<UsersTab canCreate={false} />, { role: "edu_department" });
     await screen.findByText("Иванова Анна");
     expect(screen.queryByRole("button", { name: "Иванова Анна" })).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText("Логин")).not.toBeInTheDocument();
@@ -127,7 +127,7 @@ describe("UsersTab — список", () => {
       if (path === "/admin/users") throw new ApiError(403, "Недостаточно прав");
       return DEPARTMENTS;
     });
-    renderPage(<UsersTab canEdit canCreate />, { role: "admin" });
+    renderPage(<UsersTab canCreate />, { role: "admin" });
     expect(await screen.findByText("Недостаточно прав")).toBeInTheDocument();
   });
 });
@@ -142,7 +142,7 @@ describe("UsersTab — создание", () => {
     const u = userEvent.setup();
     post.mockResolvedValueOnce(user(9, "Новая Нина", { username: "nina" }));
     post.mockResolvedValueOnce({ username: "nina", password: "Tmp-Pass-123" });
-    renderPage(<UsersTab canEdit canCreate />, { role: "admin" });
+    renderPage(<UsersTab canCreate />, { role: "admin" });
     await screen.findByText("Иванова Анна");
     await fill(u);
     await u.click(screen.getByRole("button", { name: "Добавить пользователя" }));
@@ -158,7 +158,7 @@ describe("UsersTab — создание", () => {
     const u = userEvent.setup();
     post.mockResolvedValueOnce(user(9, "Новый Админ"));
     post.mockResolvedValueOnce({ username: "x", password: "p" });
-    renderPage(<UsersTab canEdit canCreate />, { role: "admin" });
+    renderPage(<UsersTab canCreate />, { role: "admin" });
     await screen.findByText("Иванова Анна");
     await fill(u, "Новый Админ", "newadmin");
     await u.selectOptions(screen.getAllByRole("combobox")[0], "admin");
@@ -167,7 +167,7 @@ describe("UsersTab — создание", () => {
   });
 
   it("список ролей зависит от того, кто создаёт: тьютор не может завести зав. отделением и админа", async () => {
-    renderPage(<UsersTab canEdit canCreate />, { role: "tutor" });
+    renderPage(<UsersTab canCreate />, { role: "tutor" });
     await screen.findByText("Иванова Анна");
     const roleSelect = screen.getAllByRole("combobox")[0];
     const options = within(roleSelect).getAllByRole("option").map((o) => o.textContent);
@@ -175,7 +175,7 @@ describe("UsersTab — создание", () => {
   });
 
   it("зав. отделением и тьютор видят в выборе только своё отделение", async () => {
-    renderPage(<UsersTab canEdit canCreate />, { role: "dept_head", user: { department_name: "Моссовет" } });
+    renderPage(<UsersTab canCreate />, { role: "dept_head", user: { department_name: "Моссовет" } });
     await screen.findByText("Иванова Анна");
     const departmentSelect = screen.getAllByRole("combobox")[1];
     expect(within(departmentSelect).getAllByRole("option").map((o) => o.textContent)).toEqual(["Моссовет"]);
@@ -184,7 +184,7 @@ describe("UsersTab — создание", () => {
   it("занятый логин — сообщение сервера, второй запрос не уходит, введённое остаётся", async () => {
     const u = userEvent.setup();
     post.mockRejectedValue(new ApiError(400, "Логин уже занят"));
-    renderPage(<UsersTab canEdit canCreate />, { role: "admin" });
+    renderPage(<UsersTab canCreate />, { role: "admin" });
     await screen.findByText("Иванова Анна");
     await fill(u, "Новая Нина", "user2");
     await u.click(screen.getByRole("button", { name: "Добавить пользователя" }));
@@ -197,7 +197,7 @@ describe("UsersTab — создание", () => {
     const u = userEvent.setup();
     post.mockResolvedValueOnce(user(9, "Новая Нина", { username: "nina", has_password: false }));
     post.mockRejectedValueOnce(new ApiError(500, "Сервер недоступен"));
-    renderPage(<UsersTab canEdit canCreate />, { role: "admin" });
+    renderPage(<UsersTab canCreate />, { role: "admin" });
     await screen.findByText("Иванова Анна");
     const loadsBefore = get.mock.calls.filter((c) => c[0] === "/admin/users").length;
     await fill(u);
@@ -208,123 +208,9 @@ describe("UsersTab — создание", () => {
   });
 });
 
-describe("UsersTab — профиль пользователя", () => {
-  async function openProfile(name: string, role = "admin", me = {}) {
-    const u = userEvent.setup();
-    renderPage(<UsersTab canEdit canCreate />, { role, user: { id: 1, ...me } });
-    await u.click(await screen.findByRole("button", { name }));
-    return { u, dialog: await screen.findByRole("dialog", { name }) };
-  }
-
-  it("сохраняет ФИО, логин, роль и отделение", async () => {
-    const { u, dialog } = await openProfile("Иванова Анна");
-    patch.mockResolvedValue({});
-    const name = within(dialog).getByDisplayValue("Иванова Анна");
-    await u.clear(name);
-    await u.type(name, "Иванова Анна Петровна");
-    await u.selectOptions(within(dialog).getAllByRole("combobox")[0], "deputy_curator");
-    await u.click(within(dialog).getByRole("button", { name: "Сохранить" }));
-    expect(patch).toHaveBeenCalledWith("/admin/users/2", {
-      username: "user2", full_name: "Иванова Анна Петровна", role: "deputy_curator", department_id: 1,
-    });
-    expect(await within(dialog).findByText("Сохранено")).toBeInTheDocument();
-  });
-
-  it("свою роль и отделение менять нельзя: поле роли заблокировано, в запросе их нет", async () => {
-    const { u, dialog } = await openProfile("Админов Админ");
-    patch.mockResolvedValue({});
-    expect(within(dialog).getByDisplayValue("Администратор")).toBeDisabled();
-    await u.click(within(dialog).getByRole("button", { name: "Сохранить" }));
-    expect(patch).toHaveBeenCalledWith("/admin/users/1", { username: "user1", full_name: "Админов Админ" });
-    expect(within(dialog).queryByRole("button", { name: "В архив" })).not.toBeInTheDocument(); // себя в архив нельзя
-  });
-
-  it("сброс пароля показывает новый пароль; для пользователя без пароля кнопка называется «Выдать пароль»", async () => {
-    users = [user(2, "Иванова Анна", { has_password: false })];
-    const { u, dialog } = await openProfile("Иванова Анна");
-    post.mockResolvedValue({ username: "user2", password: "Gen-Pass-777" });
-    await u.click(within(dialog).getByRole("button", { name: "Выдать пароль" }));
-    expect(post).toHaveBeenCalledWith("/admin/users/2/set-password", {});
-    expect(await within(dialog).findByText("Gen-Pass-777")).toBeInTheDocument();
-  });
-
-  it("свой пароль: короче 10 символов не отправляется, подходящий уходит в запрос", async () => {
-    const { u, dialog } = await openProfile("Иванова Анна");
-    await u.click(within(dialog).getByRole("button", { name: "Задать свой пароль" }));
-    const input = within(dialog).getByPlaceholderText("Свой пароль");
-    expect(input).toHaveAttribute("minlength", "10"); // как на сервере
-    await u.type(input, "ninechars");
-    await u.click(within(dialog).getByRole("button", { name: "Задать" }));
-    expect(post).not.toHaveBeenCalled(); // 9 символов — не пускает проверка длины
-
-    post.mockResolvedValue({ username: "user2", password: "LongEnough1!" });
-    await u.clear(input);
-    await u.type(input, "LongEnough1!");
-    await u.click(within(dialog).getByRole("button", { name: "Задать" }));
-    expect(post).toHaveBeenCalledWith("/admin/users/2/set-password", { password: "LongEnough1!" });
-    expect(await within(dialog).findByText("LongEnough1!")).toBeInTheDocument();
-    expect(within(dialog).queryByPlaceholderText("Свой пароль")).not.toBeInTheDocument();
-  });
-
-  it("слабый пароль — сообщение сервера", async () => {
-    const { u, dialog } = await openProfile("Иванова Анна");
-    await u.click(within(dialog).getByRole("button", { name: "Задать свой пароль" }));
-    post.mockRejectedValue(new ApiError(400, "Пароль слишком простой"));
-    await u.type(within(dialog).getByPlaceholderText("Свой пароль"), "password123");
-    await u.click(within(dialog).getByRole("button", { name: "Задать" }));
-    expect(await within(dialog).findByText("Пароль слишком простой")).toBeInTheDocument();
-  });
-
-  it("«Разблокировать» есть только у заблокированного", async () => {
-    users = [user(2, "Иванова Анна", { is_locked: true }), user(3, "Петров Пётр")];
-    const first = await openProfile("Иванова Анна");
-    post.mockResolvedValue({});
-    await first.u.click(within(first.dialog).getByRole("button", { name: "Разблокировать" }));
-    expect(post).toHaveBeenCalledWith("/admin/users/2/unlock");
-
-    await first.u.click(within(first.dialog).getByRole("button", { name: "Закрыть" }));
-    await first.u.click(screen.getByRole("button", { name: "Петров Пётр" }));
-    const second = await screen.findByRole("dialog", { name: "Петров Пётр" });
-    expect(within(second).queryByRole("button", { name: "Разблокировать" })).not.toBeInTheDocument();
-  });
-
-  it("архивация закрывает окно, а «Удалить насовсем» есть только у архивного", async () => {
-    const { u, dialog } = await openProfile("Иванова Анна");
-    patch.mockResolvedValue({});
-    expect(within(dialog).queryByRole("button", { name: "Удалить насовсем" })).not.toBeInTheDocument();
-    await u.click(within(dialog).getByRole("button", { name: "В архив" }));
-    expect(patch).toHaveBeenCalledWith("/admin/users/2", { is_active: false });
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-  });
-
-  it("удаление спрашивает подтверждение, а итог показывается во вкладке после закрытия окна", async () => {
-    const u = userEvent.setup();
-    renderPage(<UsersTab canEdit canCreate />, { role: "admin", user: { id: 1 } });
-    await screen.findByText("Иванова Анна");
-    await u.click(screen.getByRole("button", { name: "Архив (1)" }));
-    await u.click(screen.getByRole("button", { name: "Архивов Артём" }));
-    const dialog = await screen.findByRole("dialog", { name: "Архивов Артём" });
-
-    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false);
-    await u.click(within(dialog).getByRole("button", { name: "Удалить насовсем" }));
-    expect(del).not.toHaveBeenCalled();
-
-    confirm.mockReturnValueOnce(true);
-    del.mockResolvedValue({ deleted: false, anonymized: true, detail: "Есть история действий — данные обезличены" });
-    await u.click(within(dialog).getByRole("button", { name: "Удалить насовсем" }));
-    expect(del).toHaveBeenCalledWith("/admin/users/5");
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(screen.getByText("Есть история действий — данные обезличены")).toBeInTheDocument(); // видно вкладке, не потеряно
-  });
-
-  it("зав. отделением не меняет отделение пользователя (поля нет)", async () => {
-    const { dialog } = await openProfile("Иванова Анна", "dept_head", { id: 99, department_name: "Диджитал" });
-    expect(within(dialog).queryByText("Отделение")).not.toBeInTheDocument();
-  });
-
-  it("Esc закрывает окно", async () => {
-    const { u } = await openProfile("Иванова Анна");
-    await u.keyboard("{Escape}");
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+describe("UsersTab — переход в профиль", () => {
+  it("ФИО — ссылка на страницу профиля (у всех, кто видит список)", async () => {
+    renderPage(<UsersTab canCreate={false} />, { role: "edu_department" });
+    expect(await screen.findByRole("link", { name: "Иванова Анна" })).toHaveAttribute("href", "/admin/users/2");
   });
 });

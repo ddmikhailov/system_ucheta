@@ -11,6 +11,7 @@ import './styles/shell.css'
 import './styles/my-day.css'
 import './styles/a11y.css'
 import './styles/theme.css'
+import './styles/profile.css'
 import App from './App.tsx'
 import { applyTheme, getThemePref } from './utils/theme'
 

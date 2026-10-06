@@ -22,13 +22,6 @@
   gap: 18px;
 }
 
-.app-sidebar__logo img,
-.app-topbar__logo img {
-  height: 34px;
-  width: auto;
-  display: block;
-}
-
 .app-sidebar__logo {
   padding: 0 8px;
 }

@@ -1,6 +1,6 @@
 """Пользователи: список, создание, правка, пароль, разблокировка, архив/удаление."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -16,11 +16,14 @@ from app.schemas.admin import (
     DeleteResult,
     SetPasswordRequest,
     SetPasswordResponse,
+    UserActivityPage,
     UserCreate,
+    UserProfile,
     UserRead,
     UserUpdate,
 )
 from app.services.audit_service import log_action, redact_audit_history
+from app.services import user_profile_service
 from app.services.password_service import generate_temporary_password
 
 router = APIRouter()
@@ -47,6 +50,35 @@ def list_users(user: User = Depends(require_management), db: Session = Depends(g
         q = q.filter(User.department_id == scope)
     users = q.all()
     return [_user_read(u) for u in users]
+
+
+def _viewable_user_or_404(db: Session, viewer: User, user_id: int) -> User:
+    target = db.get(User, user_id)
+    if target is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Пользователь не найден")
+    policies.assert_can_view_user(viewer, target)
+    return target
+
+
+@router.get("/users/{user_id}/profile", response_model=UserProfile)
+def user_profile(user_id: int, viewer: User = Depends(require_management), db: Session = Depends(get_db)):
+    """Профиль для администрации: закрепления, дисциплина сдачи дней, задачи, индивидуальная работа."""
+    target = _viewable_user_or_404(db, viewer, user_id)
+    return UserProfile(user=_user_read(target), **user_profile_service.build_profile(db, target))
+
+
+@router.get("/users/{user_id}/activity", response_model=UserActivityPage)
+def user_activity(
+    user_id: int,
+    before_id: int | None = None,
+    limit: int = 50,
+    area: str | None = Query(default=None, pattern=r"^[a-z_]{1,32}$"),
+    viewer: User = Depends(require_management),
+    db: Session = Depends(get_db),
+):
+    """Журнал действий пользователя (что и когда), новые сверху; `area` — «mark», «day», «task»…"""
+    target = _viewable_user_or_404(db, viewer, user_id)
+    return user_profile_service.activity_page(db, target, before_id=before_id, limit=limit, prefix=area)
 
 
 @router.post("/users", response_model=UserRead, status_code=status.HTTP_201_CREATED)

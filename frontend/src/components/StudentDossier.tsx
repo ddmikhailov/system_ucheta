@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { api, ApiError } from "../api/client";
 import { NOTE_KINDS } from "../constants/noteKinds";
 import { formatDateRu, formatServerDateTimeFull, todayIso } from "../utils/date";
 import { telHref } from "../utils/phone";
 import type { Dossier, DossierAccessEntry, DossierProfile, DossierSpecial } from "../api/types";
+import { useDossier, type DossierSectionKey, type DossierState } from "../hooks/useDossier";
 import { dialogs } from "../utils/feedback";
 
 const EMPTY_SPECIAL: DossierSpecial = {
@@ -39,46 +40,63 @@ const SPECIAL_FLAGS: [SpecialFlag, string][] = [
   ["internal_record", "Внутренний учёт"],
 ];
 
-// Досье студента: контакты, представители, особые данные (шифруются на сервере),
-// заметки куратора. Журнал просмотров — только администратору/тьютору.
-export default function StudentDossier({ studentId, isAdmin }: { studentId: number; isAdmin: boolean }) {
-  const [dossier, setDossier] = useState<Dossier | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-
-  const load = useCallback(() => {
-    api
-      .get<Dossier>(`/students/${studentId}/dossier`)
-      .then((d) => {
-        setDossier(d);
-        setError(null);
-      })
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Не удалось загрузить досье"));
-  }, [studentId]);
-
-  useEffect(load, [load]);
-
+/** Один раздел досье: основное и соц. статус, представители, записи индивидуальной работы
+ * или журнал просмотров (последний — только администратору/тьютору). */
+export function DossierSection({
+  state,
+  section,
+  studentId,
+  isAdmin,
+  showMessages = true,
+}: {
+  state: DossierState;
+  section: DossierSectionKey;
+  studentId: number;
+  isAdmin: boolean;
+  /** Ошибки и «сохранено» над разделом; досье целиком показывает их один раз сверху. */
+  showMessages?: boolean;
+}) {
+  const { dossier, error, notice, setDossier, setError, setNotice, load } = state;
+  if (section === "log") return isAdmin ? <AccessLog studentId={studentId} /> : null;
   if (error && !dossier) return <div className="error-text">{error}</div>;
   if (!dossier) return <p className="hint">Загрузка досье…</p>;
 
   return (
     <div>
-      {error && <div className="error-text">{error}</div>}
-      {notice && <div className="day-status submitted">{notice}</div>}
-      <ProfileForm
-        // Форма берёт значения из досье один раз; после сохранения key пересоздаёт её.
-        key={JSON.stringify([dossier.profile, dossier.special])}
-        dossier={dossier}
-        onSaved={(d) => {
-          setDossier(d);
-          setError(null);
-          setNotice("Досье сохранено");
-        }}
-        onError={setError}
-      />
-      <Guardians dossier={dossier} studentId={studentId} onChanged={load} onError={setError} />
-      <Notes dossier={dossier} studentId={studentId} onChanged={load} onError={setError} />
-      {isAdmin && <AccessLog studentId={studentId} />}
+      {showMessages && error && <div className="error-text">{error}</div>}
+      {showMessages && notice && <div className="day-status submitted">{notice}</div>}
+      {section === "profile" && (
+        <ProfileForm
+          // Форма берёт значения из досье один раз; после сохранения key пересоздаёт её.
+          key={JSON.stringify([dossier.profile, dossier.special])}
+          dossier={dossier}
+          onSaved={(d) => {
+            setDossier(d);
+            setError(null);
+            setNotice("Досье сохранено");
+          }}
+          onError={setError}
+        />
+      )}
+      {section === "guardians" && <Guardians dossier={dossier} studentId={studentId} onChanged={load} onError={setError} />}
+      {section === "notes" && <Notes dossier={dossier} studentId={studentId} onChanged={load} onError={setError} />}
+    </div>
+  );
+}
+
+// Досье студента целиком: контакты, представители, особые данные (шифруются на сервере),
+// заметки куратора. Журнал просмотров — только администратору/тьютору.
+export default function StudentDossier({ studentId, isAdmin }: { studentId: number; isAdmin: boolean }) {
+  const state = useDossier(studentId);
+  if (state.error && !state.dossier) return <div className="error-text">{state.error}</div>;
+  if (!state.dossier) return <p className="hint">Загрузка досье…</p>;
+  return (
+    <div>
+      {state.error && <div className="error-text">{state.error}</div>}
+      {state.notice && <div className="day-status submitted">{state.notice}</div>}
+      {(["profile", "guardians", "notes", "log"] as const).map((section) => (
+        <DossierSection key={section} state={state} section={section} studentId={studentId} isAdmin={isAdmin} showMessages={false} />
+      ))}
     </div>
   );
 }

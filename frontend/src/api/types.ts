@@ -718,3 +718,65 @@ export interface TaskSummary {
   answers: number;
   fields: TaskSummaryField[];
 }
+
+/** Профиль пользователя для администрации (интерфейс 3.0). */
+export interface UserGroupLink {
+  group_id: number;
+  group_code: string;
+  course: number;
+  department_name: string | null;
+  role_type: "curator" | "deputy";
+  start_date: string;
+  end_date: string | null;
+  is_current: boolean;
+  students_count: number;
+}
+
+export interface UserDiscipline {
+  date_from: string;
+  date_to: string;
+  study_days: number;
+  submitted: number;
+  on_time: number;
+  late: number;
+  missed: number;
+  percent_on_time: number | null;
+}
+
+export interface UserTaskStats {
+  total: number;
+  accepted: number;
+  submitted: number;
+  in_work: number;
+  returned: number;
+  overdue: number;
+}
+
+export interface UserProfile {
+  user: UserAdmin;
+  department_name: string | null;
+  created_at: string;
+  last_activity_at: string | null;
+  groups: UserGroupLink[];
+  discipline: UserDiscipline;
+  tasks: UserTaskStats;
+  marks_created_30d: number;
+  days_submitted_30d: number;
+  notes_written_30d: number;
+  follow_ups_open: number;
+  dossier_views_30d: number;
+  activity_30d: { date: string; count: number }[];
+}
+
+export interface UserActivityEntry {
+  id: number;
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  created_at: string;
+}
+
+export interface UserActivityPage {
+  items: UserActivityEntry[];
+  next_before_id: number | null;
+}
