@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, api, downloadFile, getToken, setToken, uploadFile } from "./client";
+import { ApiError, api, downloadFile, uploadFile } from "./client";
 
 function respond(status: number, body?: unknown, contentType = "application/json"): Response {
   const text = body === undefined ? "" : typeof body === "string" ? body : JSON.stringify(body);
@@ -18,18 +18,19 @@ afterEach(() => {
 });
 
 describe("api", () => {
-  it("отправляет токен и возвращает JSON", async () => {
-    setToken("tok");
+  it("возвращает JSON; сессия идёт через cookie, а не заголовок Authorization", async () => {
     const fetchMock = mockFetch(respond(200, { ok: 1 }));
     expect(await api.get<{ ok: number }>("/x")).toEqual({ ok: 1 });
     const [, init] = fetchMock.mock.calls[0];
-    expect(init.headers.Authorization).toBe("Bearer tok");
+    expect(init.headers.Authorization).toBeUndefined();
+    expect(init.headers["X-Requested-With"]).toBe("kait20");
+    expect(init.credentials).toMatch(/same-origin|include/);
   });
 
-  it("не отправляет заголовок авторизации без токена", async () => {
-    const fetchMock = mockFetch(respond(200, {}));
+  it("токен не хранится в localStorage", async () => {
+    mockFetch(respond(200, {}));
     await api.get("/x");
-    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBeUndefined();
+    expect(Object.keys(localStorage).filter((k) => /token/i.test(k))).toEqual([]);
   });
 
   it("ответ 204 даёт undefined", async () => {
@@ -48,14 +49,12 @@ describe("api", () => {
     await expect(api.get("/x")).rejects.toMatchObject({ status: 502, message: "Bad Gateway" });
   });
 
-  it("401 стирает токен и сообщает приложению", async () => {
-    setToken("tok");
+  it("401 сообщает приложению", async () => {
     const listener = vi.fn();
     window.addEventListener("auth:unauthorized", listener);
     mockFetch(respond(401, { detail: "Токен недействителен" }));
     await expect(api.get("/x")).rejects.toMatchObject({ status: 401 });
     window.removeEventListener("auth:unauthorized", listener);
-    expect(getToken()).toBeNull();
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
@@ -78,8 +77,7 @@ describe("api", () => {
 });
 
 describe("uploadFile", () => {
-  it("шлёт файл сырым телом с токеном и типом файла", async () => {
-    setToken("tok");
+  it("шлёт файл сырым телом с типом файла и заголовком CSRF", async () => {
     const fetchMock = mockFetch(respond(200, { total: 3 }));
     const file = new File(["data"], "a.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     expect(await uploadFile<{ total: number }>("/dossier-import/preview", file)).toEqual({ total: 3 });
@@ -88,7 +86,7 @@ describe("uploadFile", () => {
     expect(init.method).toBe("POST");
     expect(init.body).toBe(file);
     expect(init.headers["Content-Type"]).toBe(file.type);
-    expect(init.headers.Authorization).toBe("Bearer tok");
+    expect(init.headers["X-Requested-With"]).toBe("kait20");
   });
 
   it("показывает сообщение сервера при ошибке", async () => {
@@ -101,8 +99,7 @@ describe("uploadFile", () => {
 });
 
 describe("downloadFile", () => {
-  it("скачивает файл с токеном и подставляет имя", async () => {
-    setToken("tok");
+  it("скачивает файл по cookie сессии и подставляет имя", async () => {
     const fetchMock = mockFetch(new Response("файл", { status: 200, headers: { "Content-Type": "application/octet-stream" } }));
     const click = vi.fn();
     const created: HTMLAnchorElement[] = [];
@@ -118,7 +115,7 @@ describe("downloadFile", () => {
     URL.createObjectURL = vi.fn(() => "blob:x");
     URL.revokeObjectURL = vi.fn();
     await downloadFile("/students/1/absence-sheet?date_from=a", "лист.docx");
-    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe("Bearer tok");
+    expect(fetchMock.mock.calls[0][1].credentials).toMatch(/same-origin|include/);
     expect(click).toHaveBeenCalledTimes(1);
     expect(created[0].download).toBe("лист.docx");
     vi.restoreAllMocks();

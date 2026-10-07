@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { api, setToken } from "./api/client";
+import { ApiError, api } from "./api/client";
 import App from "./App";
 import { makeUser } from "./test/utils";
 
@@ -29,9 +29,8 @@ const get = vi.mocked(api.get);
 function visit(path: string, role: string | null, overrides = {}) {
   window.history.pushState({}, "", path);
   if (role === null) {
-    get.mockRejectedValue(new Error("не должно запрашиваться без токена"));
+    get.mockRejectedValue(new ApiError(401, "Нужна авторизация"));
   } else {
-    setToken("tok");
     get.mockResolvedValue(makeUser(role, overrides));
   }
   render(<App />);

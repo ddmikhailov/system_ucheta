@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     jwt_secret: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 12
+    # Сессия браузера живёт в HttpOnly-cookie с этим именем (JS-коду токен недоступен)
+    session_cookie_name: str = "kait20_session"
 
     cors_origins: list[str] = ["http://localhost:5173"]
 

@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -63,8 +63,12 @@ async def security_headers(request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "same-origin"
     response.headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=()"
-    if request.url.scheme == "https":
-        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+    # За прокси Amvera приложение видит запрос как http (TLS завершает прокси), поэтому
+    # схему запроса проверять нельзя — раньше заголовок из-за этого не отправлялся вовсе.
+    # Браузеры игнорируют HSTS в ответах по http, так что отправлять его всегда безопасно.
+    # includeSubDomains не ставим: домен принадлежит хостингу, поддомены — не наши.
+    if get_settings().environment != "development":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000"
     # frame-ancestors дублирует X-Frame-Options для браузеров, которые его не
     # поддерживают; unsafe-inline для style-src — Vite инлайнит критический
     # CSS и React использует inline-стили в паре мест, ужесточать без
@@ -76,7 +80,10 @@ async def security_headers(request, call_next):
         "style-src 'self' 'unsafe-inline'; "
         "script-src 'self'; "
         "connect-src 'self'; "
-        "font-src 'self'"
+        "font-src 'self'; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'"
     )
     return response
 
@@ -171,6 +178,12 @@ def register_spa(application: FastAPI, static_dir: Path) -> None:
     @application.get("/{full_path:path}")
     async def spa_fallback(full_path: str):
         candidate = resolve_static_file(full_path, static_dir)
+        segments = full_path.split("/")
+        if candidate is None and ("." in segments[-1] or any(seg.startswith(".") for seg in segments)):
+            # Маршруты SPA без расширения и точки в начале; запрос вида /.env, /.git/HEAD, /x.map — это поиск
+            # файла, и честный 404 лучше «200 с главной страницей» (так сканеры и мониторинг
+            # не принимают отсутствующий файл за существующий).
+            raise HTTPException(status_code=404, detail="Not Found")
         target = candidate if candidate is not None else static_dir / "index.html"
         return FileResponse(target, headers={"Cache-Control": "no-cache"})
 

@@ -79,7 +79,7 @@ function open({ role = "admin", me = {}, tab, target }: { role?: string; me?: ob
     throw new Error(`неожиданный запрос ${path}`);
   });
   render(
-    <AuthContext.Provider value={{ user: makeUser(role, { id: 1, ...me }), loading: false, login: vi.fn(), loginWithToken: vi.fn(), logout: vi.fn(), refresh: vi.fn() }}>
+    <AuthContext.Provider value={{ user: makeUser(role, { id: 1, ...me }), loading: false, login: vi.fn(), logout: vi.fn(), refresh: vi.fn() }}>
       <MemoryRouter initialEntries={[`/admin/users/${current.id}${tab ? `?tab=${tab}` : ""}`]}>
         <Routes>
           <Route path="/admin/users/:userId" element={<UserProfilePage />} />
@@ -136,7 +136,7 @@ describe("UserProfilePage — обзор", () => {
   it("ошибка (чужое отделение) — сообщение сервера и ссылка назад", async () => {
     get.mockRejectedValue(new ApiError(403, "Пользователь не относится к вашему отделению"));
     render(
-      <AuthContext.Provider value={{ user: makeUser("dept_head"), loading: false, login: vi.fn(), loginWithToken: vi.fn(), logout: vi.fn(), refresh: vi.fn() }}>
+      <AuthContext.Provider value={{ user: makeUser("dept_head"), loading: false, login: vi.fn(), logout: vi.fn(), refresh: vi.fn() }}>
         <MemoryRouter initialEntries={["/admin/users/5"]}>
           <Routes><Route path="/admin/users/:userId" element={<UserProfilePage />} /></Routes>
         </MemoryRouter>

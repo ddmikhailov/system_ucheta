@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, ApiError, setToken } from "../api/client";
+import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/useAuth";
 import { MIN_PASSWORD_LENGTH } from "../constants/password";
 import type { MeResponse } from "../api/types";
@@ -27,14 +27,12 @@ export default function ChangePasswordPage() {
     }
     setBusy(true);
     try {
-      const result = await api.post<MeResponse>("/auth/change-password", {
+      await api.post<MeResponse>("/auth/change-password", {
         current_password: forced ? undefined : currentPassword,
         new_password: newPassword,
       });
-      // Смена пароля отзывает все ранее выданные токены (см. TODO.md 2),
-      // включая тот, которым выполнен этот самый запрос — сервер сразу
-      // возвращает новый, иначе следующий же запрос (refresh ниже) получит 401.
-      if (result.access_token) setToken(result.access_token);
+      // Смена пароля отзывает все ранее выданные токены (см. TODO.md 2), включая
+      // текущий — сервер сразу ставит новую cookie сессии в этом же ответе.
       await refresh();
       navigate("/");
     } catch (err) {

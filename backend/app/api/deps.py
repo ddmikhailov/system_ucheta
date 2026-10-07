@@ -1,11 +1,12 @@
 import datetime
 
 import jwt
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Cookie, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.roles import DEPARTMENT_SCOPED_ROLES, DOSSIER_STAFF_ROLES, is_department_scoped
+from app.core.config import get_settings
 from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models import RoleCode, StudyGroup, User
@@ -17,18 +18,41 @@ bearer_scheme = HTTPBearer(auto_error=False)
 # доступен — проверка была только на фронтенде (см. TODO.md 2). Эти два
 # пути остаются доступны, чтобы пользователь вообще мог узнать, кто он, и
 # задать свой пароль.
-_ALLOWED_WITH_PENDING_PASSWORD_CHANGE = {"/auth/me", "/auth/change-password"}
+_ALLOWED_WITH_PENDING_PASSWORD_CHANGE = {"/auth/me", "/auth/change-password", "/auth/logout"}
+
+# Защита от CSRF для входа по cookie: браузер подставляет cookie в любой запрос к
+# нашему домену, в том числе с чужой страницы. Чужая страница не может добавить
+# нестандартный заголовок без CORS-preflight (а он отклоняется), поэтому для
+# изменяющих запросов с cookie требуем этот заголовок; SameSite=Strict — вторая линия.
+CSRF_HEADER = "x-requested-with"
+CSRF_HEADER_VALUE = "kait20"
+_SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
+def extract_token(
+    request: Request, credentials: HTTPAuthorizationCredentials | None, session_cookie: str | None
+) -> str | None:
+    """Токен из Authorization: Bearer (скрипты, тесты) либо из cookie сессии (браузер)."""
+    if credentials is not None:
+        return credentials.credentials
+    if session_cookie:
+        if request.method not in _SAFE_METHODS and request.headers.get(CSRF_HEADER) != CSRF_HEADER_VALUE:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Запрос отклонён: нет заголовка защиты от CSRF")
+        return session_cookie
+    return None
 
 
 def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    session_cookie: str | None = Cookie(default=None, alias=get_settings().session_cookie_name),
     db: Session = Depends(get_db),
 ) -> User:
-    if credentials is None:
+    token = extract_token(request, credentials, session_cookie)
+    if token is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Нужна авторизация")
     try:
-        payload = decode_access_token(credentials.credentials)
+        payload = decode_access_token(token)
     except jwt.PyJWTError:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Токен недействителен")
 

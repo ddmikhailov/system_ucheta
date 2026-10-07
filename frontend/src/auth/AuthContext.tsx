@@ -1,28 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { api, getToken, setToken } from "../api/client";
+import { api } from "../api/client";
 import type { MeResponse } from "../api/types";
 import { AuthContext } from "./authContextObject";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<MeResponse | null>(null);
-  // Без токена сразу известно, что грузить нечего — раньше эффект всё равно
-  // синхронно вызывал setLoading(false) на первом рендере (oxlint
-  // react/set-state-in-effect, см. TODO.md 5); теперь это уже верное
-  // начальное значение, а не побочный эффект.
-  const [loading, setLoading] = useState(() => !!getToken());
+  // Сессия живёт в HttpOnly-cookie, и со стороны страницы её наличие не видно —
+  // при старте всегда спрашиваем сервер, кто мы (нет сессии — 401 и экран входа).
+  const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    if (!getToken()) {
-      setUser(null);
-      setLoading(false);
-      return;
-    }
     try {
       const me = await api.get<MeResponse>("/auth/me");
       setUser(me);
     } catch {
-      setToken(null);
       setUser(null);
     } finally {
       setLoading(false);
@@ -34,7 +26,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // только после await внутри refresh(), не синхронно в теле эффекта;
     // без этого разово выполнить запрос на старте нечем (см. TODO.md 5).
     // oxlint-disable-next-line react/set-state-in-effect
-    if (getToken()) refresh();
+    refresh();
   }, [refresh]);
 
   useEffect(() => {
@@ -51,23 +43,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (username: string, password: string) => {
-    const res = await api.post<{ access_token: string }>("/auth/login", { username, password });
-    setToken(res.access_token);
-    await refresh();
-  }, [refresh]);
-
-  const loginWithToken = useCallback(async (token: string) => {
-    setToken(token);
+    // Сервер сам ставит cookie сессии; токен в ответе странице не нужен.
+    await api.post("/auth/login", { username, password });
     await refresh();
   }, [refresh]);
 
   const logout = useCallback(() => {
-    setToken(null);
+    // Выход отзывает сессию на сервере; даже если запрос не дошёл, интерфейс выходит сразу.
+    api.post("/auth/logout").catch(() => undefined);
     setUser(null);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, loginWithToken, logout, refresh }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, refresh }}>
       {children}
     </AuthContext.Provider>
   );

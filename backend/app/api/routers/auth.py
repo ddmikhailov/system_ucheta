@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import bearer_scheme, extract_token, get_current_user
 from app.core.config import get_settings
 from app.core.password_policy import validate_password_strength
 from app.core.rate_limit import check_rate_limit, client_ip, is_blocked, register_failure, reset_failures
-from app.core.security import create_access_token, hash_password, verify_password
+from app.core.security import create_access_token, decode_access_token, hash_password, verify_password
 from app.core.time import today_local
 from app.db.session import get_db
 from app.models import CuratorAssignment, RoleCode, User
@@ -20,19 +21,32 @@ from app.services.audit_service import log_action
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
+
+
+def _set_session_cookie(response: Response, token: str) -> None:
+    """Сессия браузера — HttpOnly-cookie: скрипт на странице (в т.ч. при XSS) токен прочитать не может.
+    Strict — cookie не уходит с запросов, инициированных чужими сайтами."""
+    response.set_cookie(
+        settings.session_cookie_name, token,
+        max_age=settings.access_token_expire_minutes * 60,
+        httponly=True, secure=settings.environment != "development", samesite="strict", path="/",
+    )
 PRIVILEGED_ROLES = {RoleCode.ADMIN, RoleCode.EDU_DEPARTMENT, RoleCode.DEPT_HEAD, RoleCode.TUTOR}
 _DUMMY_HASH = hash_password("dummy-password-for-timing")
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
+def login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     # По IP, а не по логину — иначе перебор паролей просто размазывается по
     # разным существующим учёткам и никогда не упирается в лимит (см.
     # TODO.md 2). Порог заметно выше, чем per-account лимит блокировки ниже,
     # чтобы не мешать обычным опечаткам нескольких разных людей из одной сети.
     ip = client_ip(request)
     if not check_rate_limit(f"login:{ip}", max_attempts=30, window_seconds=300):
-        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Слишком много попыток входа — попробуйте позже")
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS, "Слишком много попыток входа — попробуйте позже",
+            headers={"Retry-After": "300"},
+        )
 
     # Блокируется не учётная запись, а связка «адрес + логин»: раньше пять
     # неверных паролей подряд закрывали вход самому владельцу на 15 минут, и
@@ -55,6 +69,7 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
         raise HTTPException(
             status.HTTP_429_TOO_MANY_REQUESTS,
             f"Слишком много неудачных попыток входа — попробуйте через {window // 60} мин.",
+            headers={"Retry-After": str(window)},
         )
 
     # Пароль проверяется и для несуществующего логина (по пустышке), чтобы по
@@ -78,7 +93,35 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
     reset_failures(fail_key)
 
     token = create_access_token(user.id, user.role.code, user.token_version)
+    _set_session_cookie(response, token)
     return TokenResponse(access_token=token)
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(
+    request: Request,
+    response: Response,
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    session_cookie: str | None = Cookie(default=None, alias=settings.session_cookie_name),
+    db: Session = Depends(get_db),
+):
+    """Выход отзывает сессию на сервере: версия токенов пользователя растёт, и украденная
+    копия токена перестаёт работать (раньше выход лишь стирал токен в браузере). Так как
+    версия общая, выход завершает и сессии на других устройствах. Cookie стирается всегда,
+    даже если токен уже недействителен."""
+    token = extract_token(request, credentials, session_cookie)
+    response.delete_cookie(settings.session_cookie_name, path="/")
+    if token is None:
+        return
+    try:
+        payload = decode_access_token(token)
+    except Exception:
+        return
+    user = db.get(User, int(payload["sub"]))
+    if user is not None and payload.get("tv", 0) == user.token_version:
+        user.token_version += 1
+        log_action(db, user, "auth.logout", "user", str(user.id))
+        db.commit()
 
 
 @router.get("/me", response_model=MeResponse)
@@ -118,6 +161,7 @@ def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
 @router.post("/change-password", response_model=MeResponse)
 def change_password(
     payload: ChangePasswordRequest,
+    response_: Response,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -148,4 +192,5 @@ def change_password(
 
     response = me(user, db)
     response.access_token = create_access_token(user.id, user.role.code, user.token_version)
+    _set_session_cookie(response_, response.access_token)
     return response

@@ -73,7 +73,7 @@ function Where() {
 
 function open(role: string, route = "/dashboards") {
   render(
-    <AuthContext.Provider value={{ user: makeUser(role), loading: false, login: async () => undefined, loginWithToken: async () => undefined, logout: () => undefined, refresh: async () => undefined }}>
+    <AuthContext.Provider value={{ user: makeUser(role), loading: false, login: async () => undefined, logout: () => undefined, refresh: async () => undefined }}>
       <MemoryRouter initialEntries={[route]}>
         <Routes>
           <Route path="/dashboards" element={<><DashboardsPage /><Where /></>} />

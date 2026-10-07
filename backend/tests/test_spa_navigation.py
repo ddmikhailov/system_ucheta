@@ -84,3 +84,13 @@ def test_unknown_address_still_falls_back_to_the_page(client):
 )
 def test_navigation_detection(method, path, headers, expected):
     assert is_browser_navigation(method, path, headers) is expected
+
+
+@pytest.mark.parametrize("path", ["/.env", "/.git/HEAD", "/assets/missing.js.map", "/backup.sql"])
+def test_missing_file_like_path_is_404_not_the_page(client, path):
+    """Внешний аудит: /.env, /.git/HEAD отвечали 200 с главной страницей — сканеры принимали это за находку."""
+    assert client.get(path).status_code == 404
+
+
+def test_extensionless_spa_routes_still_return_the_page(client):
+    assert "<title>КАИТ-20</title>" in client.get("/some/client/route").text

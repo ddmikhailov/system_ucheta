@@ -3,16 +3,19 @@
 // backend на 8000 — два разных процесса) нужен явный адрес backend.
 const API_BASE = import.meta.env.VITE_API_BASE ?? (import.meta.env.DEV ? "http://localhost:8000" : "");
 
-const TOKEN_KEY = "kait20_token";
-
-export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
+// Сессия — HttpOnly-cookie, которую ставит сервер: скрипту (и потенциальному XSS) токен недоступен.
+// Раньше токен лежал в localStorage под этим ключом; при запуске стираем остаток от прежней версии.
+try {
+  localStorage.removeItem("kait20_token");
+} catch {
+  // хранилище недоступно (приватный режим) — нечего чистить
 }
 
-export function setToken(token: string | null) {
-  if (token) localStorage.setItem(TOKEN_KEY, token);
-  else localStorage.removeItem(TOKEN_KEY);
-}
+// Заголовок защиты от CSRF: сервер требует его для изменяющих запросов с cookie; чужая
+// страница не может его добавить без CORS-preflight, который сервер отклоняет.
+const CSRF_HEADERS = { "X-Requested-With": "kait20" };
+// В разработке frontend и backend на разных портах — cookie нужно передавать явно.
+const CREDENTIALS: RequestCredentials = import.meta.env.DEV ? "include" : "same-origin";
 
 export class ApiError extends Error {
   status: number;
@@ -23,14 +26,13 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    ...CSRF_HEADERS,
     ...(options.headers as Record<string, string> | undefined),
   };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers, credentials: CREDENTIALS });
 
   if (!res.ok) {
     let message = res.statusText;
@@ -41,7 +43,6 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       // тело не JSON — оставляем statusText
     }
     if (res.status === 401) {
-      setToken(null);
       // client.ts — не React-компонент и не может дёрнуть useAuth() напрямую;
       // AuthContext слушает это событие и сбрасывает user, чтобы роутер
       // тут же увёл на /login, а не оставлял "залогиненного" с 401 на
@@ -76,10 +77,7 @@ export const api = {
 };
 
 export async function downloadFile(path: string, filename: string) {
-  const token = getToken();
-  const headers: Record<string, string> = {};
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`${API_BASE}${path}`, { headers });
+  const res = await fetch(`${API_BASE}${path}`, { headers: CSRF_HEADERS, credentials: CREDENTIALS });
   if (!res.ok) {
     // Сервер объясняет отказ в теле ({"detail": "..."}), например «за период нет пропусков».
     let message = res.statusText;
@@ -104,12 +102,11 @@ export async function downloadFile(path: string, filename: string) {
 
 // Загрузка файла сырым телом запроса (не multipart): так бэкенду не нужна лишняя зависимость.
 export async function uploadFile<T>(path: string, file: File): Promise<T> {
-  const token = getToken();
   const headers: Record<string, string> = {
     "Content-Type": file.type || "application/octet-stream",
+    ...CSRF_HEADERS,
   };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`${API_BASE}${path}`, { method: "POST", headers, body: file });
+  const res = await fetch(`${API_BASE}${path}`, { method: "POST", headers, body: file, credentials: CREDENTIALS });
   if (!res.ok) {
     let message = res.statusText;
     try {

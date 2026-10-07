@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, api, getToken, setToken } from "../api/client";
+import { ApiError, api } from "../api/client";
 import { makeUser } from "../test/utils";
 import { AuthProvider } from "./AuthContext";
 import { useAuth } from "./useAuth";
@@ -33,14 +33,7 @@ beforeEach(() => {
 });
 
 describe("AuthProvider", () => {
-  it("без токена сразу «аноним», на сервер не ходит", () => {
-    renderAuth();
-    expect(screen.getByTestId("state")).toHaveTextContent("anonymous");
-    expect(get).not.toHaveBeenCalled();
-  });
-
-  it("с сохранённым токеном сначала «загрузка», потом пользователь", async () => {
-    setToken("tok");
+  it("при старте спрашивает сервер: есть сессия — сначала «загрузка», потом пользователь", async () => {
     get.mockResolvedValue(makeUser("curator"));
     renderAuth();
     expect(screen.getByTestId("state")).toHaveTextContent("loading");
@@ -48,48 +41,48 @@ describe("AuthProvider", () => {
     expect(get).toHaveBeenCalledWith("/auth/me");
   });
 
-  it("недействительный токен стирается, пользователь — аноним", async () => {
-    setToken("old");
-    get.mockRejectedValue(new ApiError(401, "Токен недействителен"));
+  it("нет сессии (401) — аноним", async () => {
+    get.mockRejectedValue(new ApiError(401, "Нужна авторизация"));
     renderAuth();
     await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("anonymous"));
-    expect(getToken()).toBeNull();
   });
 
-  it("вход сохраняет токен и подгружает пользователя", async () => {
+  it("вход отправляет логин и пароль и подгружает пользователя; токен в хранилище не пишется", async () => {
     const user = userEvent.setup();
+    get.mockRejectedValueOnce(new ApiError(401, "Нужна авторизация"));
+    renderAuth();
+    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("anonymous"));
     post.mockResolvedValue({ access_token: "new-token" });
     get.mockResolvedValue(makeUser("admin"));
-    renderAuth();
     await user.click(screen.getByRole("button", { name: "login" }));
     await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("user:admin"));
     expect(post).toHaveBeenCalledWith("/auth/login", { username: "kurator", password: "pw" });
-    expect(getToken()).toBe("new-token");
+    expect(JSON.stringify({ ...localStorage })).not.toContain("new-token");
   });
 
-  it("неудачный вход не оставляет токена", async () => {
+  it("неудачный вход оставляет анонимом", async () => {
     const user = userEvent.setup();
+    get.mockRejectedValue(new ApiError(401, "Нужна авторизация"));
     post.mockRejectedValue(new ApiError(401, "Неверный логин или пароль"));
     renderAuth();
+    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("anonymous"));
     await user.click(screen.getByRole("button", { name: "login" }));
     await waitFor(() => expect(post).toHaveBeenCalled());
-    expect(getToken()).toBeNull();
     expect(screen.getByTestId("state")).toHaveTextContent("anonymous");
   });
 
-  it("выход стирает токен и пользователя", async () => {
+  it("выход отзывает сессию на сервере и убирает пользователя", async () => {
     const user = userEvent.setup();
-    setToken("tok");
+    post.mockResolvedValue(undefined);
     get.mockResolvedValue(makeUser("curator"));
     renderAuth();
     await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("user:curator"));
     await user.click(screen.getByRole("button", { name: "logout" }));
     expect(screen.getByTestId("state")).toHaveTextContent("anonymous");
-    expect(getToken()).toBeNull();
+    expect(post).toHaveBeenCalledWith("/auth/logout");
   });
 
   it("401 на любом запросе (событие приложения) разлогинивает без перезагрузки страницы", async () => {
-    setToken("tok");
     get.mockResolvedValue(makeUser("curator"));
     renderAuth();
     await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("user:curator"));

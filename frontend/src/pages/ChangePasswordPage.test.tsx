@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, api, getToken, setToken } from "../api/client";
+import { ApiError, api } from "../api/client";
 import { AuthContext } from "../auth/authContextObject";
 import { makeUser } from "../test/utils";
 import ChangePasswordPage from "./ChangePasswordPage";
@@ -18,7 +18,7 @@ function open(forced: boolean) {
   const refresh = vi.fn().mockResolvedValue(undefined);
   render(
     <AuthContext.Provider
-      value={{ user: makeUser("curator", { must_change_password: forced, full_name: "Иванова Анна" }), loading: false, login: vi.fn(), loginWithToken: vi.fn(), logout: vi.fn(), refresh }}
+      value={{ user: makeUser("curator", { must_change_password: forced, full_name: "Иванова Анна" }), loading: false, login: vi.fn(), logout: vi.fn(), refresh }}
     >
       <MemoryRouter initialEntries={["/prev", "/change-password"]} initialIndex={1}>
         <Routes>
@@ -41,10 +41,9 @@ const fields = () => ({
 beforeEach(() => post.mockReset());
 
 describe("ChangePasswordPage — обычная смена", () => {
-  it("нужен текущий пароль; запрос уходит с обоими, новый токен сохраняется, пользователь обновляется", async () => {
+  it("нужен текущий пароль; запрос уходит с обоими, пользователь обновляется", async () => {
     const user = userEvent.setup();
-    setToken("old-token");
-    post.mockResolvedValue({ ...makeUser("curator"), access_token: "new-token" });
+    post.mockResolvedValue(makeUser("curator"));
     const refresh = open(false);
     const f = fields();
     await user.type(f.current!, "OldPassword123");
@@ -53,7 +52,6 @@ describe("ChangePasswordPage — обычная смена", () => {
     await user.click(screen.getByRole("button", { name: "Сохранить пароль" }));
     expect(post).toHaveBeenCalledWith("/auth/change-password", { current_password: "OldPassword123", new_password: "NewPassword456!" });
     await waitFor(() => expect(screen.getByText("главная")).toBeInTheDocument());
-    expect(getToken()).toBe("new-token"); // смена пароля отзывает прежние токены — следующий запрос должен идти уже с новым
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
@@ -113,7 +111,7 @@ describe("ChangePasswordPage — обычная смена", () => {
 describe("ChangePasswordPage — временный пароль", () => {
   it("текущий пароль не спрашивается и не отправляется, отмены нет, заголовок объясняет причину", async () => {
     const user = userEvent.setup();
-    post.mockResolvedValue({ ...makeUser("curator"), access_token: null });
+    post.mockResolvedValue(makeUser("curator"));
     open(true);
     expect(screen.getByRole("heading", { name: "Новый пароль" })).toBeInTheDocument();
     expect(screen.getByText(/Администратор выдал временный пароль/)).toBeInTheDocument();
@@ -125,18 +123,5 @@ describe("ChangePasswordPage — временный пароль", () => {
     await user.click(screen.getByRole("button", { name: "Сохранить пароль" }));
     expect(post).toHaveBeenCalledWith("/auth/change-password", { current_password: undefined, new_password: "NewPassword456!" });
     expect(await screen.findByText("главная")).toBeInTheDocument();
-  });
-
-  it("если сервер не вернул новый токен, прежний остаётся", async () => {
-    const user = userEvent.setup();
-    setToken("kept-token");
-    post.mockResolvedValue({ ...makeUser("curator"), access_token: null });
-    open(true);
-    const f = fields();
-    await user.type(f.next, "NewPassword456!");
-    await user.type(f.repeat, "NewPassword456!");
-    await user.click(screen.getByRole("button", { name: "Сохранить пароль" }));
-    await screen.findByText("главная");
-    expect(getToken()).toBe("kept-token");
   });
 });

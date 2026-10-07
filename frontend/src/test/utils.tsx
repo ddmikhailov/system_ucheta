@@ -35,7 +35,6 @@ export function renderPage(ui: ReactElement, { route = "/", path = "*", role = "
     user: role === null ? null : makeUser(role, user),
     loading: false,
     login: async () => undefined,
-    loginWithToken: async () => undefined,
     logout: () => undefined,
     refresh: async () => undefined,
   };
