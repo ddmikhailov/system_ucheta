@@ -53,9 +53,11 @@ class Settings(BaseSettings):
     risk_attendance_percent: float = 85.0
     risk_min_days: int = 5
 
-    # Блокировка входа
+    # Блокировка подбора пароля: не учётной записи, а адреса (связка «IP + логин»)
     max_failed_login_attempts: int = 5
     lockout_minutes: int = 15
+    # Для admin, edu_department, dept_head, tutor: меньше попыток и вдвое дольше пауза (тоже по адресу, не по учётке)
+    max_failed_login_attempts_privileged: int = 3
 
     # Часовой пояс колледжа: по нему считаются «сегодня» (можно ли править
     # день, сдан ли вовремя) и время сдачи в разборе дисциплины.

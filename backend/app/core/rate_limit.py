@@ -25,6 +25,47 @@ def check_rate_limit(key: str, max_attempts: int, window_seconds: int) -> bool:
     return True
 
 
+# Неудачные входы по связке «IP + логин» — отдельно от общего лимита по IP.
+# Блокируется не учётная запись (иначе любой, кто знает логин, мог бы закрыть
+# её владельцу вход подбором паролей), а тот адрес, с которого идёт подбор.
+_failures: dict[str, deque[float]] = defaultdict(deque)
+_FAILURES_PRUNE_AT = 10_000  # ключи берутся из ввода клиента — держим словарь ограниченным
+
+
+def _prune(bucket: deque[float], now: float, window_seconds: int) -> None:
+    while bucket and now - bucket[0] > window_seconds:
+        bucket.popleft()
+
+
+def is_blocked(key: str, max_failures: int, window_seconds: int) -> bool:
+    bucket = _failures.get(key)
+    if bucket is None:
+        return False
+    _prune(bucket, time.monotonic(), window_seconds)
+    if not bucket:
+        del _failures[key]
+        return False
+    return len(bucket) >= max_failures
+
+
+def register_failure(key: str, window_seconds: int) -> int:
+    """Записывает неудачную попытку и возвращает их число в окне."""
+    now = time.monotonic()
+    if len(_failures) >= _FAILURES_PRUNE_AT:
+        for k in list(_failures):
+            _prune(_failures[k], now, window_seconds)
+            if not _failures[k]:
+                del _failures[k]
+    bucket = _failures[key]
+    _prune(bucket, now, window_seconds)
+    bucket.append(now)
+    return len(bucket)
+
+
+def reset_failures(key: str) -> None:
+    _failures.pop(key, None)
+
+
 def client_ip(request) -> str:
     """Каждый доверенный прокси дописывает в X-Forwarded-For адрес того, от кого
     получил запрос, поэтому доверять можно только записям справа: N-я с конца

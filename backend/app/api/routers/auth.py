@@ -1,16 +1,14 @@
-import datetime
-
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.config import get_settings
 from app.core.password_policy import validate_password_strength
-from app.core.rate_limit import check_rate_limit, client_ip
+from app.core.rate_limit import check_rate_limit, client_ip, is_blocked, register_failure, reset_failures
 from app.core.security import create_access_token, hash_password, verify_password
-from app.core.time import today_local, utcnow
+from app.core.time import today_local
 from app.db.session import get_db
-from app.models import CuratorAssignment, User
+from app.models import CuratorAssignment, RoleCode, User
 from app.schemas.auth import (
     ChangePasswordRequest,
     LoginRequest,
@@ -22,6 +20,8 @@ from app.services.audit_service import log_action
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
+PRIVILEGED_ROLES = {RoleCode.ADMIN, RoleCode.EDU_DEPARTMENT, RoleCode.DEPT_HEAD, RoleCode.TUTOR}
+_DUMMY_HASH = hash_password("dummy-password-for-timing")
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -34,35 +34,48 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
     if not check_rate_limit(f"login:{ip}", max_attempts=30, window_seconds=300):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Слишком много попыток входа — попробуйте позже")
 
+    # Блокируется не учётная запись, а связка «адрес + логин»: раньше пять
+    # неверных паролей подряд закрывали вход самому владельцу на 15 минут, и
+    # любой, кто знает логин, мог сделать это удалённо. Теперь подбор с одного
+    # адреса упирается в лимит только для этого адреса — настоящий пользователь
+    # со своего адреса входит как обычно.
+    fail_key = f"{ip}:{payload.username.strip().lower()}"
     user = db.query(User).filter(User.username == payload.username).one_or_none()
 
-    generic_error = HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный логин или пароль")
-
-    if user is None or user.password_hash is None:
-        raise generic_error
-
-    if user.locked_until and user.locked_until > utcnow():
+    # Учётные записи с широкими правами (администрация, зав. отделением, тьютор)
+    # защищены строже: адрес-подборщик останавливается быстрее и на дольше. Саму
+    # учётную запись это не блокирует — владелец со своего адреса входит всегда.
+    privileged = user is not None and user.role.code in PRIVILEGED_ROLES
+    max_failures = settings.max_failed_login_attempts
+    window = settings.lockout_minutes * 60
+    if privileged:
+        max_failures = settings.max_failed_login_attempts_privileged
+        window *= 2
+    if is_blocked(fail_key, max_failures, window):
         raise HTTPException(
-            status.HTTP_423_LOCKED,
-            f"Учётная запись заблокирована до {user.locked_until.isoformat()} из-за неудачных попыток входа",
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            f"Слишком много неудачных попыток входа — попробуйте через {window // 60} мин.",
         )
 
-    if not verify_password(payload.password, user.password_hash):
-        user.failed_login_attempts += 1
-        if user.failed_login_attempts >= settings.max_failed_login_attempts:
-            user.locked_until = utcnow() + datetime.timedelta(
-                minutes=settings.lockout_minutes
-            )
-            user.failed_login_attempts = 0
-        db.commit()
-        raise generic_error
+    # Пароль проверяется и для несуществующего логина (по пустышке), чтобы по
+    # времени ответа нельзя было отличить «нет такого логина» от «неверный пароль».
+    password_ok = verify_password(
+        payload.password, user.password_hash if user and user.password_hash else _DUMMY_HASH
+    ) and user is not None and user.password_hash is not None
+
+    if not password_ok:
+        failures = register_failure(fail_key, window)
+        if privileged and failures == max_failures:
+            # Попытка подбора пароля к привилегированной учётке — в журнал, чтобы
+            # администрация видела её без чтения логов сервера.
+            log_action(db, user, "auth.bruteforce_blocked", "user", str(user.id), new_value=ip)
+            db.commit()
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный логин или пароль")
 
     if not user.is_active:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Учётная запись отключена")
 
-    user.failed_login_attempts = 0
-    user.locked_until = None
-    db.commit()
+    reset_failures(fail_key)
 
     token = create_access_token(user.id, user.role.code, user.token_version)
     return TokenResponse(access_token=token)

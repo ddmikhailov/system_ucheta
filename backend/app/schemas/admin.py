@@ -147,7 +147,6 @@ class UserRead(BaseModel):
     is_active: bool
     has_password: bool
     must_change_password: bool
-    is_locked: bool
 
 
 class UserUpdate(BaseModel):

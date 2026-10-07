@@ -36,7 +36,6 @@ def _user_read(u: User) -> UserRead:
         department_id=u.department_id, is_active=u.is_active,
         has_password=u.password_hash is not None,
         must_change_password=u.must_change_password,
-        is_locked=u.is_locked,
     )
 
 
@@ -256,29 +255,8 @@ def set_password(
     target.password_hash = hash_password(password)
     target.must_change_password = True
     target.token_version += 1
-    # Заодно снимаем блокировку — типовой сценарий обращения «не могу войти».
-    target.failed_login_attempts = 0
-    target.locked_until = None
 
     log_action(db, admin, "user.password_set", "user", str(target.id))
     db.commit()
 
     return SetPasswordResponse(username=target.username, password=password)
-
-
-@router.post("/users/{user_id}/unlock", response_model=UserRead)
-def unlock_user(
-    user_id: int,
-    admin: User = Depends(require_management), db: Session = Depends(get_db),
-):
-    target = db.get(User, user_id)
-    if target is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Пользователь не найден")
-    policies.assert_can_manage_user(admin, target)
-
-    target.failed_login_attempts = 0
-    target.locked_until = None
-    log_action(db, admin, "user.unlock", "user", str(target.id))
-    db.commit()
-    db.refresh(target)
-    return _user_read(target)

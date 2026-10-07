@@ -81,46 +81,11 @@ def test_voluntary_password_change_requires_current_password(client, admin_heade
     assert r.status_code == 200
 
 
-def test_set_password_unlocks_account(client, admin_headers, imported, db):
-    from app.core.config import get_settings
-
-    settings = get_settings()
+def test_unlock_endpoint_removed(client, admin_headers, imported, db):
+    """Блокировки учётной записи больше нет, разблокировать нечего."""
     target = _first_curator(db)
-    client.post(f"/admin/users/{target.id}/set-password", headers=admin_headers, json={"password": "TempPassword1"})
-
-    for _ in range(settings.max_failed_login_attempts):
-        r = client.post("/auth/login", json={"username": target.username, "password": "wrong"})
-        assert r.status_code == 401
-
-    r = client.post("/auth/login", json={"username": target.username, "password": "TempPassword1"})
-    assert r.status_code == 423
-
-    r = client.post(f"/admin/users/{target.id}/set-password", headers=admin_headers, json={"password": "NewTempPassword1"})
-    assert r.status_code == 200
-
-    r = client.post("/auth/login", json={"username": target.username, "password": "NewTempPassword1"})
-    assert r.status_code == 200
-
-
-def test_unlock_endpoint_without_changing_password(client, admin_headers, imported, db):
-    from app.core.config import get_settings
-
-    settings = get_settings()
-    target = _first_curator(db)
-    client.post(f"/admin/users/{target.id}/set-password", headers=admin_headers, json={"password": "TempPassword1"})
-
-    for _ in range(settings.max_failed_login_attempts):
-        client.post("/auth/login", json={"username": target.username, "password": "wrong"})
-
-    r = client.post("/auth/login", json={"username": target.username, "password": "TempPassword1"})
-    assert r.status_code == 423
-
     r = client.post(f"/admin/users/{target.id}/unlock", headers=admin_headers)
-    assert r.status_code == 200
-    assert r.json()["is_locked"] is False
-
-    r = client.post("/auth/login", json={"username": target.username, "password": "TempPassword1"})
-    assert r.status_code == 200
+    assert r.status_code in (404, 405)
 
 
 def test_admin_can_edit_username_and_full_name(client, admin_headers, imported, db):

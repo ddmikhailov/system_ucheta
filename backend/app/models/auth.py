@@ -36,6 +36,8 @@ class User(Base):
     display_title: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Устарели: блокировка учётной записи заменена блокировкой адреса (core/rate_limit.py).
+    # Колонки оставлены, чтобы не делать миграцию ради удаления; вход их больше не читает.
     failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     locked_until: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
 
@@ -57,7 +59,3 @@ class User(Base):
     role: Mapped["Role"] = relationship(back_populates="users")
     department: Mapped["Department"] = relationship()
     curator_assignments: Mapped[list["CuratorAssignment"]] = relationship(back_populates="user")
-
-    @property
-    def is_locked(self) -> bool:
-        return self.locked_until is not None and self.locked_until > utcnow()

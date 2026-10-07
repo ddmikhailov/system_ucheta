@@ -103,14 +103,16 @@ def _reset_rate_limit():
     без сброса между тестами один и тот же TestClient IP ("testclient")
     накопил бы попытки входа из всех тестов подряд и словил бы 429 там, где
     тест ожидает 401/200."""
-    from app.core.rate_limit import _attempts
+    from app.core.rate_limit import _attempts, _failures
 
     from app.services import task_service
 
     _attempts.clear()
+    _failures.clear()
     task_service.reset_reminder_throttle()
     yield
     _attempts.clear()
+    _failures.clear()
     task_service.reset_reminder_throttle()
 
 
