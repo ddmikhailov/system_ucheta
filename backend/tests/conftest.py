@@ -9,11 +9,13 @@ os.environ.setdefault("JWT_SECRET", "Tq8vXn4Lw2KzR7pYb5HdJ9cMfA3sUe6G")
 os.environ.setdefault("DOSSIER_ENCRYPTION_KEY", "Zm9yLXRlc3RzLW9ubHktMzItYnl0ZXMta2V5LTAwMDA=")
 
 import pytest
+from argon2 import PasswordHasher
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
 import app.db.base as db_base
+import app.core.security as security
 from app.core.security import hash_password
 from app.models import (  # noqa: F401 -- регистрирует все таблицы в Base.metadata
     CuratorAssignment,
@@ -23,6 +25,11 @@ from app.models import (  # noqa: F401 -- регистрирует все таб
     StudyGroup,
     User,
 )
+
+# Облегчённый argon2 только в тестах: хеш с параметрами по умолчанию (64 МБ,
+# 3 прохода) занимал 3–6 с на фикстуру. verify() берёт параметры из самого
+# хеша, поэтому проверка паролей работает как в проде; боевой хешер не меняется.
+security._hasher = PasswordHasher(time_cost=1, memory_cost=8, parallelism=1)
 
 ADMIN_PASSWORD = "AdminTest123!"
 DEPT_HEAD_USERNAME = "zavotd"
