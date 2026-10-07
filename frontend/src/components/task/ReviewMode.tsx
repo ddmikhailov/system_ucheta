@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import TextArea from "../TextArea";
 import { Link } from "react-router-dom";
 import { api, ApiError } from "../../api/client";
 import { formatDateRu, formatServerDateTime } from "../../utils/date";
@@ -122,9 +123,10 @@ export default function ReviewMode({ queue, onDecided }: { queue: ReviewQueueRow
               <label className="form-field" htmlFor="review-mode-comment">
                 Комментарий проверяющего
               </label>
-              <textarea
+              <TextArea
                 id="review-mode-comment"
-                ref={commentRef}
+                expandTitle="Комментарий проверяющего"
+                inputRef={commentRef}
                 rows={2}
                 placeholder="Что исправить (обязательно, если возвращаете)"
                 value={comment}

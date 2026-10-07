@@ -167,7 +167,7 @@ textarea {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 10px;
-  resize: vertical;
+  resize: none;
 }
 
 textarea:focus-visible {
@@ -1599,7 +1599,7 @@ th.sortable-th:hover {
   border-radius: 8px;
   padding: 8px 10px;
   width: 100%;
-  resize: vertical;
+  resize: none;
 }
 
 .absence-message {

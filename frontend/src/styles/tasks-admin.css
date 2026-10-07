@@ -678,10 +678,79 @@ kbd {
   font-size: 14px;
 }
 
-/* На телефоне пустую «причину» не показываем — карточка студента и так длинная. */
+
+/* «Мой ID»: пара кнопок «Да» / «Нет». Пока ответа нет — обе неактивны; выбранная подсвечена; сохранённый ответ блокируется. */
+.yesno {
+  display: inline-flex;
+  gap: 6px;
+}
+
+button.yesno__btn {
+  min-width: 64px;
+  min-height: var(--control-h, 36px);
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--control-radius, 8px);
+  background: var(--card-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button.yesno__btn:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+button.yesno__btn--yes.is-active {
+  background: var(--ok-bg);
+  border-color: var(--ok);
+  color: var(--ok);
+  opacity: 1;
+}
+
+button.yesno__btn--no.is-active {
+  background: var(--danger-bg);
+  border-color: var(--danger);
+  color: var(--danger);
+  opacity: 1;
+}
+
+.my-id-cell .my-id-reason {
+  display: block;
+  width: 100%;
+  min-width: 160px;
+  margin-top: 6px;
+  box-sizing: border-box;
+}
+
+/* Кнопки и поле причины — столбиком внутри ячейки; на телефоне — в правой части строки карточки, не шире экрана. */
+.my-id-cell__body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.my-id-cell__body .my-id-reason {
+  margin-top: 0;
+}
+
 @media (max-width: 768px) {
-  .roster-table.compact-cards td.my-id-reason-empty[data-label],
-  .roster-table td.my-id-reason-empty {
-    display: none;
+  .my-id-cell {
+    min-width: 0;
+  }
+
+  .my-id-cell__body {
+    flex: 1;
+    align-items: flex-end;
+  }
+
+  .my-id-cell__body .my-id-reason {
+    min-width: 0;
+    width: 100%;
   }
 }

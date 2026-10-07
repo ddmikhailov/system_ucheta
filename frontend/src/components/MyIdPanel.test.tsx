@@ -39,6 +39,16 @@ function mock(d: MyIdData) {
   });
 }
 
+const BIO = "Биометрия «Мой.ID»";
+const MAX_STUDENT = "Студент в чате MAX";
+const reasonLabel = (text: string, name: string) => `${text}: ${name}`;
+
+/** Пара кнопок «Да» / «Нет» показателя у студента. */
+function pair(label: string, name: string) {
+  const group = screen.getByRole("group", { name: `${label}: ${name}` });
+  return { yes: within(group).getByRole("button", { name: "Да" }), no: within(group).getByRole("button", { name: "Нет" }) };
+}
+
 const ROWS = [row(1, "Алексеев Пётр"), row(2, "Андреева Елена", { biometrics: true, max_student: false, max_student_reason: "не пользуется" })];
 
 beforeEach(() => {
@@ -46,31 +56,61 @@ beforeEach(() => {
   put.mockReset();
 });
 
-describe("MyIdPanel — вкладка «Мой ID»", () => {
-  it("показывает студентов группы с их отметками и итогами", async () => {
+describe("MyIdPanel — «Мой ID»: две кнопки «Да» / «Нет»", () => {
+  it("пока ответа нет, обе кнопки неактивны (не нажаты) и доступны; поля причины нет и чёрточек нет", async () => {
     mock(data(ROWS));
     renderPage(<MyIdPanel />, { role: "curator" });
-    expect(await screen.findByText("Алексеев Пётр")).toBeInTheDocument();
-    expect(get).toHaveBeenCalledWith("/my-id/groups/7");
-    const second = screen.getByText("Андреева Елена").closest("tr") as HTMLElement;
-    expect(within(second).getByLabelText("Биометрия «Мой.ID»: Андреева Елена")).toHaveValue("yes");
-    expect(within(second).getByLabelText("Студент в чате MAX: Андреева Елена")).toHaveValue("no");
-    expect(within(second).getByLabelText("Причина: нет MAX у студента: Андреева Елена")).toHaveValue("не пользуется");
-    const summary = document.querySelector(".my-id-summary");
-    expect(summary).toHaveTextContent("Биометрия зарегистрирована: 1 из 2");
-    expect(summary).toHaveTextContent("Не зарегистрированы: 1");
-    expect(screen.getByRole("button", { name: "Сохранить" })).toBeDisabled();
+    await screen.findByText("Алексеев Пётр");
+    const { yes, no } = pair(BIO, "Алексеев Пётр");
+    expect(yes).toHaveAttribute("aria-pressed", "false");
+    expect(no).toHaveAttribute("aria-pressed", "false");
+    expect(yes).toBeEnabled();
+    expect(no).toBeEnabled();
+    expect(screen.queryByLabelText(reasonLabel("Причина отсутствия биометрии", "Алексеев Пётр"))).not.toBeInTheDocument();
+    const firstRow = screen.getByText("Алексеев Пётр").closest("tr") as HTMLElement;
+    expect(within(firstRow).queryByText("—")).not.toBeInTheDocument(); // «чёрточек» рядом с кнопками нет
+    expect(document.querySelectorAll("table select")).toHaveLength(0); // выпадающих списков в таблице больше нет
   });
 
-  it("«НЕТ» открывает поле причины, «ДА» убирает его; сохраняются только изменённые студенты", async () => {
+  it("сохранённые ответы показаны нажатой кнопкой и заблокированы: исправить нельзя", async () => {
+    mock(data(ROWS));
+    renderPage(<MyIdPanel />, { role: "curator" });
+    await screen.findByText("Андреева Елена");
+    const bio = pair(BIO, "Андреева Елена");
+    expect(bio.yes).toHaveAttribute("aria-pressed", "true");
+    expect(bio.no).toHaveAttribute("aria-pressed", "false");
+    expect(bio.yes).toBeDisabled();
+    expect(bio.no).toBeDisabled();
+    const maxStudent = pair(MAX_STUDENT, "Андреева Елена");
+    expect(maxStudent.no).toHaveAttribute("aria-pressed", "true");
+    expect(maxStudent.yes).toBeDisabled();
+    // а там, где ответа не было, кнопки по-прежнему доступны
+    expect(pair("Родитель в чате MAX", "Андреева Елена").yes).toBeEnabled();
+  });
+
+  it("поле причины появляется только после «Нет», пустое — поле для ввода; «Да» его не показывает", async () => {
+    const user = userEvent.setup();
+    mock(data(ROWS));
+    renderPage(<MyIdPanel />, { role: "curator" });
+    await screen.findByText("Алексеев Пётр");
+    const label = reasonLabel("Причина отсутствия биометрии", "Алексеев Пётр");
+    await user.click(pair(BIO, "Алексеев Пётр").yes);
+    expect(screen.queryByLabelText(label)).not.toBeInTheDocument();
+    await user.click(pair(BIO, "Алексеев Пётр").no); // пока не сохранено — можно передумать
+    const reason = screen.getByLabelText(label);
+    expect(reason).toHaveValue("");
+    expect(reason).toBeEnabled();
+    expect(reason.tagName).toBe("INPUT");
+  });
+
+  it("ответы и причина сохраняются одним запросом; сохранённое потом блокируется", async () => {
     const user = userEvent.setup();
     mock(data(ROWS));
     put.mockResolvedValue(data([row(1, "Алексеев Пётр", { biometrics: false, biometrics_reason: "тех. трудности" }), ROWS[1]]));
     renderPage(<MyIdPanel />, { role: "curator" });
     await screen.findByText("Алексеев Пётр");
-    expect(screen.queryByLabelText("Причина отсутствия биометрии: Алексеев Пётр")).not.toBeInTheDocument();
-    await user.selectOptions(screen.getByLabelText("Биометрия «Мой.ID»: Алексеев Пётр"), "no");
-    await user.type(await screen.findByLabelText("Причина отсутствия биометрии: Алексеев Пётр"), "тех. трудности");
+    await user.click(pair(BIO, "Алексеев Пётр").no);
+    await user.type(screen.getByLabelText(reasonLabel("Причина отсутствия биометрии", "Алексеев Пётр")), "тех. трудности");
     expect(screen.getByRole("button", { name: "Сохранить (1)" })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: "Сохранить (1)" }));
     expect(put).toHaveBeenCalledWith("/my-id/groups/7", { rows: [{
@@ -79,46 +119,53 @@ describe("MyIdPanel — вкладка «Мой ID»", () => {
     }] });
     expect(await screen.findByText("Сохранено")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Сохранить" })).toBeDisabled();
+    expect(pair(BIO, "Алексеев Пётр").no).toBeDisabled(); // теперь ответ заблокирован
+    expect(screen.getByLabelText(reasonLabel("Причина отсутствия биометрии", "Алексеев Пётр"))).toBeEnabled(); // причину дописать можно
   });
 
-  it("смена «НЕТ» на «ДА» стирает причину в отправляемых данных", async () => {
+  it("у уже сохранённого «Нет» причину можно дописать, не трогая ответ", async () => {
     const user = userEvent.setup();
     mock(data(ROWS));
     put.mockResolvedValue(data(ROWS));
     renderPage(<MyIdPanel />, { role: "curator" });
     await screen.findByText("Андреева Елена");
-    await user.selectOptions(screen.getByLabelText("Студент в чате MAX: Андреева Елена"), "yes");
+    const reason = screen.getByLabelText(reasonLabel("Причина: нет MAX у студента", "Андреева Елена"));
+    await user.type(reason, " (с 1 сентября)");
     await user.click(screen.getByRole("button", { name: "Сохранить (1)" }));
     const sent = put.mock.calls[0][1] as { rows: MyIdRow[] };
-    expect(sent.rows[0]).toMatchObject({ student_id: 2, max_student: true, max_student_reason: null });
+    expect(sent.rows[0]).toMatchObject({ student_id: 2, max_student: false, max_student_reason: "не пользуется (с 1 сентября)", biometrics: true });
   });
 
-  it("итоги ДА/НЕТ пересчитываются сразу, до сохранения", async () => {
+  it("итоги Да / Нет пересчитываются сразу, до сохранения", async () => {
     const user = userEvent.setup();
     mock(data(ROWS));
     renderPage(<MyIdPanel />, { role: "curator" });
     await screen.findByText("Алексеев Пётр");
-    const footer = screen.getByText("ДА / НЕТ").closest("tr") as HTMLElement;
-    expect(within(footer).getAllByText("1")[0]).toBeInTheDocument(); // биометрия: 1 «ДА»
-    await user.selectOptions(screen.getByLabelText("Биометрия «Мой.ID»: Алексеев Пётр"), "yes");
-    expect(document.querySelector(".my-id-summary")).toHaveTextContent("Биометрия зарегистрирована: 2 из 2");
+    const summary = () => document.querySelector(".my-id-summary");
+    expect(summary()).toHaveTextContent("Биометрия зарегистрирована: 1 из 2");
+    await user.click(pair(BIO, "Алексеев Пётр").yes);
+    expect(summary()).toHaveTextContent("Биометрия зарегистрирована: 2 из 2");
+    const footer = screen.getByText("Итого").closest("tr") as HTMLElement;
+    expect(footer).toHaveTextContent("Да: 2 · Нет: 0");
   });
 
-  it("ошибка сохранения показывается, правки остаются", async () => {
+  it("ошибка сохранения (в том числе «исправить нельзя») показывается, выбор остаётся", async () => {
     const user = userEvent.setup();
     mock(data(ROWS));
-    put.mockRejectedValue(new ApiError(400, "Среди студентов есть не из этой группы"));
+    put.mockRejectedValue(new ApiError(409, "Ответ уже сохранён — исправить его нельзя"));
     renderPage(<MyIdPanel />, { role: "curator" });
-    await user.selectOptions(await screen.findByLabelText("Студент в чате MAX: Алексеев Пётр"), "yes");
+    await screen.findByText("Алексеев Пётр");
+    await user.click(pair(MAX_STUDENT, "Алексеев Пётр").yes);
     await user.click(screen.getByRole("button", { name: "Сохранить (1)" }));
-    expect(await screen.findByText("Среди студентов есть не из этой группы")).toBeInTheDocument();
-    expect(screen.getByLabelText("Студент в чате MAX: Алексеев Пётр")).toHaveValue("yes");
+    expect(await screen.findByText("Ответ уже сохранён — исправить его нельзя")).toBeInTheDocument();
+    expect(pair(MAX_STUDENT, "Алексеев Пётр").yes).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("только чтение: поля заблокированы, кнопки сохранения нет", async () => {
+  it("только чтение: кнопки заблокированы, кнопки сохранения нет", async () => {
     mock(data(ROWS, { can_edit: false }));
     renderPage(<MyIdPanel />, { role: "social_pedagogue" });
-    expect(await screen.findByLabelText("Биометрия «Мой.ID»: Алексеев Пётр")).toBeDisabled();
+    await screen.findByText("Алексеев Пётр");
+    expect(pair(BIO, "Алексеев Пётр").yes).toBeDisabled();
     expect(screen.queryByRole("button", { name: /Сохранить/ })).not.toBeInTheDocument();
   });
 

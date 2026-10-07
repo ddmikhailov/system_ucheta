@@ -44,18 +44,53 @@ def test_save_and_totals_reason_kept_only_for_no(client, curator_headers, curato
     assert db.query(StudentMyId).count() == 2  # для c записи нет
 
 
-def test_partial_save_does_not_touch_other_students_and_second_save_updates(client, curator_headers, curator_group, db):
+def test_partial_save_does_not_touch_other_students(client, curator_headers, curator_group, db):
     a, b = _students(db, curator_group)[:2]
     client.put(_url(curator_group), headers=curator_headers, json={"rows": [_row(a, biometrics=True), _row(b, biometrics=False, biometrics_reason="x")]})
-    client.put(_url(curator_group), headers=curator_headers, json={"rows": [_row(a, biometrics=False, biometrics_reason="передумал")]})
+    client.put(_url(curator_group), headers=curator_headers, json={"rows": [_row(a, max_student=True)]})  # другой показатель того же студента
     rows = {x["student_id"]: x for x in client.get(_url(curator_group), headers=curator_headers).json()["rows"]}
-    assert rows[a.id]["biometrics"] is False and rows[a.id]["biometrics_reason"] == "передумал"
+    assert rows[a.id]["biometrics"] is True and rows[a.id]["max_student"] is True
     assert rows[b.id]["biometrics"] is False and rows[b.id]["biometrics_reason"] == "x"  # b не присылали — не тронут
     assert db.query(StudentMyId).filter_by(student_id=a.id).count() == 1
-    # сброс отметки обратно в «не заполнено»
-    client.put(_url(curator_group), headers=curator_headers, json={"rows": [_row(a)]})
+
+
+def test_an_answer_cannot_be_changed_once_saved(client, curator_headers, admin_headers, curator_group, db):
+    a, b = _students(db, curator_group)[:2]
+    client.put(_url(curator_group), headers=curator_headers, json={"rows": [_row(a, biometrics=True, max_student=False), _row(b, biometrics=False)]})
+
+    for flipped in ({"biometrics": False}, {"max_student": True}):
+        r = client.put(_url(curator_group), headers=curator_headers, json={"rows": [_row(a, **flipped)]})
+        assert r.status_code == 409 and "исправить" in r.json()["detail"]
+    # конфликт в одной строке отменяет всю отправку: вторая строка не сохраняется
+    client.put(_url(curator_group), headers=curator_headers, json={"rows": [_row(a, biometrics=True), _row(b, max_parent=True)]})
+    r = client.put(_url(curator_group), headers=curator_headers, json={"rows": [_row(b, max_parent=False), _row(a, biometrics=False)]})
+    assert r.status_code == 409
     rows = {x["student_id"]: x for x in client.get(_url(curator_group), headers=curator_headers).json()["rows"]}
-    assert rows[a.id]["biometrics"] is None and rows[a.id]["biometrics_reason"] is None
+    assert rows[a.id]["biometrics"] is True and rows[a.id]["max_student"] is False
+    assert rows[b.id]["max_parent"] is True  # осталось как сохранено до конфликтной отправки
+
+    # то же значение — не конфликт; пустое значение — «не менять», а не сброс
+    same = client.put(_url(curator_group), headers=curator_headers, json={"rows": [_row(a, biometrics=True)]})
+    assert same.status_code == 200
+    cleared = client.put(_url(curator_group), headers=curator_headers, json={"rows": [_row(a)]})
+    assert cleared.status_code == 200
+    rows = {x["student_id"]: x for x in cleared.json()["rows"]}
+    assert rows[a.id]["biometrics"] is True and rows[a.id]["max_student"] is False
+    # то же — у администрации: исправить нельзя никому
+    assert client.put(_url(curator_group), headers=admin_headers, json={"rows": [_row(a, biometrics=False)]}).status_code == 409
+
+
+def test_reason_can_be_added_or_edited_after_no_but_never_after_yes(client, curator_headers, curator_group, db):
+    a, b = _students(db, curator_group)[:2]
+    client.put(_url(curator_group), headers=curator_headers, json={"rows": [_row(a, biometrics=False), _row(b, biometrics=True)]})
+    r = client.put(_url(curator_group), headers=curator_headers, json={"rows": [_row(a, biometrics=False, biometrics_reason="  нет смартфона ")]})
+    assert {x["student_id"]: x for x in r.json()["rows"]}[a.id]["biometrics_reason"] == "нет смартфона"
+    r = client.put(_url(curator_group), headers=curator_headers, json={"rows": [_row(a, biometrics_reason="поправлено")]})  # ответ не присылали
+    assert {x["student_id"]: x for x in r.json()["rows"]}[a.id]["biometrics_reason"] == "поправлено"
+    r = client.put(_url(curator_group), headers=curator_headers, json={"rows": [_row(a, biometrics=False, biometrics_reason="")]})
+    assert {x["student_id"]: x for x in r.json()["rows"]}[a.id]["biometrics_reason"] is None  # пустую прислали — стёрли
+    r = client.put(_url(curator_group), headers=curator_headers, json={"rows": [_row(b, biometrics=True, biometrics_reason="лишняя")]})
+    assert {x["student_id"]: x for x in r.json()["rows"]}[b.id]["biometrics_reason"] is None  # при «Да» причины нет
 
 
 def test_school_years_are_separate(client, curator_headers, curator_group, db):

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import TextArea from "./TextArea";
 import { api, ApiError } from "../api/client";
 import type { AbsenceMessage } from "../api/types";
 
@@ -43,7 +44,7 @@ export default function AbsenceMessageButton({ studentId, days = 14 }: { student
       {error && <div className="error-text">{error}</div>}
       {notice && <p className="hint">{notice}</p>}
       {message?.text && (
-        <textarea className="absence-message__text" readOnly rows={8} value={message.text} aria-label="Текст сообщения родителям" />
+        <TextArea className="absence-message__text" expandTitle="Сообщение родителям о пропусках" readOnly rows={8} value={message.text} aria-label="Текст сообщения родителям" />
       )}
     </div>
   );
