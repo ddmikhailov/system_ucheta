@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState } from "react";
+import { createRef, useState } from "react";
 import { describe, expect, it } from "vitest";
 import TextArea from "./TextArea";
 
@@ -35,5 +35,23 @@ describe("TextArea", () => {
     await user.click(screen.getByRole("button", { name: "Развернуть на весь экран" }));
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("только чтение: текст не правится ни в поле, ни в окне на весь экран", async () => {
+    const user = userEvent.setup();
+    render(<TextArea expandTitle="Сообщение" readOnly value="Готовый текст" onChange={() => {}} aria-label="Текст" />);
+    expect(screen.getByLabelText("Текст")).toHaveAttribute("readonly");
+    await user.click(screen.getByRole("button", { name: "Развернуть на весь экран" }));
+    const big = screen.getByRole("dialog", { name: "Сообщение" }).querySelector("textarea") as HTMLTextAreaElement;
+    expect(big).toHaveAttribute("readonly");
+    expect(big).toHaveValue("Готовый текст");
+  });
+
+  it("ссылка на поле снаружи работает (например, вернуть фокус при ошибке)", () => {
+    const ref = createRef<HTMLTextAreaElement>();
+    render(<TextArea inputRef={ref} value="" onChange={() => {}} aria-label="Комментарий" />);
+    expect(ref.current).toBe(screen.getByLabelText("Комментарий"));
+    ref.current?.focus();
+    expect(screen.getByLabelText("Комментарий")).toHaveFocus();
   });
 });

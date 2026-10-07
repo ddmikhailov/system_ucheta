@@ -1,6 +1,6 @@
 """Вкладка «Мой ID» (раздел «Моя группа»): по каждому студенту — зарегистрирована ли биометрия «Мой.ID», есть ли он сам
 и его родитель в чатах MAX и причины, если нет. Заполняется куратором вручную (как таблица в Excel, которую вели
-раньше); данные из Excel в платформу пока не переносятся.
+раньше); данные из Excel в платформу пока не переносятся. Ответ «Да» / «Нет» ставится один раз и не исправляется.
 
 Права: смотреть — тем, кому открыт журнал группы; заполнять — тем, кто работает с группой (куратор, заместитель,
 зав. отделением, тьютор, администрация). Это обычные сведения студента, не особые категории; в журнал аудита пишется
@@ -130,8 +130,11 @@ def save_my_id(
     group_id: int, payload: MyIdIn, year: str | None = Query(None, max_length=9),
     user: User = Depends(get_current_user), db: Session = Depends(get_db),
 ):
-    """Сохраняет отметки присланных студентов (остальные не трогает). Причина хранится только при «НЕТ»: при «ДА»
-    или пустой отметке она стирается."""
+    """Сохраняет отметки присланных студентов (остальные не трогает).
+
+    Ответ «Да» / «Нет» ставится один раз и **исправить его нельзя**: если показатель уже отмечен, другое значение —
+    409, а пустое (`null`) значит «не менять». Причина хранится только при «Нет» и дописывается при необходимости;
+    при «Да» её нет."""
     today = today_local()
     assert_can_access_group(db, user, group_id, today)
     group = _group(db, group_id)
@@ -144,6 +147,15 @@ def save_my_id(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Среди студентов есть не из этой группы")
     existing = {r.student_id: r for r in db.query(StudentMyId).filter(
         StudentMyId.school_year == year, StudentMyId.student_id.in_(sent))} if sent else {}
+
+    # Сначала проверяем все строки, потом пишем: при конфликте не сохраняется ничего.
+    for row in payload.rows:
+        record = existing.get(row.student_id)
+        for flag, _ in CHECKS:
+            new, old = getattr(row, flag), getattr(record, flag) if record else None
+            if old is not None and new is not None and new != old:
+                raise HTTPException(status.HTTP_409_CONFLICT, "Ответ уже сохранён — исправить его нельзя")
+
     changed = 0
     for row in payload.rows:
         record = existing.get(row.student_id)
@@ -155,8 +167,14 @@ def save_my_id(
         before = [getattr(record, a) for pair in CHECKS for a in pair]
         for flag, reason in CHECKS:
             value = getattr(row, flag)
+            if value is None:
+                value = getattr(record, flag)  # не прислано — оставляем как было
             setattr(record, flag, value)
-            setattr(record, reason, _clean(getattr(row, reason)) if value is False else None)
+            raw_reason = getattr(row, reason)
+            if value is not False:
+                setattr(record, reason, None)
+            elif raw_reason is not None:  # прислано (в том числе пустое — стереть); не прислано — как было
+                setattr(record, reason, _clean(raw_reason))
         if before != [getattr(record, a) for pair in CHECKS for a in pair]:
             record.updated_by_user_id = user.id
             changed += 1

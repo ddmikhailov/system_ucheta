@@ -1,5 +1,5 @@
-import { useLayoutEffect, useRef, useState } from "react";
-import type { TextareaHTMLAttributes } from "react";
+import { useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
+import type { Ref, TextareaHTMLAttributes } from "react";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 
 // Сколько поле может вырасти само (дальше — прокрутка внутри или «развернуть на весь экран»).
@@ -8,12 +8,15 @@ const MAX_HEIGHT = 280;
 type Props = TextareaHTMLAttributes<HTMLTextAreaElement> & {
   /** Заголовок окна «на весь экран» — обычно подпись поля. */
   expandTitle?: string;
+  /** Ссылка на само поле — например, чтобы вернуть в него фокус при ошибке. */
+  inputRef?: Ref<HTMLTextAreaElement>;
 };
 
 /** Многострочное поле: растягивать мышью нельзя (поле не «уезжает» за край), оно само растёт по тексту
  * до разумной высоты, а для длинного текста есть кнопка «Развернуть на весь экран». */
-export default function TextArea({ expandTitle, className, value, onChange, disabled, ...rest }: Props) {
+export default function TextArea({ expandTitle, className, value, onChange, disabled, inputRef, ...rest }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
+  useImperativeHandle(inputRef, () => ref.current as HTMLTextAreaElement);
   const [expanded, setExpanded] = useState(false);
 
   // Высота по содержимому: сбросить и взять scrollHeight, но не выше MAX_HEIGHT.
@@ -55,6 +58,7 @@ export default function TextArea({ expandTitle, className, value, onChange, disa
           onChange={onChange}
           maxLength={rest.maxLength}
           placeholder={rest.placeholder}
+          readOnly={rest.readOnly}
           onClose={() => {
             setExpanded(false);
             ref.current?.focus();
@@ -71,6 +75,7 @@ function FullscreenEditor({
   onChange,
   maxLength,
   placeholder,
+  readOnly,
   onClose,
 }: {
   title: string;
@@ -78,6 +83,7 @@ function FullscreenEditor({
   onChange?: TextareaHTMLAttributes<HTMLTextAreaElement>["onChange"];
   maxLength?: number;
   placeholder?: string;
+  readOnly?: boolean;
   onClose: () => void;
 }) {
   useEscapeKey(onClose);
@@ -95,6 +101,7 @@ function FullscreenEditor({
         onChange={onChange}
         maxLength={maxLength}
         placeholder={placeholder}
+        readOnly={readOnly}
         autoFocus
         aria-label={title}
       />

@@ -4,7 +4,6 @@ import type { MyIdData, MyIdRow } from "../api/types";
 import { useGroupParams } from "../hooks/useGroupParams";
 import SearchSelect from "./SearchSelect";
 
-type Choice = "" | "yes" | "no";
 type Check = "biometrics" | "max_student" | "max_parent";
 
 const CHECKS: { key: Check; reason: "biometrics_reason" | "max_student_reason" | "max_parent_reason"; label: string; reasonLabel: string }[] = [
@@ -12,9 +11,6 @@ const CHECKS: { key: Check; reason: "biometrics_reason" | "max_student_reason" |
   { key: "max_student", reason: "max_student_reason", label: "Студент в чате MAX", reasonLabel: "Причина: нет MAX у студента" },
   { key: "max_parent", reason: "max_parent_reason", label: "Родитель в чате MAX", reasonLabel: "Причина: нет MAX у родителя" },
 ];
-
-const toChoice = (v: boolean | null): Choice => (v === true ? "yes" : v === false ? "no" : "");
-const fromChoice = (c: Choice): boolean | null => (c === "yes" ? true : c === "no" ? false : null);
 
 interface GroupOption {
   id: number;
@@ -134,8 +130,8 @@ export default function MyIdPanel({ fixedGroupId }: { fixedGroupId?: number } = 
         </p>
       )}
       <p className="hint">
-        Отметьте, у кого зарегистрирована биометрия «Мой.ID» и кто состоит в чатах MAX (студенты и родители). Если «НЕТ» — можно
-        указать причину.
+        Отметьте «Да» или «Нет»: зарегистрирована ли биометрия «Мой.ID» и состоят ли студент и его родитель в чатах MAX.
+        После «Нет» появится поле причины. Сохранённый ответ исправить нельзя.
       </p>
       {!current ? (
         !error && <p className="hint">Загрузка…</p>
@@ -161,9 +157,7 @@ export default function MyIdPanel({ fixedGroupId }: { fixedGroupId?: number } = 
                   <th>№</th>
                   <th>Студент</th>
                   {CHECKS.map((c) => (
-                    <th key={c.key} colSpan={2}>
-                      {c.label}
-                    </th>
+                    <th key={c.key}>{c.label}</th>
                   ))}
                 </tr>
               </thead>
@@ -175,11 +169,12 @@ export default function MyIdPanel({ fixedGroupId }: { fixedGroupId?: number } = 
                       <td data-label="№">{i + 1}</td>
                       <td data-label="Студент">{base.full_name}</td>
                       {CHECKS.map((c) => (
-                        <MyIdCells
+                        <MyIdCell
                           key={c.key}
                           name={base.full_name}
                           check={c}
                           row={r}
+                          locked={base[c.key] !== null}
                           disabled={!current.can_edit}
                           onChange={(patch) => change(base, patch)}
                         />
@@ -190,10 +185,10 @@ export default function MyIdPanel({ fixedGroupId }: { fixedGroupId?: number } = 
               </tbody>
               <tfoot>
                 <tr>
-                  <td colSpan={2}>ДА / НЕТ</td>
+                  <td colSpan={2}>Итого</td>
                   {CHECKS.map((c) => (
-                    <td key={c.key} colSpan={2}>
-                      <b>{yes(c.key)}</b> / <b>{no(c.key)}</b>
+                    <td key={c.key}>
+                      Да: <b>{yes(c.key)}</b> · Нет: <b>{no(c.key)}</b>
                     </td>
                   ))}
                 </tr>
@@ -206,46 +201,54 @@ export default function MyIdPanel({ fixedGroupId }: { fixedGroupId?: number } = 
   );
 }
 
-function MyIdCells({
-  name, check, row, disabled, onChange,
+/** Ячейка показателя: две кнопки «Да» / «Нет» (пока ответа нет — обе неактивны) и, только после «Нет», поле причины
+ * (пустое — поле для ввода). Сохранённый ответ исправить нельзя — кнопки блокируются; причину при «Нет» дописать можно. */
+function MyIdCell({
+  name, check, row, locked, disabled, onChange,
 }: {
   name: string;
   check: (typeof CHECKS)[number];
   row: MyIdRow;
+  locked: boolean;
   disabled: boolean;
   onChange: (patch: Partial<MyIdRow>) => void;
 }) {
-  const choice = toChoice(row[check.key]);
+  const value = row[check.key];
   return (
-    <>
-      <td data-label={check.label}>
-        <select
-          aria-label={`${check.label}: ${name}`}
-          value={choice}
-          disabled={disabled}
-          onChange={(e) => {
-            const value = fromChoice(e.target.value as Choice);
-            onChange({ [check.key]: value, ...(value === false ? {} : { [check.reason]: null }) } as Partial<MyIdRow>);
-          }}
+    <td data-label={check.label} className="my-id-cell">
+      <div className="my-id-cell__body">
+      <div className="yesno" role="group" aria-label={`${check.label}: ${name}`}>
+        <button
+          type="button"
+          className={`yesno__btn yesno__btn--yes${value === true ? " is-active" : ""}`}
+          aria-pressed={value === true}
+          disabled={disabled || locked}
+          onClick={() => onChange({ [check.key]: true, [check.reason]: null } as Partial<MyIdRow>)}
         >
-          <option value="">—</option>
-          <option value="yes">ДА</option>
-          <option value="no">НЕТ</option>
-        </select>
-      </td>
-      <td data-label={check.reasonLabel} className={choice === "no" ? undefined : "my-id-reason-empty"}>
-        {choice === "no" ? (
-          <input
-            aria-label={`${check.reasonLabel}: ${name}`}
-            value={row[check.reason] ?? ""}
-            maxLength={255}
-            disabled={disabled}
-            onChange={(e) => onChange({ [check.reason]: e.target.value } as Partial<MyIdRow>)}
-          />
-        ) : (
-          <span className="hint">—</span>
-        )}
-      </td>
-    </>
+          Да
+        </button>
+        <button
+          type="button"
+          className={`yesno__btn yesno__btn--no${value === false ? " is-active" : ""}`}
+          aria-pressed={value === false}
+          disabled={disabled || locked}
+          onClick={() => onChange({ [check.key]: false } as Partial<MyIdRow>)}
+        >
+          Нет
+        </button>
+      </div>
+      {value === false && (
+        <input
+          className="my-id-reason"
+          aria-label={`${check.reasonLabel}: ${name}`}
+          placeholder="Причина"
+          value={row[check.reason] ?? ""}
+          maxLength={255}
+          disabled={disabled}
+          onChange={(e) => onChange({ [check.reason]: e.target.value } as Partial<MyIdRow>)}
+        />
+      )}
+      </div>
+    </td>
   );
 }
