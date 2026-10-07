@@ -40,3 +40,10 @@ backend/scripts/import/data/*.tsv
 
 # Версия для передачи администратору (tools/build_release.py) — собирается, не хранится
 release/
+
+# Внутренние заметки и отчёты ревью — не для публичного репозитория
+TODO.md
+plan-v2.md
+futures.md
+Attention.md
+Attention.MD

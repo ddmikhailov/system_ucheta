@@ -1,6 +1,7 @@
 import datetime
 import io
 import os
+from xml.sax.saxutils import escape as xml_escape
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
@@ -243,7 +244,7 @@ def build_signature_pdf(
         style.fontName = _PDF_FONT_NAME
 
     elements = [
-        Paragraph(f"Табель посещаемости — группа {group.code}", styles["Title"]),
+        Paragraph(f"Табель посещаемости — группа {xml_escape(group.code)}", styles["Title"]),
         Paragraph(f"Период: {date_from.strftime('%d.%m.%Y')} — {date_to.strftime('%d.%m.%Y')}", styles["Normal"]),
         Paragraph(
             f"В списке: {stats.in_list}, присутствие: {stats.percent}%",

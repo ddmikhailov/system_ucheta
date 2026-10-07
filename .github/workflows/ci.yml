@@ -30,7 +30,7 @@ jobs:
       - name: pytest
         working-directory: backend
         env:
-          JWT_SECRET: ci-only-secret-do-not-use-in-production-32chars
+          JWT_SECRET: Ci4vXn8Lw2KzR7pYb5HdJ9cMfA3sUe6Gt
         run: pytest
 
       - name: pip-audit
@@ -71,7 +71,7 @@ jobs:
       - name: pytest (MySQL)
         working-directory: backend
         env:
-          JWT_SECRET: ci-only-secret-do-not-use-in-production-32chars
+          JWT_SECRET: Ci4vXn8Lw2KzR7pYb5HdJ9cMfA3sUe6Gt
           TEST_DATABASE_URL: mysql+pymysql://root@127.0.0.1:3306/kait20_test
         run: pytest
 

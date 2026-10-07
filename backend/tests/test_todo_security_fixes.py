@@ -332,3 +332,24 @@ def test_new_curator_assignment_ends_previous_one(client, admin_headers, importe
     )
     assert len(active) == 1, "на группе не должно быть двух активных основных кураторов одновременно"
     assert active[0].user_id == curators[1].id
+
+
+def test_jwt_secret_rejects_long_placeholders():
+    import pytest
+
+    from app.core.config import validate_jwt_secret
+
+    for weak in ("change-me-in-production-please-use-a-long-one", "a" * 40, "password" * 6):
+        with pytest.raises(RuntimeError):
+            validate_jwt_secret(weak)
+    validate_jwt_secret("Xq7vK2mP9tLw4RzN8bYc1HfD6sJgAe3U")
+
+
+def test_pdf_title_escapes_markup_in_group_code(client, db, admin_headers, imported):
+    from app.models import StudyGroup
+
+    group = db.query(StudyGroup).first()
+    group.code = "<b>ИИ"
+    db.commit()
+    r = client.get(f"/export/pdf/{group.id}", params={"date_from": "2026-09-01", "date_to": "2026-09-05"}, headers=admin_headers)
+    assert r.status_code == 200

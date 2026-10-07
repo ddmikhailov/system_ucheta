@@ -15,6 +15,11 @@ _INSECURE_JWT_SECRETS = {
 }
 
 
+# Длинные, но узнаваемые заготовки («change-me-to-a-long-random-string») и строки из пары символов
+# проходили проверку длины; случайный секрет их не содержит.
+_PLACEHOLDER_WORDS = ("change", "default", "example", "placeholder", "password", "secret", "qwerty", "12345")
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -78,7 +83,9 @@ class Settings(BaseSettings):
 
 
 def validate_jwt_secret(secret: str) -> None:
-    if len(secret) < 32 or secret.lower() in _INSECURE_JWT_SECRETS:
+    lowered = secret.lower()
+    looks_like_placeholder = any(word in lowered for word in _PLACEHOLDER_WORDS) or len(set(secret)) < 8
+    if len(secret) < 32 or lowered in _INSECURE_JWT_SECRETS or looks_like_placeholder:
         raise RuntimeError(
             "JWT_SECRET не задан или слишком короткий/предсказуемый (нужна случайная строка "
             "не короче 32 символов) — иначе токен администратора можно подделать. "

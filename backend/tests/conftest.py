@@ -4,7 +4,7 @@ import os
 # Должно быть выставлено раньше первого импорта из app.* — иначе Settings()
 # (через lru_cache) закэширует значение до того, как мы его зададим (см.
 # TODO.md 1.6: без этого get_settings() падает на слабом секрете по умолчанию).
-os.environ.setdefault("JWT_SECRET", "pytest-only-secret-do-not-use-in-production-32chars")
+os.environ.setdefault("JWT_SECRET", "Tq8vXn4Lw2KzR7pYb5HdJ9cMfA3sUe6G")
 # Тестовый ключ Fernet для шифрования особых полей досье (не используется нигде, кроме тестов).
 os.environ.setdefault("DOSSIER_ENCRYPTION_KEY", "Zm9yLXRlc3RzLW9ubHktMzItYnl0ZXMta2V5LTAwMDA=")
 
