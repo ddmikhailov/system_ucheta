@@ -316,3 +316,58 @@ def test_polling_notifications_creates_the_weekly_task_once(client, admin_header
 
     with SessionLocal() as session:
         assert session.query(Task).filter(Task.kind == "meal").count() == 1
+
+
+def test_weekly_task_is_not_duplicated_by_parallel_polls(db, curator_group):
+    """Колокольчик опрашивает сервер из нескольких вкладок сразу — задача должна появиться ровно одна."""
+    import threading
+
+    from app.db.base import SessionLocal
+
+    results = []
+
+    def poll():
+        with SessionLocal() as session:
+            results.append(meal_service.ensure_weekly_task(session, at(PREV_MON, 10)))
+
+    threads = [threading.Thread(target=poll) for _ in range(6)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert sum(1 for r in results if r is not None) == 1
+    assert db.query(Task).filter(Task.kind == "meal").count() == 1
+
+
+def test_overview_and_group_do_not_query_per_group_or_per_day(client, admin_headers, imported):
+    """Свод по всему колледжу — десятки запросов, а не тысячи: на MySQL с сетевой задержкой каждая секунда заметна
+    (раньше было около 780 запросов, вкладка «Питание» не загружалась)."""
+    from sqlalchemy import event
+
+    import app.db.base as db_base
+
+    engine = db_base.SessionLocal.kw["bind"]
+    count = {"n": 0}
+
+    def on_query(*args, **kwargs):
+        count["n"] += 1
+
+    event.listen(engine, "before_cursor_execute", on_query)
+    try:
+        body = client.get(f"/meals/overview?week_start={MON}", headers=admin_headers).json()
+        assert len(body["rows"]) > 30
+        assert count["n"] <= 30, f"свод сделал {count['n']} запросов"
+        count["n"] = 0
+        client.get(f"/meals/groups/{body['rows'][0]['study_group_id']}", headers=admin_headers)
+        assert count["n"] <= 40, f"группа сделала {count['n']} запросов"
+    finally:
+        event.remove(engine, "before_cursor_execute", on_query)
+
+
+def test_cutoff_after_a_long_break_is_not_in_the_distant_past():
+    """После каникул первый день не закрыт заранее: срок не уходит дальше четырёх дней назад."""
+    monday_after_break = datetime.date(2030, 1, 14)
+    days_before_break = [datetime.date(2029, 12, 20)]
+    assert meal_service.cutoff_for(days_before_break, monday_after_break) == at(monday_after_break - datetime.timedelta(days=4), 10)
+    friday = datetime.date(2030, 1, 11)
+    assert meal_service.cutoff_for([friday], monday_after_break) == at(friday, 10)  # обычные выходные — пятница 10:00

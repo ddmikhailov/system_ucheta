@@ -11,17 +11,18 @@
   * Отдельного планировщика нет: задача создаётся, а число считается при открытии платформы или свода."""
 import datetime
 import json
+import threading
 from collections import defaultdict
 from dataclasses import dataclass, field
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.roles import DEPARTMENT_SCOPED_ROLES
 from app.core.time import now_local, today_local, utcnow
 from app.models import (
-    AttendanceMark, DaySubmission, MarkCode, MealDayOverride, MealSubmission, RoleCode, Student, StudentMeal,
+    AttendanceMark, CuratorAssignment, DaySubmission, MarkCode, MealDayOverride, MealSubmission, RoleCode, Student, StudentMeal,
     StudentProfile, StudyGroup, Task, TaskAssignment, User,
 )
 from app.schemas.tasks import ScopeDef
@@ -61,11 +62,17 @@ def task_appears_at(target_week: datetime.date) -> datetime.datetime:
     return datetime.datetime.combine(prev_monday + datetime.timedelta(days=TASK_APPEARS[0]), TASK_APPEARS[1])
 
 
-def day_cutoff(db: Session, group: StudyGroup, day: datetime.date) -> datetime.datetime:
-    """Последний момент, когда можно править число на `day`: 10:00 предыдущего учебного дня."""
-    prev = calendar_service.previous_study_day(db, day, study_group_id=group.id)
-    if prev is None:
-        prev = day - datetime.timedelta(days=1)
+CUTOFF_MAX_LOOKBACK_DAYS = 4  # после каникул срок «предыдущего учебного дня» не уходит дальше этого
+
+
+def cutoff_for(study_days: list[datetime.date], day: datetime.date) -> datetime.datetime:
+    """Последний момент, когда можно править число на `day`: 10:00 предыдущего учебного дня (по списку учебных дней
+    группы, отсортированному по возрастанию). Если учебного дня рядом нет (каникулы) — 10:00 за четыре дня до `day`,
+    иначе первый день после каникул был бы закрыт задолго до своего наступления."""
+    earliest = day - datetime.timedelta(days=CUTOFF_MAX_LOOKBACK_DAYS)
+    prev = next((d for d in reversed(study_days) if d < day), None)
+    if prev is None or prev < earliest:
+        prev = earliest
     return datetime.datetime.combine(prev, DAY_CUTOFF_TIME)
 
 
@@ -225,6 +232,9 @@ def build_weeks(
         ).scalars()
     }
     deadline = submit_deadline(target_week)
+    # Календарь всех групп — двумя запросами (а не по запросу на группу и день): неделя плюс две недели назад,
+    # чтобы найти «предыдущий учебный день» для понедельника.
+    calendar = calendar_service.study_days_by_group(db, target_week - datetime.timedelta(days=14), week_end, groups)
     result: dict[int, GroupWeek] = {}
     for group in groups:
         eaters = eaters_count(states.get(group.id, []))
@@ -236,8 +246,9 @@ def build_weeks(
             forecast=forecast, submission=submission, deadline=deadline,
             status="submitted" if submission else ("pending" if now < deadline else "forecast"),
         )
-        for day in calendar_service.study_days_between(db, target_week, week_end, study_group_id=group.id):
-            cutoff = day_cutoff(db, group, day)
+        group_days = calendar[group.id]
+        for day in (d for d in group_days if d >= target_week):
+            cutoff = cutoff_for(group_days, day)
             override = overrides.get((group.id, day))
             if override is not None:
                 count, source = override.count, "edited"
@@ -352,13 +363,35 @@ def _complete_task(db: Session, group: StudyGroup, target_week: datetime.date) -
         assignment.review_step = 1
 
 
+# Задачу создаёт тот запрос, который первым открыл платформу после понедельника 09:00. Колокольчик опрашивает
+# сервер из многих вкладок сразу, а потоки запросов идут параллельно, поэтому без замка две вкладки создали бы по
+# задаче (уникальности на (вид, период) в БД нет). Процесс один (см. CLAUDE.md), так что замка и памяти достаточно.
+_task_lock = threading.Lock()
+_ensured_week: datetime.date | None = None
+
+
+def reset_weekly_task_cache() -> None:
+    global _ensured_week
+    _ensured_week = None
+
+
 def ensure_weekly_task(db: Session, now: datetime.datetime | None = None) -> Task | None:
     """Создаёт задачу «Подать питание на следующую неделю», когда пришло её время (понедельник 09:00 и позже).
-    Вызывается при открытии платформы; повторный вызов ничего не делает."""
+    Вызывается при открытии платформы; повторный вызов ничего не делает и в БД не ходит."""
+    global _ensured_week
     now = now or now_local()
     target_week = next_week_start(now.date())
-    if now < task_appears_at(target_week):
+    if now < task_appears_at(target_week) or _ensured_week == target_week:
         return None
+    with _task_lock:
+        if _ensured_week == target_week:
+            return None
+        task = _create_weekly_task(db, now, target_week)
+        _ensured_week = target_week
+        return task
+
+
+def _create_weekly_task(db: Session, now: datetime.datetime, target_week: datetime.date) -> Task | None:
     period = _task_period(target_week)
     if db.execute(select(Task.id).where(Task.kind == TASK_KIND, Task.period_key == period)).first():
         return None
@@ -399,7 +432,11 @@ def ensure_weekly_task(db: Session, now: datetime.datetime | None = None) -> Tas
 
 def visible_groups(db: Session, user: User, department_id: int | None = None) -> list[StudyGroup]:
     """Активные группы не на договорной основе, которые пользователь видит в своде питания."""
-    query = db.query(StudyGroup).filter(StudyGroup.is_active.is_(True))
+    # Отделение и назначения куратора — сразу, без запроса на каждую группу при сборке свода.
+    query = db.query(StudyGroup).options(
+        joinedload(StudyGroup.department),
+        selectinload(StudyGroup.curator_assignments).joinedload(CuratorAssignment.user),
+    ).filter(StudyGroup.is_active.is_(True))
     if RoleCode(user.role.code) in DEPARTMENT_SCOPED_ROLES:
         if user.department_id is None:
             return []

@@ -98,6 +98,15 @@ def db(test_engine):
 
 
 @pytest.fixture(autouse=True)
+def _reset_meal_task_cache():
+    from app.services import meal_service
+
+    meal_service.reset_weekly_task_cache()
+    yield
+    meal_service.reset_weekly_task_cache()
+
+
+@pytest.fixture(autouse=True)
 def _no_weekly_meal_task_on_polls(request, monkeypatch):
     """Задача «Подать питание» создаётся при опросе уведомлений начиная с понедельника 09:00 — то есть почти
     всегда. Без отключения она попадала бы в счётчики и списки любых тестов задач и уведомлений, и результат
