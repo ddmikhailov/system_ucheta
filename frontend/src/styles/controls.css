@@ -253,3 +253,51 @@ form button.btn-secondary[type="submit"]:not(.link-btn):hover:not(:disabled) {
   background: var(--sunken);
   border-color: var(--primary);
 }
+
+/* Сортировка таблиц витрин: заголовок-кнопка выглядит как обычный заголовок. */
+.sort-btn {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+}
+
+.sort-btn:focus-visible {
+  outline: 2px solid var(--accent, currentColor);
+  outline-offset: 2px;
+}
+
+.sort-btn__arrow {
+  font-size: 10px;
+  opacity: 0.55;
+}
+
+th[aria-sort="ascending"] .sort-btn__arrow,
+th[aria-sort="descending"] .sort-btn__arrow {
+  opacity: 1;
+}
+
+.toolbar--filters {
+  flex-wrap: wrap;
+}
+
+.toolbar--filters input[type="search"] {
+  min-width: 200px;
+}
+
+.results-bar {
+  margin: 4px 0 8px;
+}
+
+.check-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--control-h);
+  font-size: 14px;
+}

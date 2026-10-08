@@ -24,7 +24,7 @@ const DEPARTMENTS = [
 function user(id: number, name: string, over: Partial<UserAdmin> = {}): UserAdmin {
   return {
     id, username: `user${id}`, full_name: name, role: "curator", display_title: null, department_id: 1,
-    is_active: true, has_password: true, must_change_password: false, is_locked: false, ...over,
+    is_active: true, has_password: true, must_change_password: false, ...over,
   };
 }
 
@@ -65,17 +65,15 @@ describe("UsersTab — список", () => {
     expect(within(row("Архивов Артём")).getByText("в архиве")).toBeInTheDocument();
   });
 
-  it("показывает «нужен пароль», «ждёт смены» и «заблокирован»", async () => {
+  it("показывает «нужен пароль» и «ждёт смены»", async () => {
     users = [
       user(2, "Без Пароля", { has_password: false }),
       user(3, "Ждёт Смены", { must_change_password: true }),
-      user(4, "Заблокирован Зуев", { is_locked: true }),
     ];
     renderPage(<UsersTab canCreate />, { role: "admin" });
     await screen.findByText("Без Пароля");
     expect(within(row("Без Пароля")).getByText("нет пароля")).toBeInTheDocument();
     expect(within(row("Ждёт Смены")).getByText("ждёт смены пароля")).toBeInTheDocument();
-    expect(within(row("Заблокирован Зуев")).getByText("заблокирован")).toBeInTheDocument();
   });
 
   it("поиск по ФИО, фильтры по роли и по отделению", async () => {

@@ -60,7 +60,7 @@ function mockApi() {
       ];
     }
     if (path === "/admin/groups") return GROUPS;
-    if (path === "/admin/users") return [{ id: 11, username: "k1", full_name: "Куратор К.", role: "curator", display_title: null, department_id: 1, is_active: true, has_password: true, must_change_password: false, is_locked: false }];
+    if (path === "/admin/users") return [{ id: 11, username: "k1", full_name: "Куратор К.", role: "curator", display_title: null, department_id: 1, is_active: true, has_password: true, must_change_password: false }];
     if (path === "/admin/departments") return [{ id: 1, name: "Диджитал", is_active: true }, { id: 2, name: "Моссовет", is_active: true }];
     throw new Error(`неожиданный запрос ${path}`);
   });
@@ -409,5 +409,90 @@ describe("DashboardsPage — экспорт и отделение", () => {
     await screen.findByText("СА172");
     await user.click(screen.getByRole("button", { name: "Свод" }));
     expect(await screen.findByText("свод, фильтр отделения=true")).toBeInTheDocument();
+  });
+});
+
+const groupCodes = () => Array.from(document.querySelectorAll(".dash-table tbody tr td:first-child")).map((td) => td.textContent);
+
+describe("DashboardsPage — фильтры и сортировка", () => {
+  it("«День»: поиск по группе и ответственному, статус сдачи, курс, счётчик и сброс", async () => {
+    const user = userEvent.setup();
+    open("admin");
+    await screen.findByText("СА172");
+    expect(screen.getByRole("status")).toHaveTextContent("Показано 3 из 3");
+
+    await user.selectOptions(screen.getByLabelText("Статус сдачи"), "missing");
+    expect(groupCodes()).toEqual(["ИИ212"]);
+    expect(screen.getByRole("status")).toHaveTextContent("Показано 1 из 3");
+
+    await user.click(screen.getByRole("button", { name: "Сбросить фильтры" }));
+    expect(groupCodes()).toHaveLength(3);
+
+    await user.type(screen.getByLabelText("Поиск по группе или ответственному"), "петров");
+    expect(groupCodes()).toEqual(["ИТ301"]);
+    await user.clear(screen.getByLabelText("Поиск по группе или ответственному"));
+
+    await user.selectOptions(screen.getByLabelText("Курс"), "2");
+    expect(groupCodes()).toEqual(["ИИ212"]);
+  });
+
+  it("«День»: только с пропусками без причины", async () => {
+    const user = userEvent.setup();
+    open("admin");
+    await screen.findByText("СА172");
+    await user.click(screen.getByLabelText("Только с пропусками без причины"));
+    expect(groupCodes()).toEqual(["СА172"]);
+  });
+
+  it("«День»: сортировка по клику на заголовок — вверх, вниз, сброс; пустые значения внизу", async () => {
+    const user = userEvent.setup();
+    open("admin");
+    await screen.findByText("СА172");
+    const header = screen.getByRole("button", { name: /^%/ });
+    await user.click(header);
+    expect(groupCodes()).toEqual(["СА172", "ИТ301", "ИИ212"]);
+    await user.click(header);
+    expect(groupCodes()).toEqual(["ИТ301", "СА172", "ИИ212"]);
+    await user.click(header);
+    expect(groupCodes()).toEqual(["СА172", "ИИ212", "ИТ301"]);
+  });
+
+  it("«Дисциплина кураторов»: только с несданными днями и поиск по ответственному", async () => {
+    const user = userEvent.setup();
+    open("admin", "/dashboards?tab=discipline");
+    await screen.findByText("ИИ212");
+    await user.click(screen.getByLabelText("Только с несданными днями"));
+    expect(groupCodes()).toEqual(["ИИ212"]);
+    await user.click(screen.getByLabelText("Только с несданными днями"));
+    await user.type(screen.getByLabelText("Поиск по группе или ответственному"), "иванова");
+    expect(groupCodes()).toEqual(["СА172"]);
+  });
+
+  it("«Динамика»: только дни с данными и порог посещаемости", async () => {
+    const user = userEvent.setup();
+    open("admin", "/dashboards?tab=dynamics");
+    await screen.findByText("Присутствовало");
+    const rows = () => document.querySelectorAll(".dash-table tbody tr").length;
+    expect(rows()).toBe(3);
+    await user.click(screen.getByLabelText("Только дни с данными"));
+    expect(rows()).toBe(2);
+    await user.type(screen.getByLabelText("Посещаемость ниже, %"), "90");
+    expect(rows()).toBe(1);
+  });
+
+  it("«Группа риска»: поиск по студенту и по группе; пустой результат объяснён", async () => {
+    const user = userEvent.setup();
+    open("admin", "/dashboards?tab=risk");
+    await screen.findByRole("link", { name: "Алексеев Пётр" });
+    await user.type(screen.getByLabelText("Поиск по студенту или группе"), "несуществующий");
+    expect(screen.getByText("Под выбранные фильтры ничего не подошло.")).toBeInTheDocument();
+  });
+
+  it("«Вакантные группы»: поиск по коду", async () => {
+    const user = userEvent.setup();
+    open("admin", "/dashboards?tab=vacant");
+    await screen.findByText("ИИ212");
+    await user.type(screen.getByLabelText("Поиск по коду группы"), "ск");
+    expect(screen.getByText("Под выбранные фильтры ничего не подошло.")).toBeInTheDocument();
   });
 });

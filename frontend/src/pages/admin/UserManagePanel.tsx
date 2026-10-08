@@ -85,16 +85,6 @@ export default function UserManagePanel({
     }
   }
 
-  async function unlock() {
-    setError(null);
-    try {
-      await api.post(`/admin/users/${user.id}/unlock`);
-      onChanged();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось снять блокировку");
-    }
-  }
-
   async function toggleActive() {
     setError(null);
     try {
@@ -202,11 +192,6 @@ export default function UserManagePanel({
             <button className="link-btn" onClick={() => setCustomPasswordOpen(true)}>
               Задать свой пароль
             </button>
-            {user.is_locked && (
-              <button className="link-btn" onClick={unlock}>
-                Разблокировать
-              </button>
-            )}
           </div>
         )}
 

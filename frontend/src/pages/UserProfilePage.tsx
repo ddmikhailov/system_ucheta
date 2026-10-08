@@ -84,7 +84,7 @@ export default function UserProfilePage() {
 
       <ProfileHero
         name={u.full_name}
-        badge={<span className={`locked-badge${u.is_active && !u.is_locked ? "" : " risk-badge"}`}>{userStatusLabel(u)}</span>}
+        badge={<span className={`locked-badge${u.is_active ? "" : " risk-badge"}`}>{userStatusLabel(u)}</span>}
         meta={[
           u.display_title || (ROLE_LABELS[u.role as RoleCode] ?? u.role),
           profile.department_name,
@@ -220,7 +220,7 @@ export default function UserProfilePage() {
       {canManage && (
         <TabPanel idPrefix="user" tabKey="manage" active={tab}>
           <UserManagePanel
-            key={[u.full_name, u.username, u.role, u.department_id, u.is_active, u.is_locked, u.has_password].join("|")}
+            key={[u.full_name, u.username, u.role, u.department_id, u.is_active, u.has_password].join("|")}
             user={u}
             me={me}
             departments={departments}

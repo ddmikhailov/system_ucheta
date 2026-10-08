@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { api, ApiError } from "../../api/client";
 import { useAuth } from "../../auth/useAuth";
@@ -8,7 +8,14 @@ import { CURATOR_CAPABLE_ROLES, DEPARTMENT_SCOPED_ROLES, FORCE_DELETE_GROUP_ROLE
 import { useEscapeKey } from "../../hooks/useEscapeKey";
 import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { DeleteResult, DepartmentAdmin, StudyGroupAdmin, UserAdmin } from "../../api/types";
+import ResultsBar from "../../components/dashboards/ResultsBar";
+import SortHeader from "../../components/dashboards/SortHeader";
 import { dialogs } from "../../utils/feedback";
+import { filterByQuery } from "../../utils/searchMatch";
+import { nextSort, sortRows } from "../../utils/tableView";
+import type { SortState } from "../../utils/tableView";
+
+type GroupSortKey = "code" | "course" | "form" | "curator" | "active";
 
 export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; canCreate: boolean }) {
   const { user: me } = useAuth();
@@ -88,7 +95,29 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
     }
   }
 
-  const visibleRows = showArchived ? rows : rows.filter((g) => g.is_active);
+  // Групп десятки: поиск по коду/куратору, курс, «без куратора» и сортировка по столбцам.
+  const [query, setQuery] = useState("");
+  const [courseFilter, setCourseFilter] = useState<number | "all">("all");
+  const [onlyVacant, setOnlyVacant] = useState(false);
+  const [sort, setSort] = useState<SortState<GroupSortKey> | null>(null);
+  const courses = useMemo(() => Array.from(new Set(rows.map((g) => g.course))).sort((a, b) => a - b), [rows]);
+  const baseRows = showArchived ? rows : rows.filter((g) => g.is_active);
+  const filtered = query.trim() !== "" || courseFilter !== "all" || onlyVacant;
+  const visibleRows = useMemo(() => {
+    let list = baseRows;
+    if (courseFilter !== "all") list = list.filter((g) => g.course === courseFilter);
+    if (onlyVacant) list = list.filter((g) => !g.curator_name);
+    list = filterByQuery(list, query, (g) => `${g.code} ${g.curator_name ?? "нет куратора"}`);
+    return sortRows(list, sort, {
+      code: (g) => g.code, course: (g) => g.course, form: (g) => g.study_form,
+      curator: (g) => g.curator_name, active: (g) => g.is_active,
+    });
+  }, [baseRows, courseFilter, onlyVacant, query, sort]);
+  function resetFilters() {
+    setQuery("");
+    setCourseFilter("all");
+    setOnlyVacant(false);
+  }
   const archivedCount = rows.length - rows.filter((g) => g.is_active).length;
   const detailGroup = rows.find((g) => g.id === detailId) ?? null;
 
@@ -129,14 +158,28 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
         </div>
       )}
 
+      <div className="toolbar toolbar--filters">
+        <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Код группы или куратор" aria-label="Поиск по группе или куратору" />
+        <select aria-label="Фильтр по курсу" value={courseFilter} onChange={(e) => setCourseFilter(e.target.value === "all" ? "all" : Number(e.target.value))}>
+          <option value="all">Все курсы</option>
+          {courses.map((c) => (
+            <option key={c} value={c}>Курс {c}</option>
+          ))}
+        </select>
+        <label className="check-inline">
+          <input type="checkbox" checked={onlyVacant} onChange={(e) => setOnlyVacant(e.target.checked)} /> Только без куратора
+        </label>
+      </div>
+      <ResultsBar shown={visibleRows.length} total={baseRows.length} filtered={filtered} onReset={resetFilters} />
+
       <table className="dash-table">
         <thead>
           <tr>
-            <th>Код</th>
-            <th>Курс</th>
-            <th>Форма обучения</th>
-            <th>Куратор</th>
-            <th title="Отключённая группа не учитывается в своде и общих списках">Активна</th>
+            <SortHeader label="Код" sortKey="code" sort={sort} onSort={(k) => setSort((s) => nextSort(s, k))} />
+            <SortHeader label="Курс" sortKey="course" sort={sort} onSort={(k) => setSort((s) => nextSort(s, k))} />
+            <SortHeader label="Форма обучения" sortKey="form" sort={sort} onSort={(k) => setSort((s) => nextSort(s, k))} />
+            <SortHeader label="Куратор" sortKey="curator" sort={sort} onSort={(k) => setSort((s) => nextSort(s, k))} />
+            <SortHeader label="Активна" sortKey="active" sort={sort} onSort={(k) => setSort((s) => nextSort(s, k))} />
           </tr>
         </thead>
         <tbody>
@@ -175,6 +218,11 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
               </td>
             </tr>
           ))}
+          {visibleRows.length === 0 && (
+            <tr>
+              <td colSpan={5}>{baseRows.length === 0 ? "Групп пока нет." : "Под выбранные фильтры ничего не подошло."}</td>
+            </tr>
+          )}
         </tbody>
       </table>
 

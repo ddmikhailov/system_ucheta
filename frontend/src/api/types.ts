@@ -365,7 +365,6 @@ export interface UserAdmin {
   is_active: boolean;
   has_password: boolean;
   must_change_password: boolean;
-  is_locked: boolean;
 }
 
 export interface SetPasswordResult {

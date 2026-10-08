@@ -26,7 +26,7 @@ const DEPARTMENTS = [
 function account(id: number, name: string, over: Partial<UserAdmin> = {}): UserAdmin {
   return {
     id, username: `user${id}`, full_name: name, role: "curator", display_title: null, department_id: 1,
-    is_active: true, has_password: true, must_change_password: false, is_locked: false, ...over,
+    is_active: true, has_password: true, must_change_password: false, ...over,
   };
 }
 
@@ -241,13 +241,6 @@ describe("UserProfilePage — управление учётной записью
     await u.type(screen.getByPlaceholderText("Свой пароль"), "password123");
     await u.click(screen.getByRole("button", { name: "Задать" }));
     expect(await screen.findByText("Пароль слишком простой")).toBeInTheDocument();
-  });
-
-  it("«Разблокировать» есть только у заблокированного", async () => {
-    const u = await manage({ target: account(2, "Иванова Анна", { is_locked: true }) });
-    post.mockResolvedValue({});
-    await u.click(screen.getByRole("button", { name: "Разблокировать" }));
-    expect(post).toHaveBeenCalledWith("/admin/users/2/unlock");
   });
 
   it("у незаблокированного «Разблокировать» нет", async () => {

@@ -31,10 +31,10 @@ function group(id: number, code: string, over: Partial<StudyGroupAdmin> = {}): S
 }
 
 const USERS: UserAdmin[] = [
-  { id: 11, username: "k1", full_name: "Куратор Первый", role: "curator", display_title: null, department_id: 1, is_active: true, has_password: true, must_change_password: false, is_locked: false },
-  { id: 12, username: "p1", full_name: "Психолог Павел", role: "psychologist", display_title: null, department_id: 1, is_active: true, has_password: true, must_change_password: false, is_locked: false },
-  { id: 13, username: "a1", full_name: "Админов Админ", role: "admin", display_title: null, department_id: null, is_active: true, has_password: true, must_change_password: false, is_locked: false },
-  { id: 14, username: "k2", full_name: "Архивный Куратор", role: "curator", display_title: null, department_id: 1, is_active: false, has_password: true, must_change_password: false, is_locked: false },
+  { id: 11, username: "k1", full_name: "Куратор Первый", role: "curator", display_title: null, department_id: 1, is_active: true, has_password: true, must_change_password: false },
+  { id: 12, username: "p1", full_name: "Психолог Павел", role: "psychologist", display_title: null, department_id: 1, is_active: true, has_password: true, must_change_password: false },
+  { id: 13, username: "a1", full_name: "Админов Админ", role: "admin", display_title: null, department_id: null, is_active: true, has_password: true, must_change_password: false },
+  { id: 14, username: "k2", full_name: "Архивный Куратор", role: "curator", display_title: null, department_id: 1, is_active: false, has_password: true, must_change_password: false },
 ];
 
 let groups: StudyGroupAdmin[];
@@ -127,7 +127,7 @@ describe("GroupsTab — создание", () => {
     renderPage(<GroupsTab canEdit canCreate />, { role: "admin" });
     await screen.findByText("СА172");
     await u.type(screen.getByPlaceholderText("Код группы"), "КБ101");
-    await u.selectOptions(screen.getByRole("combobox"), "2");
+    await u.selectOptions(screen.getByLabelText("Отделение"), "2");
     await u.click(screen.getByRole("button", { name: "Добавить группу" }));
     expect(post).toHaveBeenCalledWith("/admin/groups", { code: "КБ101", course: 1, department_id: 2, study_form: null });
     await waitFor(() => expect(screen.getByPlaceholderText("Код группы")).toHaveValue(""));
@@ -136,7 +136,7 @@ describe("GroupsTab — создание", () => {
   it("зав. отделением и тьютор создают только в своём отделении", async () => {
     renderPage(<GroupsTab canEdit canCreate />, { role: "dept_head", user: { department_name: "Моссовет" } });
     await screen.findByText("СА172");
-    expect(within(screen.getByRole("combobox")).getAllByRole("option").map((o) => o.textContent)).toEqual(["Моссовет"]);
+    expect(within(screen.getByLabelText("Отделение")).getAllByRole("option").map((o) => o.textContent)).toEqual(["Моссовет"]);
   });
 
   it("дубликат кода — сообщение сервера, введённое остаётся", async () => {
@@ -306,5 +306,45 @@ describe("GroupsTab — удаление группы", () => {
     del.mockRejectedValue(new ApiError(409, "У группы есть история — оставьте её в архиве"));
     await u.click(within(dialog).getByRole("button", { name: "Удалить насовсем" }));
     expect(await screen.findByText(/оставьте её в архиве/)).toBeInTheDocument();
+  });
+});
+
+describe("GroupsTab — фильтры и сортировка", () => {
+  const codes = () => Array.from(document.querySelectorAll(".dash-table tbody tr td:first-child")).map((td) => td.textContent);
+
+  beforeEach(() => {
+    groups = [
+      group(1, "СА172", { course: 1 }),
+      group(2, "ИИ212", { course: 2, curator_name: null, curator_assignment_id: null }),
+      group(3, "ИТ301", { course: 3 }),
+    ];
+  });
+
+  it("поиск по коду и куратору, курс, «только без куратора», счётчик и сброс", async () => {
+    const u = userEvent.setup();
+    renderPage(<GroupsTab canEdit canCreate />, { role: "admin" });
+    await screen.findByRole("button", { name: "СА172" });
+    expect(screen.getByRole("status")).toHaveTextContent("Показано 3 из 3");
+
+    await u.click(screen.getByLabelText("Только без куратора"));
+    expect(codes()).toEqual(["ИИ212"]);
+    await u.click(screen.getByRole("button", { name: "Сбросить фильтры" }));
+    expect(codes()).toHaveLength(3);
+
+    await u.selectOptions(screen.getByLabelText("Фильтр по курсу"), "3");
+    expect(codes()).toEqual(["ИТ301"]);
+    await u.selectOptions(screen.getByLabelText("Фильтр по курсу"), "all");
+
+    await u.type(screen.getByLabelText("Поиск по группе или куратору"), "иит");
+    expect(codes()).toEqual(["Под выбранные фильтры ничего не подошло."]);
+  });
+
+  it("сортировка по заголовку «Курс»: вверх, вниз", async () => {
+    const u = userEvent.setup();
+    renderPage(<GroupsTab canEdit canCreate />, { role: "admin" });
+    await screen.findByRole("button", { name: "СА172" });
+    await u.click(screen.getByRole("button", { name: /^Курс/ }));
+    await u.click(screen.getByRole("button", { name: /^Курс/ }));
+    expect(codes()).toEqual(["ИТ301", "ИИ212", "СА172"]);
   });
 });
