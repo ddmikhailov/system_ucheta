@@ -63,7 +63,7 @@ async def security_headers(request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "same-origin"
     response.headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=()"
-    # За прокси Amvera приложение видит запрос как http (TLS завершает прокси), поэтому
+    # За обратным прокси приложение видит запрос как http (TLS завершает прокси), поэтому
     # схему запроса проверять нельзя — раньше заголовок из-за этого не отправлялся вовсе.
     # Браузеры игнорируют HSTS в ответах по http, так что отправлять его всегда безопасно.
     # includeSubDomains не ставим: домен принадлежит хостингу, поддомены — не наши.

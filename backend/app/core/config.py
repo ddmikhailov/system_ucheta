@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60 * 12
     # Сессия браузера живёт в HttpOnly-cookie с этим именем (JS-коду токен недоступен)
     session_cookie_name: str = "kait20_session"
+    # Secure-cookie: браузер отправляет сессию только по HTTPS. По умолчанию включено вне разработки; выключать
+    # (SESSION_COOKIE_SECURE=false) можно ТОЛЬКО если платформа временно открыта по http без сертификата —
+    # иначе вход «не запоминается»: браузер молча отбрасывает Secure-cookie, полученную по http.
+    session_cookie_secure: bool | None = None
 
     cors_origins: list[str] = ["http://localhost:5173"]
 
@@ -80,6 +84,10 @@ class Settings(BaseSettings):
     # Без ключа особые поля недоступны (чтение и запись), остальное работает.
     # Сгенерировать: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     dossier_encryption_key: str = ""
+
+    @property
+    def cookie_secure(self) -> bool:
+        return self.session_cookie_secure if self.session_cookie_secure is not None else self.environment != "development"
 
     @property
     def database_url(self) -> str:

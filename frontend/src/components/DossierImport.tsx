@@ -22,6 +22,8 @@ interface ApplyResult {
   skipped_with_errors: number;
 }
 
+const MAX_FILE_BYTES = 5 * 1024 * 1024; // как на сервере (dossier_import.MAX_FILE_BYTES)
+
 // Массовая загрузка досье из Excel: скачать шаблон → заполнить → выбрать файл →
 // посмотреть предпросмотр с ошибками → применить. Строки с ошибками пропускаются.
 export default function DossierImport() {
@@ -45,10 +47,12 @@ export default function DossierImport() {
   }
 
   function pick(f: File | null) {
-    setFile(f);
+    const tooBig = f !== null && f.size > MAX_FILE_BYTES;
+    setFile(tooBig ? null : f);
     setPreview(null);
     setResult(null);
-    setError(null);
+    // Проверяем здесь, а не ждём ответа сервера: через обратный прокси отказ по размеру приходил бы общей ошибкой.
+    setError(tooBig ? "Файл больше 5 МБ — разбейте его на несколько." : null);
   }
 
   if (!open) {
