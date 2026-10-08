@@ -17,6 +17,8 @@ class RoleCode(str, enum.Enum):
     # структурой, пользователями и справочниками.
     SOCIAL_PEDAGOGUE = "social_pedagogue"
     PSYCHOLOGIST = "psychologist"
+    # Ответственная по питанию: видит только вкладку «Питание» (своды по группам и отделениям), больше ничего.
+    MEAL_MANAGER = "meal_manager"
 
 
 class StudentStatus(str, enum.Enum):

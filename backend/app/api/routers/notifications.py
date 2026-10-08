@@ -5,7 +5,7 @@ from app.api.deps import get_current_user
 from app.core.time import utcnow
 from app.db.session import get_db
 from app.models import InAppNotification, User
-from app.services import in_app_notification_service, task_schedule, task_service
+from app.services import in_app_notification_service, meal_service, task_schedule, task_service
 from app.schemas.notifications import NotificationRead, UnreadCountResponse
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
@@ -15,6 +15,7 @@ def _task_reminders(db: Session, user: User) -> None:
     """Сроки задач проверяем при открытии платформы (колокольчик опрашивает эти ручки)."""
     # Сначала периодические задачи: их «новая задача» тоже попадёт в этот же опрос.
     task_schedule.run_due_templates(db)
+    meal_service.ensure_weekly_task(db)
     if task_service.generate_reminders(db, user):
         db.commit()
 

@@ -20,5 +20,12 @@ DOSSIER_STAFF_ROLES = (RoleCode.SOCIAL_PEDAGOGUE, RoleCode.PSYCHOLOGIST)
 COLLEGE_WIDE_ROLES = (RoleCode.ADMIN, RoleCode.EDU_DEPARTMENT, *DOSSIER_STAFF_ROLES)
 
 
+# Кто видит вкладку «Питание» (своды питающихся): администрация, воспитательный отдел, зав. отделением и тьютор
+# (последние двое — только своё отделение, как в витринах посещаемости) и ответственная по питанию (весь колледж).
+MEAL_VIEW_ROLES = (
+    RoleCode.ADMIN, RoleCode.EDU_DEPARTMENT, RoleCode.DEPT_HEAD, RoleCode.TUTOR, RoleCode.MEAL_MANAGER,
+)
+
+
 def is_department_scoped(user: User) -> bool:
     return RoleCode(user.role.code) in DEPARTMENT_SCOPED_ROLES

@@ -33,6 +33,8 @@ class Task(Base):
     series_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     step_no: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     unlock_on: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # Особый вид задачи: "meal" — «Подать питание на след. неделю»; пусто — обычная задача.
+    kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     author: Mapped["User"] = relationship()
     assignments: Mapped[list["TaskAssignment"]] = relationship(back_populates="task", cascade="all, delete-orphan")

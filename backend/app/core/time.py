@@ -30,3 +30,9 @@ def today_local() -> datetime.date:
     TODO.md 3)."""
     settings = get_settings()
     return datetime.datetime.now(ZoneInfo(settings.notification_timezone)).date()
+
+
+def now_local() -> datetime.datetime:
+    """Текущее местное время колледжа (наивное) — для сроков «до 10:00» и «до четверга 16:00»."""
+    settings = get_settings()
+    return datetime.datetime.now(ZoneInfo(settings.notification_timezone)).replace(tzinfo=None)

@@ -44,6 +44,10 @@ MANAGE_USER_CASES = [
     (DEPT_HEAD, DEPT_A, ADMIN, None, False),
     (DEPT_HEAD, None, CURATOR, DEPT_A, False),  # у самого нет отделения
     (EDU_DEPARTMENT, None, CURATOR, DEPT_A, False),  # не управляет учётками вообще
+    ("meal_manager", None, CURATOR, DEPT_A, False),  # ответственная по питанию — только вкладка «Питание»
+    (ADMIN, None, "meal_manager", None, True),
+    (DEPT_HEAD, DEPT_A, "meal_manager", None, False),  # учётку ответственной заводит только администратор
+    (TUTOR, DEPT_A, "meal_manager", None, False),
 ]
 
 

@@ -71,7 +71,7 @@ def _group_read(g: StudyGroup, today: datetime.date | None = None) -> StudyGroup
     )
     return StudyGroupRead(
         id=g.id, code=g.code, course=g.course, department_id=g.department_id,
-        study_form=g.study_form, is_active=g.is_active,
+        study_form=g.study_form, is_active=g.is_active, funding=g.funding,
         curator_name=curator_assignment.user.full_name if curator_assignment else None,
         curator_assignment_id=curator_assignment.id if curator_assignment else None,
         deputy_name=deputy_assignment.user.full_name if deputy_assignment else None,

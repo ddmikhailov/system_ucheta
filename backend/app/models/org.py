@@ -23,6 +23,8 @@ class StudyGroup(Base):
     department_id: Mapped[int] = mapped_column(ForeignKey("departments.id"), nullable=False)
     study_form: Mapped[str | None] = mapped_column(String(64), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # budget / contract; пусто — бюджет. Группа «на договорной основе» не питается (см. meal_service).
+    funding: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     department: Mapped["Department"] = relationship(back_populates="study_groups")
     students: Mapped[list["Student"]] = relationship(back_populates="study_group")

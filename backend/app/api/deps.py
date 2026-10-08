@@ -5,7 +5,7 @@ from fastapi import Cookie, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
-from app.core.roles import DEPARTMENT_SCOPED_ROLES, DOSSIER_STAFF_ROLES, is_department_scoped
+from app.core.roles import DEPARTMENT_SCOPED_ROLES, DOSSIER_STAFF_ROLES, MEAL_VIEW_ROLES, is_department_scoped
 from app.core.config import get_settings
 from app.core.security import decode_access_token
 from app.db.session import get_db
@@ -105,6 +105,7 @@ require_structure_editor = require_roles(RoleCode.ADMIN, RoleCode.TUTOR, RoleCod
 # Просмотр групп, витрин и списка групп: управленческие роли + соц. педагог и
 # психолог (по всему колледжу, только чтение). Всё, что меняет данные, остаётся
 # за require_management / require_structure_editor.
+require_meal_viewer = require_roles(*MEAL_VIEW_ROLES)
 require_viewer = require_roles(
     RoleCode.DEPT_HEAD, RoleCode.EDU_DEPARTMENT, RoleCode.ADMIN, RoleCode.TUTOR, *DOSSIER_STAFF_ROLES
 )

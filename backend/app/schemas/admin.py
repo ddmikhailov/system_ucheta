@@ -28,6 +28,7 @@ class StudyGroupRead(BaseModel):
     department_id: int
     study_form: str | None
     is_active: bool
+    funding: str | None = None
     curator_name: str | None = None
     curator_assignment_id: int | None = None
     deputy_name: str | None = None
@@ -39,6 +40,7 @@ class StudyGroupCreate(BaseModel):
     course: int = Field(ge=1, le=6)
     department_id: int
     study_form: str | None = Field(default=None, max_length=64)
+    funding: Literal["budget", "contract"] | None = None
 
 
 class StudyGroupUpdate(BaseModel):
@@ -46,6 +48,7 @@ class StudyGroupUpdate(BaseModel):
     course: int | None = Field(default=None, ge=1, le=6)
     department_id: int | None = None
     study_form: str | None = Field(default=None, max_length=64)
+    funding: Literal["budget", "contract"] | None = None
     is_active: bool | None = None
 
 

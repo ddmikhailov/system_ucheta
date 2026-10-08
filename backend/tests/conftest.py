@@ -280,3 +280,24 @@ def today() -> datetime.date:
     while day.weekday() >= 5:
         day -= datetime.timedelta(days=1)
     return day
+
+
+MEAL_MANAGER_PASSWORD = "MealManager123!"
+
+
+@pytest.fixture()
+def meal_manager_user(db, seeded):
+    role = db.query(Role).filter(Role.code == RoleCode.MEAL_MANAGER.value).one()
+    user = User(
+        username="pitanie", full_name="Ответственная по питанию", role_id=role.id,
+        password_hash=hash_password(MEAL_MANAGER_PASSWORD),
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@pytest.fixture()
+def meal_manager_headers(client, meal_manager_user):
+    return _login(client, meal_manager_user.username, MEAL_MANAGER_PASSWORD)

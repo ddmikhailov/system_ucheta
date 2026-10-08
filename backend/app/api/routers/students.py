@@ -7,7 +7,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import assert_can_access_group, get_current_user, scope_department_id, validate_date_range
+from app.api.deps import assert_can_access_group, get_current_user, require_viewer, scope_department_id, validate_date_range
 from app.core.roles import DOSSIER_STAFF_ROLES, is_department_scoped
 from app.core.time import today_local
 from app.db.session import get_db
@@ -64,13 +64,11 @@ class StudentSearchRow(BaseModel):
 @router.get("", response_model=list[StudentSearchRow])
 def search_students(
     q: str = "", group_id: int | None = None, limit: int = 50,
-    user: User = Depends(get_current_user), db: Session = Depends(get_db),
+    user: User = Depends(require_viewer), db: Session = Depends(get_db),
 ):
     """Поиск студента по ФИО/группе — вход в карточку и досье для соц. педагога,
-    психолога и администрации. Куратор работает через «Мои группы»."""
-    role = RoleCode(user.role.code)
-    if role in (RoleCode.CURATOR, RoleCode.DEPUTY_CURATOR):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Недостаточно прав")
+    психолога и администрации. Куратор работает через «Мои группы». Список допущенных ролей —
+    разрешающий (require_viewer), а не запрещающий: новая роль не получает всех студентов колледжа по умолчанию."""
     query = db.query(Student).join(StudyGroup, StudyGroup.id == Student.study_group_id)
     if is_department_scoped(user):
         query = query.filter(StudyGroup.department_id == scope_department_id(user, None))

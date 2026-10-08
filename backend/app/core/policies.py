@@ -46,7 +46,7 @@ DEPARTMENT_REQUIRED_ROLES = {
     RoleCode.DEPT_HEAD.value, RoleCode.TUTOR.value, RoleCode.CURATOR.value, RoleCode.DEPUTY_CURATOR.value,
     RoleCode.SOCIAL_PEDAGOGUE.value, RoleCode.PSYCHOLOGIST.value,
 }
-DEPARTMENT_FORBIDDEN_ROLES = {RoleCode.ADMIN.value, RoleCode.EDU_DEPARTMENT.value}
+DEPARTMENT_FORBIDDEN_ROLES = {RoleCode.ADMIN.value, RoleCode.EDU_DEPARTMENT.value, RoleCode.MEAL_MANAGER.value}
 
 
 def assert_can_manage_user(admin: User, target: User) -> None:

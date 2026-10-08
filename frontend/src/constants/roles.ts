@@ -13,6 +13,7 @@ export const ROLE = {
   TUTOR: "tutor",
   SOCIAL_PEDAGOGUE: "social_pedagogue",
   PSYCHOLOGIST: "psychologist",
+  MEAL_MANAGER: "meal_manager",
 } as const;
 
 export type RoleCode = (typeof ROLE)[keyof typeof ROLE];
@@ -26,6 +27,7 @@ export const ROLE_LABELS: Record<RoleCode, string> = {
   tutor: "Тьютор",
   social_pedagogue: "Социальный педагог",
   psychologist: "Педагог-психолог",
+  meal_manager: "Ответственная по питанию",
 };
 
 type Roles = readonly string[];
@@ -69,6 +71,12 @@ export const FORCE_DELETE_GROUP_ROLES: Roles = [ROLE.ADMIN, ROLE.TUTOR];
 
 /** Кто видит журнал просмотров досье (по студентам своей области доступа). */
 export const DOSSIER_AUDIT_ROLES: Roles = [ROLE.ADMIN, ROLE.TUTOR];
+
+/** Кто видит вкладку «Питание» (своды питающихся): зав. отделением и тьютор — только своё отделение
+ * (backend: MEAL_VIEW_ROLES). */
+export const MEAL_VIEW_ROLES: Roles = [
+  ROLE.ADMIN, ROLE.EDU_DEPARTMENT, ROLE.DEPT_HEAD, ROLE.TUTOR, ROLE.MEAL_MANAGER,
+];
 
 /** Роли, которым отделение обязательно (backend: DEPARTMENT_REQUIRED_ROLES). */
 export const DEPARTMENT_REQUIRED_ROLES: Roles = [

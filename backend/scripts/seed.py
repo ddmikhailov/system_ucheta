@@ -26,6 +26,7 @@ ROLES = [
     (RoleCode.TUTOR, "Тьютор"),
     (RoleCode.SOCIAL_PEDAGOGUE, "Социальный педагог"),
     (RoleCode.PSYCHOLOGIST, "Педагог-психолог"),
+    (RoleCode.MEAL_MANAGER, "Ответственная по питанию"),
 ]
 
 # Флаги закреплены здесь один раз — дальше их можно менять из админки без правки кода.
