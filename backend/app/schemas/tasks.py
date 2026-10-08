@@ -161,6 +161,7 @@ class MyAssignmentRow(BaseModel):
     filled: int = 0
     total: int = 0
     review_comment: str | None = None
+    kind: str | None = None  # "meal" — «Подать питание»
 
 
 class RowRead(BaseModel):
@@ -220,6 +221,7 @@ class AssignmentDetail(BaseModel):
     locked_reason: str | None = None
     step_no: int = 1
     step_total: int | None = None
+    kind: str | None = None  # "meal" — «Подать питание»: ответ даётся во вкладке «Питание» группы
 
 
 class RowIn(BaseModel):

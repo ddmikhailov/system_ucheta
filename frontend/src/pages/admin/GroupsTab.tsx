@@ -195,7 +195,7 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
                 )}
               </td>
               <td>{g.course}</td>
-              <td>{g.study_form ?? "—"}</td>
+              <td>{g.study_form ?? "—"}{g.funding === "contract" ? " · договор" : ""}</td>
               <td>{g.curator_name ?? "нет куратора"}</td>
               <td>
                 {canEdit ? (
@@ -269,6 +269,7 @@ function GroupDetailModal({
   const [editCode, setEditCode] = useState(group.code);
   const [editCourse, setEditCourse] = useState(group.course);
   const [editStudyForm, setEditStudyForm] = useState(group.study_form ?? "");
+  const [editFunding, setEditFunding] = useState(group.funding === "contract" ? "contract" : "budget");
   // Какое назначение открыто: куратор или заместитель (окно выбора роли должно открываться на нужной).
   const [assigning, setAssigning] = useState<"curator" | "deputy" | null>(null);
   const [deletingForever, setDeletingForever] = useState(false);
@@ -279,7 +280,7 @@ function GroupDetailModal({
     setLocalError(null);
     try {
       await api.patch(`/admin/groups/${group.id}`, {
-        code: editCode, course: editCourse, study_form: editStudyForm || null,
+        code: editCode, course: editCourse, study_form: editStudyForm || null, funding: editFunding,
       });
       onChanged();
     } catch (err) {
@@ -358,6 +359,13 @@ function GroupDetailModal({
         <label>
           Форма обучения
           <input value={editStudyForm} onChange={(e) => setEditStudyForm(e.target.value)} placeholder="необязательно" />
+        </label>
+        <label>
+          Финансирование
+          <select value={editFunding} onChange={(e) => setEditFunding(e.target.value)} aria-label="Финансирование группы">
+            <option value="budget">Бюджет</option>
+            <option value="contract">Договорная основа (питание не предоставляется)</option>
+          </select>
         </label>
         <div className="actions">
           <button onClick={saveEdit}>Сохранить</button>

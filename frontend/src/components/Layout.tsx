@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { api } from "../api/client";
 import { useAuth } from "../auth/useAuth";
-import { MANAGEMENT_ROLES, TASK_MANAGER_ROLES, VIEWER_ROLES, inRoles, leadsGroups } from "../constants/roles";
+import { MANAGEMENT_ROLES, MEAL_VIEW_ROLES, TASK_MANAGER_ROLES, VIEWER_ROLES, inRoles, leadsGroups } from "../constants/roles";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import type { MeResponse } from "../api/types";
 import NavIcon from "./NavIcon";
@@ -51,6 +51,7 @@ function navItems(user: MeResponse | null): NavItem[] {
     items.push({ to: "/report", label: "Отчёт куратора", short: "Отчёт", icon: "report" });
     items.push({ to: "/my-id", label: "Мой ID", short: "ID", icon: "id" });
   }
+  if (inRoles(role, MEAL_VIEW_ROLES)) items.push({ to: "/meals", label: "Питание", icon: "meals" });
   if (inRoles(role, MANAGEMENT_ROLES)) items.push({ to: "/admin", label: "Админка", icon: "admin", counter: "journal_changes" });
   return items;
 }

@@ -286,3 +286,22 @@ def test_meal_manager_has_no_other_permissions(client, meal_manager_headers, cur
     assert client.get("/tasks", headers=meal_manager_headers).status_code in (200, 403)
     me = client.get("/auth/me", headers=meal_manager_headers).json()
     assert me["role"] == "meal_manager" and me["groups"] == []
+
+
+def test_admin_creates_a_meal_manager_without_department_and_she_sees_only_meals(client, admin_headers, imported):
+    r = client.post("/admin/users", headers=admin_headers, json={
+        "full_name": "Ответственная Питания", "username": "meals.head", "role": "meal_manager", "department_id": 1,
+    })
+    assert r.status_code == 201, r.text
+    assert r.json()["department_id"] is None and r.json()["role"] == "meal_manager"
+    pwd = client.post(f"/admin/users/{r.json()['id']}/set-password", headers=admin_headers, json={"password": "MealsHead2026!x"})
+    assert pwd.status_code == 200
+    token = client.post("/auth/login", json={"username": "meals.head", "password": "MealsHead2026!x"}).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    # временный пароль: сначала смена, дальше — только «Питание»
+    assert client.get("/auth/me", headers=headers).json()["must_change_password"] is True
+
+
+def test_only_admin_may_create_a_meal_manager(client, dept_head_headers, imported):
+    r = client.post("/admin/users", headers=dept_head_headers, json={"full_name": "Х", "username": "x.meals", "role": "meal_manager"})
+    assert r.status_code == 403

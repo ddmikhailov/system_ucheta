@@ -1,6 +1,6 @@
 import { Suspense, lazy } from "react";
 import type { ReactElement } from "react";
-import { Navigate, Route, BrowserRouter as Router, Routes } from "react-router-dom";
+import { Navigate, Route, BrowserRouter as Router, Routes, useLocation } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthContext";
 import { useAuth } from "./auth/useAuth";
 import FeedbackHost from "./components/FeedbackHost";
@@ -9,7 +9,7 @@ import LoginPage from "./pages/LoginPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 import CuratorCabinetPage from "./pages/CuratorCabinetPage";
 import CuratorGroupPage from "./pages/CuratorGroupPage";
-import { DOSSIER_STAFF_ROLES, MANAGEMENT_ROLES, TASK_MANAGER_ROLES, VIEWER_ROLES, inRoles } from "./constants/roles";
+import { DOSSIER_STAFF_ROLES, MANAGEMENT_ROLES, MEAL_VIEW_ROLES, ROLE, TASK_MANAGER_ROLES, VIEWER_ROLES, inRoles } from "./constants/roles";
 import MyDayPage from "./pages/MyDayPage";
 import MyIdPanel from "./components/MyIdPanel";
 import PlanPage from "./pages/PlanPage";
@@ -27,13 +27,24 @@ const StudentsSearchPage = lazy(() => import("./pages/StudentsSearchPage"));
 const IndividualWorkPage = lazy(() => import("./pages/IndividualWorkPage"));
 const PassportPage = lazy(() => import("./pages/PassportPage"));
 const TasksPage = lazy(() => import("./pages/TasksPage"));
+const MealsPage = lazy(() => import("./pages/MealsPage"));
 
 function RequireAuth({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
+  const { pathname } = useLocation();
   if (loading) return <div className="loading-screen">Загрузка…</div>;
   if (!user) return <Navigate to="/login" replace />;
   // Временный пароль от администратора — дальше пути нет, пока не задан свой.
   if (user.must_change_password) return <Navigate to="/change-password" replace />;
+  // Ответственной по питанию открыта только вкладка «Питание»: остальные разделы ей недоступны (и сервер их закрывает).
+  if (user.role === ROLE.MEAL_MANAGER && !pathname.startsWith("/meals")) return <Navigate to="/meals" replace />;
+  return children;
+}
+
+// «Питание» (своды питающихся) — для руководства и ответственной по питанию.
+function RequireMealViewer({ children }: { children: ReactElement }) {
+  const { user } = useAuth();
+  if (!user || !inRoles(user.role, MEAL_VIEW_ROLES)) return <Navigate to="/" replace />;
   return children;
 }
 
@@ -76,6 +87,7 @@ function HomeRedirect() {
   // отправлялся бы на страницу входа при каждом открытии сайта по корневому адресу.
   if (loading) return <div className="loading-screen">Загрузка…</div>;
   if (!user) return <Navigate to="/login" replace />;
+  if (user.role === ROLE.MEAL_MANAGER) return <Navigate to="/meals" replace />;
   if (inRoles(user.role, DOSSIER_STAFF_ROLES)) return <Navigate to="/students" replace />;
   if (inRoles(user.role, MANAGEMENT_ROLES)) return <Navigate to="/dashboards" replace />;
   return <Navigate to="/my-day" replace />;
@@ -145,6 +157,18 @@ export default function App() {
                       <DashboardsPage />
                     </Layout>
                   </RequireViewer>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/meals"
+              element={
+                <RequireAuth>
+                  <RequireMealViewer>
+                    <Layout>
+                      <MealsPage />
+                    </Layout>
+                  </RequireMealViewer>
                 </RequireAuth>
               }
             />

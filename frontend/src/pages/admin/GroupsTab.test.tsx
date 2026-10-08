@@ -159,7 +159,15 @@ describe("GroupsTab — окно группы", () => {
     await u.clear(code);
     await u.type(code, "СА172-26");
     await u.click(within(dialog).getByRole("button", { name: "Сохранить" }));
-    expect(patch).toHaveBeenCalledWith("/admin/groups/1", { code: "СА172-26", course: 1, study_form: "очная" });
+    expect(patch).toHaveBeenCalledWith("/admin/groups/1", { code: "СА172-26", course: 1, study_form: "очная", funding: "budget" });
+  });
+
+  it("группу можно перевести на договорную основу — питание ей не предоставляется", async () => {
+    const { u, dialog } = await openGroup("СА172");
+    patch.mockResolvedValue({});
+    await u.selectOptions(within(dialog).getByLabelText("Финансирование группы"), "contract");
+    await u.click(within(dialog).getByRole("button", { name: "Сохранить" }));
+    expect(patch).toHaveBeenCalledWith("/admin/groups/1", expect.objectContaining({ funding: "contract" }));
   });
 
   it("ошибка сохранения показывается внутри окна", async () => {

@@ -323,6 +323,8 @@ export interface StudyGroupAdmin {
   department_id: number;
   study_form: string | null;
   is_active: boolean;
+  /** "contract" — группа на договорной основе (не питается); пусто или "budget" — бюджет. */
+  funding?: string | null;
   curator_name: string | null;
   curator_assignment_id: number | null;
   deputy_name: string | null;
@@ -665,6 +667,7 @@ export interface TaskDetail {
 }
 
 export interface MyAssignmentRow {
+  kind?: string | null;
   id: number;
   task_id: number;
   title: string;
@@ -739,6 +742,8 @@ export interface AssignmentDetail {
   locked_reason: string | null;
   step_no: number;
   step_total: number | null;
+  /** "meal" — «Подать питание»: ответ даётся во вкладке «Питание» группы. */
+  kind?: string | null;
 }
 
 export interface ReviewQueueRow {
@@ -957,4 +962,76 @@ export interface MyIdData {
     max_parent_yes: number;
     max_parent_no: number;
   };
+}
+
+
+// --- Питание ---
+
+export interface MealStudent {
+  student_id: number;
+  full_name: string;
+  eats: boolean;
+  /** Почему включить питание нельзя («Обучение на договорной основе»). */
+  locked_reason: string | null;
+}
+
+export type MealSource = "submitted" | "edited" | "forecast";
+
+export interface MealDay {
+  date: string;
+  count: number;
+  source: MealSource;
+  /** Число на день ещё можно поправить (до 10:00 предыдущего учебного дня). */
+  open: boolean;
+  cutoff: string;
+}
+
+export interface MealWeek {
+  week_start: string;
+  status: "submitted" | "pending" | "forecast";
+  deadline: string;
+  submitted_count: number | null;
+  submitted_at: string | null;
+  forecast: number;
+  days: MealDay[];
+}
+
+export interface GroupMeals {
+  study_group_id: number;
+  code: string;
+  funding: string | null;
+  can_edit: boolean;
+  eaters: number;
+  students: MealStudent[];
+  attendance_percent: number | null;
+  hint: number;
+  weeks: MealWeek[];
+}
+
+export interface MealOverviewDay {
+  date: string;
+  count: number;
+  source: MealSource;
+}
+
+export interface MealOverviewRow {
+  study_group_id: number;
+  code: string;
+  course: number;
+  department_id: number;
+  department_name: string;
+  curator_name: string | null;
+  eaters: number;
+  attendance_percent: number | null;
+  status: "submitted" | "pending" | "forecast";
+  submitted_at: string | null;
+  days: MealOverviewDay[];
+}
+
+export interface MealOverview {
+  week_start: string;
+  deadline: string;
+  dates: string[];
+  rows: MealOverviewRow[];
+  totals: Record<string, number>;
 }

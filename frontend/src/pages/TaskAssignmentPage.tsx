@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import StatusMark from "../components/StatusMark";
 import { markKind } from "../utils/statusMark";
@@ -386,6 +386,30 @@ export default function TaskAssignmentPage() {
     }
     if (window.history.length > 1) navigate(-1);
     else navigate("/");
+  }
+
+  if (detail.kind === "meal") {
+    // «Подать питание» заполняется не формой задачи, а во вкладке «Питание» группы; подача закрывает задачу сама.
+    const done = detail.status === "accepted";
+    return (
+      <div className="assignment">
+        <p>
+          <button className="link-btn" onClick={goBack}>
+            ← Назад
+          </button>
+        </p>
+        <h2>{detail.title}</h2>
+        {detail.description && <p>{detail.description}</p>}
+        <div className={`day-status ${done ? "submitted" : "not-submitted"}`}>
+          {done ? "Питание подано." : `Питание не подано. Срок — ${formatDueShort(detail.due_date)} 16:00.`}
+        </div>
+        <p>
+          <Link className="btn-primary" to={`/cabinet/groups/${detail.study_group_id}?tab=meals`}>
+            Открыть вкладку «Питание»
+          </Link>
+        </p>
+      </div>
+    );
   }
 
   const studentNames = new Map(detail.rows.map((r) => [r.student_id, r.student_name]));

@@ -352,7 +352,7 @@ describe("CuratorGroupPage — сданный день и правка прош�
     expect(await screen.findByText("В группе СА172 нет студентов.")).toBeInTheDocument();
     const tabs = screen.getByRole("tablist", { name: "Разделы группы" });
     expect(within(tabs).getAllByRole("tab").map((t) => t.textContent?.replace(/\d+$/, ""))).toEqual([
-      "Журнал", "Студенты", "Индивидуальная работа", "Соц. паспорт", "План группы", "Отчёт", "Мой ID",
+      "Журнал", "Студенты", "Питание", "Индивидуальная работа", "Соц. паспорт", "План группы", "Отчёт", "Мой ID",
     ]);
     expect(within(tabs).getByRole("tab", { name: "Мой ID" })).toHaveAttribute("aria-selected", "true");
     expect(get).toHaveBeenCalledWith("/my-id/groups/7");

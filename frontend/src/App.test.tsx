@@ -21,6 +21,7 @@ vi.mock("./pages/StudentsSearchPage", async () => (await import("./test/stub")).
 vi.mock("./pages/PassportPage", async () => (await import("./test/stub")).stubPage("соц. паспорт"));
 vi.mock("./pages/TasksPage", async () => (await import("./test/stub")).stubPage("задачи"));
 vi.mock("./pages/MyTasksPage", async () => (await import("./test/stub")).stubPage("мои задачи"));
+vi.mock("./pages/MealsPage", async () => (await import("./test/stub")).stubPage("питание"));
 vi.mock("./pages/TaskAssignmentPage", async () => (await import("./test/stub")).stubPage("назначение"));
 vi.mock("./components/NotificationBell", () => ({ default: () => null }));
 
@@ -50,9 +51,29 @@ describe("App — стартовая страница по роли", () => {
     ["edu_department", "витрины"],
     ["social_pedagogue", "поиск студентов"],
     ["psychologist", "поиск студентов"],
+    ["meal_manager", "питание"],
   ])("%s с «/» попадает на нужную страницу", async (role, page) => {
     visit("/", role);
     expect(await screen.findByText(`страница: ${page}`)).toBeInTheDocument();
+  });
+});
+
+describe("App — ответственная по питанию", () => {
+  it.each(["/my-day", "/cabinet", "/dashboards", "/students", "/admin", "/tasks", "/passport"])(
+    "по адресу %s попадает только на «Питание»", async (path) => {
+      visit(path, "meal_manager");
+      expect(await screen.findByText("страница: питание")).toBeInTheDocument();
+    },
+  );
+
+  it.each(["admin", "edu_department", "dept_head", "tutor"])("%s открывает «Питание»", async (role) => {
+    visit("/meals", role);
+    expect(await screen.findByText("страница: питание")).toBeInTheDocument();
+  });
+
+  it.each(["curator", "deputy_curator", "social_pedagogue", "psychologist"])("%s на «Питание» не попадает", async (role) => {
+    visit("/meals", role);
+    await waitFor(() => expect(screen.queryByText("страница: питание")).not.toBeInTheDocument());
   });
 });
 

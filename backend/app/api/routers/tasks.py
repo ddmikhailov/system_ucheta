@@ -173,7 +173,7 @@ def my_assignments(user: User = Depends(get_current_user), db: Session = Depends
             group_code=a.study_group.code, due_date=a.task.due_date, status=a.status,
             is_overdue=svc.is_overdue(a, today), is_closed=a.task.is_closed, is_locked=a.locked,
             step_no=a.task.step_no, step_total=totals.get(a.task.series_id), filled=filled, total=total,
-            review_comment=a.review_comment if a.status == "returned" else None,
+            review_comment=a.review_comment if a.status == "returned" else None, kind=a.task.kind,
         ))
     return result
 
@@ -230,7 +230,7 @@ def _detail_assignment(db: Session, user: User, a: TaskAssignment) -> Assignment
         review_steps=2 if task.reviewer_rule == "two_step" else 1, can_edit=editable, can_submit=editable,
         can_review=svc.can_review(user, a) and a.status == "submitted",
         is_locked=a.locked, locked_reason=svc.lock_reason(db, a), step_no=task.step_no,
-        step_total=_step_totals(db).get(task.series_id),
+        step_total=_step_totals(db).get(task.series_id), kind=task.kind,
     )
 
 

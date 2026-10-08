@@ -8,6 +8,7 @@ import GroupListModal from "../components/GroupListModal";
 import MyIdPanel from "../components/MyIdPanel";
 import { Kpi, ProfileHero } from "../components/ProfileHero";
 import StudentCardModal from "../components/StudentCardModal";
+import GroupMealsPanel from "../components/meals/GroupMealsPanel";
 import { TabBar, TabPanel } from "../components/Tabs";
 import { filterByQuery } from "../utils/searchMatch";
 import { formatPercent } from "../utils/percent";
@@ -17,7 +18,7 @@ import { GroupPassportPanel } from "./PassportPage";
 import PlanPage from "./PlanPage";
 import ReportPage from "./ReportPage";
 
-const TABS = ["journal", "students", "work", "passport", "plan", "report", "my-id"] as const;
+const TABS = ["journal", "students", "meals", "work", "passport", "plan", "report", "my-id"] as const;
 type GroupTab = (typeof TABS)[number];
 // Параметры вкладок (год, семестр, раздел) — свои у каждой; при смене вкладки они сбрасываются.
 const TAB_SCOPED_PARAMS = ["part", "section", "year", "semester", "date"];
@@ -103,6 +104,7 @@ export default function CuratorGroupPage() {
         tabs={[
           { key: "journal", label: "Журнал" },
           { key: "students", label: "Студенты", badge: summary.students_count || undefined },
+          { key: "meals", label: "Питание" },
           { key: "work", label: "Индивидуальная работа" },
           { key: "passport", label: "Соц. паспорт" },
           { key: "plan", label: "План группы" },
@@ -129,6 +131,9 @@ export default function CuratorGroupPage() {
       </TabPanel>
       <TabPanel idPrefix="group" tabKey="students" active={tab}>
         <GroupStudents groupId={groupId} groupCode={summary.code} />
+      </TabPanel>
+      <TabPanel idPrefix="group" tabKey="meals" active={tab}>
+        <GroupMealsPanel groupId={groupId} />
       </TabPanel>
       <TabPanel idPrefix="group" tabKey="work" active={tab}>
         <IndividualWorkPage fixedGroupId={groupId} />

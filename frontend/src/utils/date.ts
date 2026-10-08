@@ -66,6 +66,13 @@ export function formatWeekdayLong(iso: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+// Местное время колледжа с сервера без пересчёта («2030-01-14T10:00:00» → «14.01 10:00»): сроки питания
+// сервер отдаёт уже в местном времени, а не в UTC, как остальные метки.
+export function formatLocalDateTime(iso: string): string {
+  const [day, time = ""] = iso.split("T");
+  return `${formatDayMonthRu(day)} ${time.slice(0, 5)}`.trim();
+}
+
 // Местное время «14:32» (например, «Сохранено в 14:32»).
 export function formatTimeRu(d: Date): string {
   return d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });

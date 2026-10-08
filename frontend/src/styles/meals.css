@@ -1,0 +1,106 @@
+/* Питание: вкладка группы и свод. */
+.meals {
+  display: grid;
+  gap: 16px;
+}
+
+.meals__weeks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.meals__counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px;
+  margin: 12px 0;
+}
+
+.meals__count {
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+}
+
+.meals__count-value {
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.meals__count-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.meals__total {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.meals__total input,
+.meals__days input {
+  width: 96px;
+}
+
+.meals__hint {
+  margin: 0 0 8px;
+}
+
+.meals__row--forecast td {
+  font-style: italic;
+}
+
+.meals__day-actions {
+  display: flex;
+  gap: 12px;
+  white-space: nowrap;
+}
+
+.meals__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  columns: 2 280px;
+}
+
+.meals__student {
+  padding: 6px 0;
+  break-inside: avoid;
+}
+
+.meals__student--off {
+  color: var(--muted);
+}
+
+.meals__student label {
+  cursor: pointer;
+}
+
+/* Свод питания */
+.meals-overview__cell--forecast {
+  font-style: italic;
+  background: var(--warn-bg);
+}
+
+.meals-overview__cell--edited {
+  font-weight: 700;
+}
+
+.meals-overview__totals td {
+  font-weight: 700;
+  border-top: 2px solid var(--border-strong);
+}
+
+@media (max-width: 640px) {
+  .meals__count-value {
+    font-size: 24px;
+  }
+}
