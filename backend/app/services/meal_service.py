@@ -450,7 +450,7 @@ def visible_groups(db: Session, user: User, department_id: int | None = None) ->
 
 def export_workbook(overview) -> bytes:
     """Книга Excel по образцу колледжа: лист на отделение; № п/п, группа, куратор, число питающихся и заказ по дням
-    недели, итоги, статус подачи. Числа «по прогнозу» выделены цветом и курсивом."""
+    недели, итоги, статус подачи. Числа «по прогнозу» выделены цветом, поправки куратора — жирным."""
     import io
 
     from openpyxl import Workbook
@@ -488,7 +488,7 @@ def export_workbook(overview) -> bytes:
                 if value is not None:
                     totals[d] += value.count
                     if value.source == "forecast":
-                        cell.fill, cell.font = forecast_fill, Font(italic=True)
+                        cell.fill = forecast_fill
                     elif value.source == "edited":
                         cell.font = Font(bold=True)
         append_row(ws, ["", "", "Итого", sum(r.eaters for r in rows)] + [totals[d] for d in overview.dates] + [""])

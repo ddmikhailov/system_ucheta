@@ -117,7 +117,7 @@ export default function MealsPage() {
     <div className="meals-overview">
       <div className="toolbar">
         <button type="button" className="btn-secondary" onClick={() => setWeek(addDaysIso(week, -7))} aria-label="Предыдущая неделя">‹</button>
-        <strong>Неделя {formatDayMonthRu(week)}–{formatDayMonthRu(last)}</strong>
+        <strong className="meals-overview__week">Неделя {formatDayMonthRu(week)}–{formatDayMonthRu(last)}</strong>
         <button type="button" className="btn-secondary" onClick={() => setWeek(addDaysIso(week, 7))} aria-label="Следующая неделя">›</button>
         <button type="button" className="link-btn" onClick={() => setReloadKey((k) => k + 1)} title="Запросить данные заново">Обновить</button>
         <button type="button" className="link-btn" onClick={exportExcel}>Экспорт в Excel</button>
@@ -185,7 +185,7 @@ export default function MealsPage() {
                     </td>
                   );
                 })}
-                <td>{STATUS_TEXT[r.status]}</td>
+                <td><span className={`meals-source meals-source--${r.status === "submitted" ? "submitted" : r.status === "forecast" ? "forecast" : "edited"}`}>{STATUS_TEXT[r.status]}</span></td>
               </tr>
             ))}
             {visible.length === 0 && (
@@ -208,7 +208,7 @@ export default function MealsPage() {
           )}
         </table>
       </div>
-      <p className="hint">Курсивом на жёлтом — число по прогнозу (куратор не подал), жирным — поправка куратора на день.</p>
+      <p className="hint">Жёлтым выделено число по прогнозу (куратор не подал), жирным — поправка куратора на день.</p>
 
       {openGroup && <GroupDialog row={openGroup} onClose={() => setOpenGroup(null)} />}
     </div>

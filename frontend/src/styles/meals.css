@@ -1,92 +1,231 @@
-/* Питание: вкладка группы и свод. */
+/* Питание: блок группы (подвкладки «Подача», «По дням», «Студенты») и свод. Без курсива: прогноз отмечается плашкой и цветом. */
 .meals {
   display: grid;
-  gap: 16px;
+  gap: 4px;
 }
 
 .meals__weeks {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  margin: 0 0 12px;
 }
 
-.meals__counts {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 16px;
-  margin: 12px 0;
+.meals .day-status {
+  margin: 0 0 16px;
+  line-height: 1.45;
 }
 
-.meals__count {
+/* Три карточки одной высоты: число, поле итогового числа, кнопка — выровнены по одной сетке. */
+.meals-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 0 0 16px;
+}
+
+.meals-card {
   display: flex;
   flex-direction: column;
-  min-width: 120px;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card-bg);
 }
 
-.meals__count-value {
-  font-size: 28px;
+.meals-card--action {
+  justify-content: center;
+  gap: 10px;
+}
+
+.meals-card--action .btn-primary {
+  width: 100%;
+  min-height: var(--control-h);
+}
+
+.meals-card__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.meals-card__value {
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.meals-card input[type="number"] {
+  width: 100%;
+  min-height: var(--control-h);
+  box-sizing: border-box;
+  font-size: 20px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
-.meals__count-label {
+.meals-card__note {
   font-size: 12px;
+  line-height: 1.35;
   color: var(--muted);
 }
 
-.meals__total {
+/* Подсказка по посещаемости. */
+.meals-tip {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.meals__total input,
-.meals__days input {
-  width: 96px;
-}
-
-.meals__hint {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
   margin: 0 0 8px;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  background: var(--primary-light);
+  line-height: 1.45;
 }
 
-.meals__row--forecast td {
-  font-style: italic;
+.meals-tip__apply {
+  margin-left: auto;
+  min-height: var(--control-h);
+  white-space: nowrap;
+}
+
+/* «По дням» */
+.meals__days td,
+.meals__days th {
+  vertical-align: middle;
+}
+
+.meals__days input[type="number"] {
+  width: 96px;
+  min-height: var(--control-h);
+  box-sizing: border-box;
+  text-align: center;
+  font-weight: 600;
 }
 
 .meals__day-actions {
   display: flex;
+  align-items: center;
   gap: 12px;
   white-space: nowrap;
 }
 
-.meals__list {
-  list-style: none;
+.meals-source {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--sunken);
+}
+
+.meals-source--forecast {
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+}
+
+.meals-source--edited {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.meals-source--submitted {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+/* «Студенты» */
+.meals-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+
+.meals-filters {
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.meals-filters .chip-filter {
   margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 2px;
-  columns: 2 280px;
 }
 
-.meals__student {
-  padding: 6px 0;
-  break-inside: avoid;
+.meals-filters input[type="search"] {
+  min-width: 220px;
+  min-height: var(--control-h);
+  box-sizing: border-box;
 }
 
-.meals__student--off {
+.meals-students td {
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+
+.meals-students__off td:nth-child(2) {
   color: var(--muted);
 }
 
-.meals__student label {
-  cursor: pointer;
+.meals-students__body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .meals-students__body {
+    align-items: flex-end;
+  }
+
+  .meals-card__value {
+    font-size: 26px;
+  }
+
+  .meals-tip__apply {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .meals-filters input[type="search"] {
+    width: 100%;
+  }
 }
 
 /* Свод питания */
+.meals-overview .toolbar {
+  align-items: center;
+}
+
+.meals-overview__week {
+  min-width: 150px;
+  text-align: center;
+}
+
+.meals-overview table td,
+.meals-overview table th {
+  vertical-align: middle;
+}
+
+.meals-overview table td:nth-child(n + 3),
+.meals-overview table th:nth-child(n + 3) {
+  text-align: center;
+}
+
+.meals-overview table td:last-child,
+.meals-overview table th:last-child {
+  text-align: left;
+  white-space: nowrap;
+}
+
 .meals-overview__cell--forecast {
-  font-style: italic;
   background: var(--warn-bg);
 }
 
@@ -99,8 +238,6 @@
   border-top: 2px solid var(--border-strong);
 }
 
-@media (max-width: 640px) {
-  .meals__count-value {
-    font-size: 24px;
-  }
+.modal--wide {
+  max-width: 920px;
 }
