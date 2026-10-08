@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     db_user: str = "kait20"
     db_password: str = "kait20"
     db_name: str = "kait20"
+    # Размер пула соединений с БД: постоянные + запасные на пике (должно укладываться в max_connections MySQL)
+    db_pool_size: int = 10
+    db_max_overflow: int = 20
 
     jwt_secret: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"
