@@ -98,6 +98,20 @@ def db(test_engine):
 
 
 @pytest.fixture(autouse=True)
+def _no_weekly_meal_task_on_polls(request, monkeypatch):
+    """Задача «Подать питание» создаётся при опросе уведомлений начиная с понедельника 09:00 — то есть почти
+    всегда. Без отключения она попадала бы в счётчики и списки любых тестов задач и уведомлений, и результат
+    зависел бы от дня недели. Тесты самого питания вызывают сервис напрямую либо ставят метку `real_meal_task`."""
+    if request.node.get_closest_marker("real_meal_task"):
+        return
+    from types import SimpleNamespace
+
+    from app.api.routers import notifications
+
+    monkeypatch.setattr(notifications, "meal_service", SimpleNamespace(ensure_weekly_task=lambda db: None))
+
+
+@pytest.fixture(autouse=True)
 def _reset_rate_limit():
     """Лимитер по IP (app/core/rate_limit.py) — общее состояние процесса;
     без сброса между тестами один и тот же TestClient IP ("testclient")
