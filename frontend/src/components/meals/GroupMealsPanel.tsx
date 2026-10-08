@@ -266,11 +266,11 @@ export default function GroupMealsPanel({ groupId, viewOnly = false }: { groupId
                         <td data-label="Источник">
                           <span className={`meals-source meals-source--${day.source}`}>{SOURCE_TEXT[day.source]}</span>
                         </td>
-                        <td data-label="Правка до">{day.open ? formatLocalDateTime(day.cutoff) : <span className="hint">закрыто</span>}</td>
+                        <td data-label="Правка до">{day.open ? formatLocalDateTime(day.cutoff) : <span className="meals__closed">закрыто</span>}</td>
                         {editable && (
                           <td data-label="" className="meals__day-actions">
                             {day.open && (
-                              <>
+                              <div className="meals__day-buttons">
                                 <button
                                   type="button"
                                   className="btn-secondary"
@@ -284,7 +284,7 @@ export default function GroupMealsPanel({ groupId, viewOnly = false }: { groupId
                                     Сбросить
                                   </button>
                                 )}
-                              </>
+                              </div>
                             )}
                           </td>
                         )}
