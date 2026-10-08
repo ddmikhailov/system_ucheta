@@ -154,6 +154,16 @@ export default function DayJournal({
   }, [loadRoster]);
 
   const month = date.slice(0, 7);
+  // Ритм группы (посещаемость за три недели) грузится отдельно: он меняется после сдачи дня, оформления
+  // периода отсутствия и решения по исправлению — раньше обновлялся только при смене группы или месяца.
+  const loadRhythm = useCallback(() => {
+    if (!groupId) return;
+    api
+      .get<MyDayRhythmDay[]>(`/curator/groups/${groupId}/rhythm`)
+      .then((r) => setRhythm(Array.isArray(r) ? r : []))
+      .catch(() => setRhythm([]));
+  }, [groupId]);
+
   const loadMonthStatus = useCallback(() => {
     if (!groupId) return;
     const [year, m] = month.split("-").map(Number);
@@ -161,16 +171,16 @@ export default function DayJournal({
       .get<MonthDayStatus[]>(`/curator/groups/${groupId}/month-status?year=${year}&month=${m}`)
       .then(setMonthStatus)
       .catch(() => setMonthStatus([]));
-    // Ритм группы (посещаемость за три недели) обновляется вместе с календарём — после сдачи дня тоже.
-    api
-      .get<MyDayRhythmDay[]>(`/curator/groups/${groupId}/rhythm`)
-      .then((r) => setRhythm(Array.isArray(r) ? r : []))
-      .catch(() => setRhythm([]));
   }, [groupId, month]);
 
   useEffect(() => {
     loadMonthStatus();
   }, [loadMonthStatus]);
+
+  // Переход на другой день того же месяца тоже подтягивает свежий ритм (отметки могли поменять другие).
+  useEffect(() => {
+    loadRhythm();
+  }, [date, loadRhythm]);
 
   const markCodeByCode = useMemo(() => new Map(markCodes.map((m) => [m.code, m])), [markCodes]);
   const selectedDayType = monthStatus.find((d) => d.date === date)?.day_type;
@@ -286,6 +296,7 @@ export default function DayJournal({
       applyRoster(await api.post<RosterResponse>(path, body));
       // Иначе календарь и пометка «не сдано сегодня» в списке групп остаются устаревшими (см. TODO.md 4).
       loadMonthStatus();
+      loadRhythm();
       if (!fixedGroupId) loadGroups();
       onSubmitted?.();
       scrollToTop();
@@ -392,6 +403,7 @@ export default function DayJournal({
               onDone={() => {
                 loadRoster();
                 loadMonthStatus();
+                loadRhythm();
               }}
             />
           )}
@@ -541,6 +553,7 @@ export default function DayJournal({
           onSaved={() => {
             setShowPeriodForm(null);
             loadRoster();
+            loadRhythm();
             scrollToTop();
           }}
         />
