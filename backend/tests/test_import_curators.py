@@ -122,3 +122,35 @@ def test_transliteration_matches_existing_username_style():
     assert curators.base_username("Волкова Юлия Александровна") == "volkova.y"
     assert curators.base_username("Михалёва Александра Валентиновна") == "mikhaleva.a"
     assert curators.base_username("Шкуренко Андрей Игоревич") == "shkurenko.a"
+
+
+def test_issue_passwords_only_with_apply_and_to_curators_without_one(kiber, db, tmp_path):
+    from app.core.security import verify_password
+
+    path = write_list(tmp_path, ["Комлев Глеб Сергеевич\tИБС115", "Егорова Наталья Владимировна\tИБС315"])
+    out = tmp_path / "passwords.csv"
+
+    stats = curators.run(path, "Кибер", apply=False, issue_passwords_file=str(out))
+    assert not out.exists() and "временных паролей выдано" not in stats  # проверка ничего не выдаёт
+
+    stats = curators.run(path, "Кибер", apply=True, issue_passwords_file=str(out))
+    assert stats["временных паролей выдано"] == 2
+    rows = [line.split(";") for line in out.read_text(encoding="utf-8-sig").splitlines()]
+    assert rows[0] == ["ФИО", "Отделение", "Логин", "Временный пароль"] and len(rows) == 3
+    assert oct(out.stat().st_mode & 0o777) == "0o600"
+    by_login = {r[2]: r[3] for r in rows[1:]}
+    komlev = db.query(User).filter_by(username="komlev.g").one()
+    assert komlev.must_change_password and verify_password(by_login["komlev.g"], komlev.password_hash)
+
+    # повторный запуск паролей не меняет и новых не выдаёт
+    out2 = tmp_path / "again.csv"
+    stats = curators.run(path, "Кибер", apply=True, issue_passwords_file=str(out2))
+    assert "временных паролей выдано" not in stats and not out2.exists()
+
+
+def test_assigned_from_and_report_file(kiber, db, tmp_path):
+    path = write_list(tmp_path, ["Комлев Глеб Сергеевич\tИБС115"])
+    report = tmp_path / "r.txt"
+    curators.run(path, "Кибер", apply=True, assigned_from=datetime.date(2027, 9, 1), report=str(report))
+    assert db.query(CuratorAssignment).one().start_date == datetime.date(2027, 9, 1)
+    assert "кураторов создано: 1" in report.read_text(encoding="utf-8")

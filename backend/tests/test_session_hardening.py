@@ -81,3 +81,12 @@ def test_blocked_login_tells_when_to_retry(client, admin_headers):
 def test_change_password_refreshes_the_session_cookie(client, admin_headers):
     r = client.post("/auth/change-password", headers=admin_headers, json={"current_password": "AdminTest123!", "new_password": "NewAdminPass123!"})
     assert r.status_code == 200 and COOKIE in r.headers["set-cookie"]
+
+
+def test_cookie_secure_follows_environment_unless_overridden():
+    from app.core.config import Settings
+
+    assert Settings(environment="production", jwt_secret="x" * 40).cookie_secure is True
+    assert Settings(environment="development", jwt_secret="x" * 40).cookie_secure is False
+    # явное отключение — для временной работы по http без сертификата
+    assert Settings(environment="production", jwt_secret="x" * 40, session_cookie_secure=False).cookie_secure is False

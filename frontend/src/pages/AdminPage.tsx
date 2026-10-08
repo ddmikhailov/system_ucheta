@@ -8,11 +8,12 @@ import MarkCodesTab from "./admin/MarkCodesTab";
 import UsersTab from "./admin/UsersTab";
 import CalendarTab from "./admin/CalendarTab";
 import GroupJournalTab from "./admin/GroupJournalTab";
+import ImportTab from "./admin/ImportTab";
 import { DEPARTMENT_SCOPED_ROLES, REFERENCE_EDITOR_ROLES, ROLE, inRoles } from "../constants/roles";
 
-type Tab = "departments" | "groups" | "students" | "mark-codes" | "users" | "calendar" | "journal";
+type Tab = "departments" | "groups" | "students" | "mark-codes" | "users" | "calendar" | "journal" | "import";
 
-const VALID_TABS: Tab[] = ["departments", "groups", "students", "mark-codes", "users", "calendar", "journal"];
+const VALID_TABS: Tab[] = ["departments", "groups", "students", "mark-codes", "users", "calendar", "journal", "import"];
 
 export default function AdminPage() {
   const { user } = useAuth();
@@ -63,6 +64,8 @@ export default function AdminPage() {
         { key: "users", label: "Пользователи" },
         { key: "calendar", label: "Календарь" },
         { key: "journal", label: "Журнал группы" },
+        // Массовая загрузка контингента — только администратор (бэкенд проверяет роль).
+        ...(isAdmin ? [{ key: "import" as Tab, label: "Импорт" }] : []),
       ];
 
   return (
@@ -82,6 +85,7 @@ export default function AdminPage() {
       {tab === "users" && <UsersTab canCreate={canCreate} />}
       {tab === "calendar" && <CalendarTab canEdit={isReferenceEditor} canEditGroups={isReferenceEditor || isDeptHead} />}
       {tab === "journal" && <GroupJournalTab />}
+      {tab === "import" && isAdmin && <ImportTab />}
     </div>
   );
 }

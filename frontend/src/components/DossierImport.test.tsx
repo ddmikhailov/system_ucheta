@@ -142,4 +142,15 @@ describe("DossierImport", () => {
     await user.click(screen.getByRole("button", { name: "Закрыть" }));
     expect(screen.queryByRole("button", { name: "Скачать шаблон" })).not.toBeInTheDocument();
   });
+
+  it("файл больше 5 МБ отклоняется сразу, без запроса на сервер", async () => {
+    const user = userEvent.setup();
+    render(<DossierImport />);
+    await user.click(screen.getByRole("button", { name: /Загрузить досье из Excel/ }));
+    const big = new File([new Uint8Array(5 * 1024 * 1024 + 1)], "big.xlsx");
+    await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, big);
+    expect(screen.getByText(/Файл больше 5 МБ/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Проверить|Предпросмотр/ })).toBeDisabled();
+    expect(upload).not.toHaveBeenCalled();
+  });
 });

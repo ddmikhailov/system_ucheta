@@ -17,6 +17,11 @@
     python -m scripts.import_curators curators.tsv               # единый файл с колонкой отделения
     python -m scripts.import_curators curators_Кибер.tsv Кибер   # отделение задано аргументом
     ... --apply                                                    # записать
+    ... --assigned-from 2026-09-01    # дата начала назначения (по умолчанию — 01.09.2026 или IMPORT_ASSIGNED_FROM)
+    ... --apply --issue-passwords пароли.csv   # выдать временные пароли новым кураторам (и тем, у кого пароля ещё нет)
+    ... --report отчёт.txt                      # сохранить результат в файл
+
+Пароли выдаются только при записи (--apply) и пишутся в CSV с правами 600; при первом входе куратор обязан задать свой.
 """
 import argparse
 import datetime
@@ -27,9 +32,12 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.db import base as db_base
+from app.core.security import hash_password
 from app.models import AssignmentRole, CuratorAssignment, Department, Role, RoleCode, StudyGroup, User
+from app.services.password_service import generate_temporary_password
+from scripts._report import write_credentials, write_report
 
-ASSIGNED_FROM = datetime.date(2026, 9, 1)
+ASSIGNED_FROM = datetime.date.fromisoformat(os.environ.get("IMPORT_ASSIGNED_FROM") or "2026-09-01")
 YEAR_SUFFIX = re.compile(r"-\d{2}")
 
 _TRANSLIT = {
@@ -73,7 +81,12 @@ def resolve_group(code: str, groups: dict[str, StudyGroup]) -> StudyGroup | None
     return found[0] if len(found) == 1 else None
 
 
-def run(path: str, department_name: str | None, apply: bool) -> dict[str, int]:
+def run(
+    path: str, department_name: str | None, apply: bool, *,
+    assigned_from: datetime.date | None = None, issue_passwords_file: str | None = None, report: str | None = None,
+) -> dict[str, int]:
+    assigned_from = assigned_from or ASSIGNED_FROM
+    credentials: list[tuple[str, str, str, str]] = []
     rows = read_rows(path, department_name)
     db = db_base.SessionLocal()
     stats: dict[str, int] = {}
@@ -139,16 +152,31 @@ def run(path: str, department_name: str | None, apply: bool) -> dict[str, int]:
                 count("групп пропущено (уже есть куратор)")
                 continue
             db.add(CuratorAssignment(study_group_id=group.id, user_id=user.id,
-                                     role_type=AssignmentRole.CURATOR, start_date=ASSIGNED_FROM))
+                                     role_type=AssignmentRole.CURATOR, start_date=assigned_from))
             count("назначений создано")
+
+        if issue_passwords_file and apply:
+            # Новые кураторы и те, у кого пароля ещё нет (например, загруженные раньше без пароля).
+            for full_name, group, department in resolved:
+                user = users_by_key[(department.id, full_name)]
+                if user.password_hash is None and all(c[2] != user.username for c in credentials):
+                    password = generate_temporary_password()
+                    user.password_hash = hash_password(password)
+                    user.must_change_password = True
+                    credentials.append((user.full_name, department.name, user.username, password))
+            if credentials:
+                stats["временных паролей выдано"] = len(credentials)
 
         if apply:
             db.commit()
+            if credentials:
+                write_credentials(issue_passwords_file, credentials)
         else:
             db.rollback()
     finally:
         db.close()
 
+    write_report(report, "Загрузка кураторов", apply, stats)
     print("Загружено." if apply else "Проверка (ничего не записано; добавьте --apply):")
     for name, value in stats.items():
         print(f"  {name}: {value}")
@@ -161,8 +189,17 @@ def main() -> None:
     parser.add_argument("path", help="файл «ФИО<табуляция>группа[<табуляция>отделение]»")
     parser.add_argument("department", nargs="?", help="отделение, если в файле нет третьей колонки")
     parser.add_argument("--apply", action="store_true", help="записать изменения в базу")
+    parser.add_argument("--assigned-from", type=datetime.date.fromisoformat, help="дата начала назначения, ГГГГ-ММ-ДД")
+    parser.add_argument("--issue-passwords", metavar="ФАЙЛ.csv", help="выдать временные пароли и записать их в этот CSV (только с --apply)")
+    parser.add_argument("--report", metavar="ФАЙЛ.txt", help="сохранить результат запуска в файл")
     args = parser.parse_args()
-    run(args.path, args.department, args.apply)
+    if args.issue_passwords and not args.apply:
+        parser.error("--issue-passwords работает только вместе с --apply")
+    try:
+        run(args.path, args.department, args.apply, assigned_from=args.assigned_from,
+            issue_passwords_file=args.issue_passwords, report=args.report)
+    except RuntimeError as exc:
+        sys.exit(f"Ошибка: {exc}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,30 @@
+# /etc/systemd/system/kait20.service
+[Unit]
+Description=Цифровой куратор (КАИТ №20)
+After=network.target mysql.service mysqld.service mariadb.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=kait20
+Group=kait20
+WorkingDirectory=/opt/kait20/backend
+# Секреты и настройки читает само приложение из /opt/kait20/backend/.env (права 600, владелец kait20).
+ExecStart=/opt/kait20/backend/.venv/bin/python -m scripts.entrypoint
+Environment=PYTHONUNBUFFERED=1
+Environment=HOST=127.0.0.1
+Environment=PORT=8000
+# Запускать РОВНО ОДИН экземпляр: лимит попыток входа хранится в памяти процесса.
+Restart=on-failure
+RestartSec=5
+# Миграции и справочники при старте занимают до минуты на большой базе.
+TimeoutStartSec=300
+
+# Ограничения: приложению нужны только своя папка и чтение .env.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

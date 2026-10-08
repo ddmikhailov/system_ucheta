@@ -29,7 +29,7 @@ def _set_session_cookie(response: Response, token: str) -> None:
     response.set_cookie(
         settings.session_cookie_name, token,
         max_age=settings.access_token_expire_minutes * 60,
-        httponly=True, secure=settings.environment != "development", samesite="strict", path="/",
+        httponly=True, secure=settings.cookie_secure, samesite="strict", path="/",
     )
 PRIVILEGED_ROLES = {RoleCode.ADMIN, RoleCode.EDU_DEPARTMENT, RoleCode.DEPT_HEAD, RoleCode.TUTOR}
 _DUMMY_HASH = hash_password("dummy-password-for-timing")

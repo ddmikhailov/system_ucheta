@@ -18,16 +18,32 @@ vi.mock("./admin/MarkCodesTab", async () => ({ default: ({ canEdit }: { canEdit:
 vi.mock("./admin/UsersTab", async () => ({ default: (p: { canCreate: boolean }) => <div>вкладка пользователей, создание={String(p.canCreate)}</div> }));
 vi.mock("./admin/CalendarTab", async () => ({ default: (p: { canEdit: boolean; canEditGroups: boolean }) => <div>вкладка календаря, общий={String(p.canEdit)}, группы={String(p.canEditGroups)}</div> }));
 vi.mock("./admin/GroupJournalTab", async () => ({ default: () => <div>вкладка журнала</div> }));
+vi.mock("./admin/ImportTab", async () => ({ default: () => <div>вкладка импорта</div> }));
 
 beforeEach(() => vi.mocked(api.get).mockResolvedValue([]));
 
 const tabs = () => screen.getAllByRole("button").map((b) => b.textContent);
 
 describe("AdminPage — вкладки по ролям", () => {
-  it.each(["admin", "edu_department"])("%s видит полный набор вкладок, начинает с «Группы»", (role) => {
-    renderPage(<AdminPage />, { role });
-    expect(tabs()).toEqual(["Отделения", "Группы", "Студенты", "Коды отметок", "Пользователи", "Календарь", "Журнал группы"]);
+  it("admin видит полный набор вкладок, включая «Импорт», начинает с «Группы»", () => {
+    renderPage(<AdminPage />, { role: "admin" });
+    expect(tabs()).toEqual(["Отделения", "Группы", "Студенты", "Коды отметок", "Пользователи", "Календарь", "Журнал группы", "Импорт"]);
     expect(screen.getByText(/вкладка групп/)).toBeInTheDocument();
+  });
+
+  it("edu_department видит справочники, но не «Импорт» (загрузка контингента — только администратору)", () => {
+    renderPage(<AdminPage />, { role: "edu_department" });
+    expect(tabs()).toEqual(["Отделения", "Группы", "Студенты", "Коды отметок", "Пользователи", "Календарь", "Журнал группы"]);
+  });
+
+  it("вкладка «Импорт» открывается по ссылке только у администратора", () => {
+    renderPage(<AdminPage />, { role: "admin", route: "/admin?tab=import", path: "/admin" });
+    expect(screen.getByText("вкладка импорта")).toBeInTheDocument();
+  });
+
+  it("чужая ссылка на «Импорт» не показывает экран", () => {
+    renderPage(<AdminPage />, { role: "edu_department", route: "/admin?tab=import", path: "/admin" });
+    expect(screen.queryByText("вкладка импорта")).not.toBeInTheDocument();
   });
 
   it.each(["dept_head", "tutor"])("%s работает в границах отделения: свой набор вкладок, начинает с журнала", (role) => {

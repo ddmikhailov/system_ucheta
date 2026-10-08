@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routers import admin, attendance_changes, auth, curator, dashboards, dossier, dossier_import, export, individual_work, my_day, notifications, passport, students, tasks, events, meetings, reports, my_id, meals
+from app.api.routers import admin, attendance_changes, auth, curator, dashboards, dossier, dossier_import, export, individual_work, my_day, notifications, passport, students, tasks, events, meetings, reports, my_id, meals, contingent_import
 from app.core.config import get_settings
 from app.core.observability import init_sentry
 from app.core.rate_limit import client_ip
@@ -63,7 +63,7 @@ async def security_headers(request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "same-origin"
     response.headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=()"
-    # За прокси Amvera приложение видит запрос как http (TLS завершает прокси), поэтому
+    # За обратным прокси приложение видит запрос как http (TLS завершает прокси), поэтому
     # схему запроса проверять нельзя — раньше заголовок из-за этого не отправлялся вовсе.
     # Браузеры игнорируют HSTS в ответах по http, так что отправлять его всегда безопасно.
     # includeSubDomains не ставим: домен принадлежит хостингу, поддомены — не наши.
@@ -106,6 +106,7 @@ app.include_router(my_day.router)
 app.include_router(passport.router)
 app.include_router(tasks.router)
 app.include_router(meals.router)
+app.include_router(contingent_import.router)
 
 
 @app.get("/health")
