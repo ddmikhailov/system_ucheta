@@ -38,7 +38,10 @@ export default function DayNavigator({
   onChange: (date: string) => void;
 }) {
   // На телефоне календарь свёрнут под кнопку — иначе итоги дня оказываются на втором экране.
-  const [calendarOpen, setCalendarOpen] = useState(false);
+  // На телефоне календарь свёрнут (экономим высоту), на широком экране открыт, как и раньше.
+  const [calendarOpen, setCalendarOpen] = useState(
+    () => typeof window.matchMedia === "function" && window.matchMedia("(min-width: 721px)").matches,
+  );
   const byDate = new Map(monthStatus.map((d) => [d.date, d]));
   const isOff = (iso: string) => {
     const s = byDate.get(iso);

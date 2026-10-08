@@ -116,18 +116,10 @@
   flex: 1;
 }
 
-.day-nav__cal-toggle {
+/* Календарь сворачивается кнопкой на любой ширине. Раньше правило работало только до 720 px,
+   а кнопка (её display перебивал button.btn-secondary) на широком экране была видна и ничего не делала. */
+.day-nav:not(.is-calendar-open) .month-cal {
   display: none;
-}
-
-@media (max-width: 720px) {
-  .day-nav__cal-toggle {
-    display: inline-flex;
-  }
-
-  .day-nav:not(.is-calendar-open) .month-cal {
-    display: none;
-  }
 }
 
 .month-cal {
