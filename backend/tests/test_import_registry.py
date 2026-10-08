@@ -221,3 +221,45 @@ def test_absent_student_is_deleted_with_marks_and_audit_names(seeded, db, admin_
     assert db.query(AuditLog).filter_by(entity_type="student", entity_id=str(gone_id)).one().new_value == "[обезличено]"
     assert stats["отметок посещаемости удалено"] == 1
     assert db.get(StudyGroup, group.id).is_active is True
+
+
+def test_guard_stops_a_file_that_would_delete_too_much(seeded, db, tmp_path):
+    names = [(f"Студент{i:02d}", "Тест", None) for i in range(20)]
+    digital_group(db, "ИИ112-26", 1, names)
+    path = make_registry(tmp_path, [(f"Студент{i:02d} Тест", "Обучается", "ИИ112-26", DIGITAL, 1) for i in range(5)])
+
+    with pytest.raises(RuntimeError, match="15 из 20"):
+        registry.run(path, apply=True, today=TODAY)
+    db.expire_all()
+    assert db.query(Student).count() == 20  # ничего не записано
+
+    stats = registry.run(path, apply=True, today=TODAY, force_delete=True)
+    assert stats["студентов удалено (нет в реестре)"] == 15
+    # предел можно поднять и без «force»
+    digital_group(db, "ИИ122-26", 1, [(f"Другой{i}", "Тест", None) for i in range(20)])
+    path2 = make_registry(tmp_path, [(f"Студент{i:02d} Тест", "Обучается", "ИИ112-26", DIGITAL, 1) for i in range(5)])
+    stats = registry.run(path2, apply=False, today=TODAY, max_delete_percent=90)
+    assert stats["студентов удалено (нет в реестре)"] == 20
+
+
+def test_extra_addresses_enrolled_date_and_report_file(seeded, db, tmp_path):
+    import json
+    addresses = tmp_path / "addresses.json"
+    addresses.write_text(json.dumps({"город Москва, улица Новая, дом 1": "Новое отделение"}, ensure_ascii=False), encoding="utf-8")
+    path = make_registry(tmp_path, [("Новый Студент", "Обучается", "НО111-26", "город Москва, улица Новая, дом 1", 1)])
+    report = tmp_path / "report.txt"
+
+    registry.run(path, apply=True, today=TODAY, enrolled_at=datetime.date(2027, 9, 1),
+                 address_map_file=str(addresses), report=str(report))
+
+    assert db.query(StudyGroup).filter_by(code="НО111").one().department.name == "Новое отделение"
+    assert db.query(Student).one().enrolled_at == datetime.date(2027, 9, 1)
+    text = report.read_text(encoding="utf-8")
+    assert "ЗАПИСЬ" in text and "студентов создано: 1" in text
+
+
+def test_bad_address_map_file_is_rejected(tmp_path):
+    bad = tmp_path / "bad.json"
+    bad.write_text('["не объект"]', encoding="utf-8")
+    with pytest.raises(RuntimeError, match="нужен JSON-объект"):
+        registry.load_address_map(str(bad))

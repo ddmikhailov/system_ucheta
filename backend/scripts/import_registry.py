@@ -22,6 +22,12 @@
 Без --apply ничего не пишет в базу — только печатает, что было бы сделано.
 Идемпотентен: повторный запуск ничего не меняет.
 
+Предохранитель: если файл удалил бы больше 10% студентов базы (и больше 10 человек) — похоже на неполную выгрузку —
+загрузка останавливается, ничего не записав. Порог меняется --max-delete-percent, осознанное удаление — --force-delete.
+Настройки вместо зашитых значений: дата зачисления новых студентов — --enrolled-at (или IMPORT_ENROLLED_AT);
+дополнительные адреса площадок → отделение — JSON-файл {"адрес": "Отделение"} в --addresses (или REGISTRY_ADDRESS_MAP);
+результат запуска в файл — --report.
+
     python -m scripts.import_registry путь/к/реестру.xlsx            # проверка
     python -m scripts.import_registry путь/к/реестру.xlsx --apply    # загрузка
 
@@ -30,6 +36,7 @@
 """
 import argparse
 import datetime
+import json
 import os
 import re
 import sys
@@ -48,6 +55,7 @@ from app.models import (
 )
 from app.services import group_membership_service
 from app.services.erasure_service import erase_student_personal_data
+from scripts._report import write_report
 
 # Адрес площадки (как в реестре) → отделение.
 ADDRESS_TO_DEPARTMENT = {
@@ -70,7 +78,10 @@ HEADER_FIO, HEADER_STATUS, HEADER_GROUP, HEADER_ADDRESS, HEADER_COURSE = (
 )
 # Дата зачисления для студентов, которых в базе ещё не было, — как у прошлого
 # импорта: отметки посещаемости на платформе начинаются с запуска.
-ENROLLED_AT = datetime.date(2026, 9, 1)
+ENROLLED_AT = datetime.date.fromisoformat(os.environ.get("IMPORT_ENROLLED_AT") or "2026-09-01")
+# Предохранитель на удаление: см. docstring.
+GUARD_MIN_ABSENT = 10
+DEFAULT_MAX_DELETE_PERCENT = 10.0
 # Хвост кода группы в реестре — год набора («-26») или номер подгруппы («.8»):
 # на платформе группа называется без него («ИИ112»), а группы, отличавшиеся
 # только хвостом, считаются одной.
@@ -96,7 +107,21 @@ class RegistryRow:
         return (self.last_name, self.first_name, self.middle_name or "")
 
 
-def read_registry(path: str) -> list[RegistryRow]:
+def load_address_map(path: str | None = None) -> dict[str, str]:
+    """Встроенные адреса площадок + дополнительные из JSON-файла (новая площадка не требует правки кода)."""
+    result = dict(ADDRESS_TO_DEPARTMENT)
+    extra_path = path or os.environ.get("REGISTRY_ADDRESS_MAP")
+    if extra_path:
+        with open(extra_path, encoding="utf-8") as f:
+            extra = json.load(f)
+        if not isinstance(extra, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in extra.items()):
+            raise RuntimeError(f"{extra_path}: нужен JSON-объект «адрес площадки»: «название отделения»")
+        result.update({k.strip(): v.strip() for k, v in extra.items()})
+    return result
+
+
+def read_registry(path: str, address_map: dict[str, str] | None = None) -> list[RegistryRow]:
+    address_map = address_map if address_map is not None else ADDRESS_TO_DEPARTMENT
     workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
     rows = list(workbook.active.iter_rows(values_only=True))
     needed = (HEADER_FIO, HEADER_STATUS, HEADER_GROUP, HEADER_ADDRESS, HEADER_COURSE)
@@ -119,7 +144,7 @@ def read_registry(path: str) -> list[RegistryRow]:
         status = STATUS_BY_TEXT.get(str(row[col_status]).strip())
         if status is None:
             raise RuntimeError(f"Строка {number}: неизвестный статус обучения «{row[col_status]}»")
-        department = ADDRESS_TO_DEPARTMENT.get(str(row[col_address]).strip())
+        department = address_map.get(str(row[col_address]).strip())
         if department is None:
             raise RuntimeError(f"Строка {number}: неизвестный адрес площадки «{row[col_address]}»")
         course_match = re.match(r"\s*(\d+)", str(row[col_course]))
@@ -148,9 +173,14 @@ def _check_registry(rows: list[RegistryRow]) -> None:
         seen.add(key)
 
 
-def run(path: str, apply: bool, today: datetime.date | None = None) -> dict[str, int]:
+def run(
+    path: str, apply: bool, today: datetime.date | None = None, *,
+    max_delete_percent: float = DEFAULT_MAX_DELETE_PERCENT, force_delete: bool = False,
+    enrolled_at: datetime.date | None = None, address_map_file: str | None = None, report: str | None = None,
+) -> dict[str, int]:
     today = today or today_local()
-    rows = read_registry(path)
+    enrolled_at = enrolled_at or ENROLLED_AT
+    rows = read_registry(path, load_address_map(address_map_file))
     _check_registry(rows)
 
     db = db_base.SessionLocal()
@@ -247,7 +277,7 @@ def run(path: str, apply: bool, today: datetime.date | None = None) -> dict[str,
                 continue
             student = Student(
                 last_name=r.last_name, first_name=r.first_name, middle_name=r.middle_name,
-                study_group_id=groups[r.group].id, status=r.status, enrolled_at=ENROLLED_AT,
+                study_group_id=groups[r.group].id, status=r.status, enrolled_at=enrolled_at,
             )
             db.add(student)
             db.flush()
@@ -270,6 +300,13 @@ def run(path: str, apply: bool, today: datetime.date | None = None) -> dict[str,
                 stats["статус студента изменён"] += 1
 
         absent_ids = [s.id for s in students if s.id not in matched]
+        share = 100 * len(absent_ids) / len(students) if students else 0.0
+        if not force_delete and len(absent_ids) > GUARD_MIN_ABSENT and share > max_delete_percent:
+            raise RuntimeError(
+                f"Файл удалил бы {len(absent_ids)} из {len(students)} студентов базы ({share:.0f}%, предел {max_delete_percent:g}%) — "
+                "похоже на неполную выгрузку реестра. Ничего не записано. Проверьте файл; если удаление "
+                "действительно нужно — запустите с --force-delete (и сначала сделайте копию БД)."
+            )
         for start in range(0, len(absent_ids), 500):
             chunk = absent_ids[start:start + 500]
             marks_deleted = db.query(AttendanceMark).filter(
@@ -310,6 +347,7 @@ def run(path: str, apply: bool, today: datetime.date | None = None) -> dict[str,
     finally:
         db.close()
 
+    write_report(report, "Загрузка реестра контингента", apply, stats)
     print(("Загружено." if apply else "Проверка (ничего не записано; добавьте --apply):"))
     for name, count in stats.items():
         print(f"  {name}: {count}")
@@ -321,8 +359,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("path", help="файл реестра контингента (.xlsx)")
     parser.add_argument("--apply", action="store_true", help="записать изменения в базу")
+    parser.add_argument("--max-delete-percent", type=float, default=DEFAULT_MAX_DELETE_PERCENT,
+                        help="предохранитель: больше этой доли студентов не удалять (по умолчанию 10)")
+    parser.add_argument("--force-delete", action="store_true", help="снять предохранитель на удаление")
+    parser.add_argument("--enrolled-at", type=datetime.date.fromisoformat, help="дата зачисления новых студентов, ГГГГ-ММ-ДД")
+    parser.add_argument("--addresses", metavar="ФАЙЛ.json", help="дополнительные адреса площадок → отделение")
+    parser.add_argument("--report", metavar="ФАЙЛ.txt", help="сохранить результат запуска в файл")
     args = parser.parse_args()
-    run(args.path, args.apply)
+    try:
+        run(args.path, args.apply, max_delete_percent=args.max_delete_percent, force_delete=args.force_delete,
+            enrolled_at=args.enrolled_at, address_map_file=args.addresses, report=args.report)
+    except RuntimeError as exc:
+        sys.exit(f"Ошибка: {exc}")
 
 
 if __name__ == "__main__":
