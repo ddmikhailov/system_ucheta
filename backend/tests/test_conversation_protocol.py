@@ -1,5 +1,6 @@
 """«Протокол беседы» в Word из заметки журнала индивидуальной работы: выдуманные данные."""
 import io
+import re
 import xml.etree.ElementTree as ET
 import zipfile
 
@@ -38,30 +39,49 @@ def test_protocol_is_filled_from_the_note(client, curator_headers, curator_user,
     r = _protocol(client, curator_headers, student, note)
     assert r.status_code == 200 and r.headers["content-type"].startswith("application/vnd.openxmlformats")
     text = _paragraphs(r.content)
+    assert "ПРОТОКОЛ БЕСЕДЫ" in text and "с родителями (законными представителями)" in text  # в присутствующих — мать
     assert "«01» октября 2026 г." in text
-    assert f"ФИО обучающегося {student.full_name}" in text and f"Группа {curator_group.code}" in text
+    assert student.full_name in text and curator_group.code in text
     assert "1. Иванова Мария, мать" in text and "2. Куратор Тестовый, куратор" in text
-    assert "1…(ФИО, должность/статус)" not in text  # образцовые строки заменены списком
-    assert "Цель беседы: Выяснить причины пропусков" in text
-    assert "Содержание беседы: Обсудили пропуски.\nДоговорились о справках." in text
-    assert any(p.endswith("Результат беседы: Родитель будет контролировать посещаемость") for p in text)
-    assert any("подпись куратора учебной группы" in p for p in text)  # места для подписей остались из образца
+    assert "Цель беседы" in text and "Выяснить причины пропусков" in text
+    assert "Тема обсуждения" in text and "Обсудили пропуски." in text and "Договорились о справках." in text
+    assert "Родитель будет контролировать посещаемость" in text
+    # форма нового протокола внизу: решение, заявления, подписи, ознакомление представителей
+    for label in ("Решение", "Протокол прочитан", "Заявления, замечания", "Участники встречи:",
+                  "Законные представители ознакомлены:", "(подпись)", "(ФИО)"):
+        assert label in text
+    assert text.index("Цель беседы") < text.index("Тема обсуждения") < text.index("Решение") < text.index("Участники встречи:")
 
 
-def test_unfilled_parts_stay_blank_lines_for_handwriting(client, curator_headers, curator_group, db):
+def test_unfilled_parts_stay_blank_lines_and_subtitle_depends_on_whom(client, curator_headers, curator_group, db):
     student = _student(db, curator_group)
     note = _note(client, curator_headers, student)
     text = _paragraphs(_protocol(client, curator_headers, student, note).content)
-    assert "1…(ФИО, должность/статус)" in text and "2…" in text
-    assert any(p.startswith("Цель беседы: ___") for p in text)
-    assert any(p.endswith("Результат беседы: " + "_" * 49) for p in text)  # итог не задан — черта образца
+    assert "с обучающимся" in text and "Цель беседы" in text and "Тема обсуждения" in text
+    assert not any(p.startswith("1.") for p in text)  # присутствующих нет — остаются пустые линии
+    parents = _note(client, curator_headers, student, kind="parent_invited")
+    assert "с родителями (законными представителями)" in _paragraphs(_protocol(client, curator_headers, student, parents).content)
+
+
+def test_layout_is_fixed_regardless_of_data(client, curator_headers, curator_group, db):
+    """Ширины колонок заданы в документе: длинный текст переносится внутри поля, а не меняет раскладку."""
+    student = _student(db, curator_group)
+    short = _note(client, curator_headers, student)
+    long_ = _note(client, curator_headers, student, text="Слово" * 400, goal="я" * 400, result="x " * 200)
+    grids = []
+    for note in (short, long_):
+        with zipfile.ZipFile(io.BytesIO(_protocol(client, curator_headers, student, note).content)) as archive:
+            xml = archive.read("word/document.xml").decode("utf-8")
+        assert xml.count('<w:tblLayout w:type="fixed"/>') == xml.count("<w:tbl>") >= 8
+        grids.append(re.findall(r'<w:gridCol w:w="(\d+)"/>', xml))
+    assert grids[0] == grids[1]
 
 
 def test_special_characters_are_escaped(client, curator_headers, curator_group, db):
     student = _student(db, curator_group)
     note = _note(client, curator_headers, student, text='Сказал: "Я & <вернусь>"', goal="A & B")
     text = _paragraphs(_protocol(client, curator_headers, student, note).content)
-    assert 'Содержание беседы: Сказал: "Я & <вернусь>"' in text and "Цель беседы: A & B" in text
+    assert 'Сказал: "Я & <вернусь>"' in text and "A & B" in text
 
 
 def test_only_conversation_like_notes_and_access_rules(client, curator_headers, admin_headers, curator_group, db):
