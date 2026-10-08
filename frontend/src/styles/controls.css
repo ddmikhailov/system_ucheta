@@ -290,6 +290,14 @@ th[aria-sort="descending"] .sort-btn__arrow {
   min-width: 200px;
 }
 
+/* На телефоне поиск занимает всю строку, а не сжимается до обрезанной подсказки. */
+@media (max-width: 640px) {
+  .toolbar--filters input[type="search"] {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+}
+
 .results-bar {
   margin: 4px 0 8px;
 }

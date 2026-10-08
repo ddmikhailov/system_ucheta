@@ -1,10 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, ApiError, downloadFile } from "../api/client";
 import { useAuth } from "../auth/useAuth";
 import { COLLEGE_WIDE_ROLES, DOSSIER_AUDIT_ROLES, inRoles } from "../constants/roles";
 import type { DepartmentAdmin } from "../api/types";
 import { TabBar, TabPanel } from "../components/Tabs";
+import ResultsBar from "../components/dashboards/ResultsBar";
+import SortHeader from "../components/dashboards/SortHeader";
+import { filterByQuery } from "../utils/searchMatch";
+import { nextSort, sortRows, type SortState, type SortValue } from "../utils/tableView";
 
 interface SummaryRow {
   group_id: number;
@@ -53,6 +57,41 @@ interface GroupPassport {
 }
 
 const fmt = (n: number | null | undefined) => (n === null || n === undefined ? "—" : String(n));
+
+type Focus = "all" | "no_guardians" | "dossier_empty" | "minors" | "contract";
+const FOCUS_LABELS: Record<Focus, string> = {
+  all: "Все группы",
+  no_guardians: "Есть студенты без представителей",
+  dossier_empty: "Есть незаполненные досье",
+  minors: "Есть несовершеннолетние",
+  contract: "Есть договорники",
+};
+
+function matchesFocus(r: SummaryRow, focus: Focus): boolean {
+  switch (focus) {
+    case "no_guardians": return r.no_guardians > 0;
+    case "dossier_empty": return r.dossier_empty > 0;
+    case "minors": return r.minors > 0;
+    case "contract": return r.contract > 0;
+    default: return true;
+  }
+}
+
+/** Итоги по видимым строкам (когда включены фильтры, итог сервера по всему отделению уже не подходит). */
+function sumRows(rows: SummaryRow[], categories: { key: string }[]): SummaryRow {
+  const counts: Record<string, number | null> = {};
+  for (const c of categories) {
+    const values = rows.map((r) => r.counts[c.key]).filter((v): v is number => v !== null && v !== undefined);
+    counts[c.key] = values.length === 0 ? null : values.reduce((a, b) => a + b, 0);
+  }
+  const total = (pick: (r: SummaryRow) => number) => rows.reduce((acc, r) => acc + pick(r), 0);
+  return {
+    group_id: 0, group_code: "Итого", course: 0, department_name: "",
+    students_total: total((r) => r.students_total), minors: total((r) => r.minors), budget: total((r) => r.budget),
+    contract: total((r) => r.contract), no_guardians: total((r) => r.no_guardians), dossier_empty: total((r) => r.dossier_empty),
+    counts,
+  };
+}
 
 // Социальный паспорт: сводка из досье по группам и поимённая карточка группы.
 // Особые данные берутся из зашифрованного досье — каждый просмотр поимённого
@@ -118,6 +157,11 @@ export default function PassportPage() {
   const [departments, setDepartments] = useState<DepartmentAdmin[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [course, setCourse] = useState<number | "all">("all");
+  const [focus, setFocus] = useState<Focus>("all");
+  const [category, setCategory] = useState("");
+  const [sort, setSort] = useState<SortState<string> | null>(null);
 
   const canFilterDepartment = inRoles(user?.role, COLLEGE_WIDE_ROLES);
   // Причину (нет ключа шифрования на сервере) знать нужно администратору; остальным — что делать.
@@ -139,6 +183,30 @@ export default function PassportPage() {
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "Не удалось загрузить паспорт"));
   }, [departmentId, groupId]);
+
+  const rows = useMemo(() => summary?.rows ?? [], [summary]);
+  const courses = useMemo(() => [...new Set(rows.map((r) => r.course))].sort((a, b) => a - b), [rows]);
+  const filtered = query.trim() !== "" || course !== "all" || focus !== "all" || category !== "";
+  const visible = useMemo(() => {
+    let list = rows.filter((r) => (course === "all" || r.course === course) && matchesFocus(r, focus));
+    if (category) list = list.filter((r) => (r.counts[category] ?? 0) > 0);
+    list = filterByQuery(list, query, (r) => `${r.group_code} ${r.department_name}`);
+    const getters: Record<string, (r: SummaryRow) => SortValue> = {
+      group: (r) => r.group_code, students: (r) => r.students_total, minors: (r) => r.minors,
+      budget: (r) => r.budget, no_guardians: (r) => r.no_guardians, dossier_empty: (r) => r.dossier_empty,
+    };
+    for (const c of summary?.categories ?? []) getters[`cat:${c.key}`] = (r) => r.counts[c.key];
+    return sortRows(list, sort, getters);
+  }, [rows, course, focus, category, query, sort, summary]);
+  const totals = summary && (filtered ? sumRows(visible, summary.categories) : summary.totals);
+  function resetFilters() {
+    setQuery("");
+    setCourse("all");
+    setFocus("all");
+    setCategory("");
+    setSort(null);
+  }
+  const onSort = (k: string) => setSort((cur) => nextSort(cur, k));
 
   function exportFile(path: string, filename: string) {
     downloadFile(path, filename).catch((err) =>
@@ -180,6 +248,31 @@ export default function PassportPage() {
           Экспорт сводки в Excel
         </button>
       </div>
+      {summary && rows.length > 0 && (
+        <>
+          <div className="toolbar toolbar--filters">
+            <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Группа или отделение" aria-label="Поиск по группе или отделению" />
+            <select aria-label="Курс" value={course} onChange={(e) => setCourse(e.target.value === "all" ? "all" : Number(e.target.value))}>
+              <option value="all">Все курсы</option>
+              {courses.map((c) => (
+                <option key={c} value={c}>{c} курс</option>
+              ))}
+            </select>
+            <select aria-label="Что показать" value={focus} onChange={(e) => setFocus(e.target.value as Focus)}>
+              {(Object.keys(FOCUS_LABELS) as Focus[]).map((k) => (
+                <option key={k} value={k}>{FOCUS_LABELS[k]}</option>
+              ))}
+            </select>
+            <select aria-label="Особая категория" value={category} onChange={(e) => setCategory(e.target.value)}>
+              <option value="">Любые категории</option>
+              {summary.categories.map((c) => (
+                <option key={c.key} value={c.key}>Есть: {c.title}</option>
+              ))}
+            </select>
+          </div>
+          <ResultsBar shown={visible.length} total={rows.length} filtered={filtered} onReset={resetFilters} />
+        </>
+      )}
       {error && <div className="error-text">{error}</div>}
       {!summary && !error && <p className="hint">Загрузка…</p>}
       {summary && (
@@ -187,26 +280,28 @@ export default function PassportPage() {
           {!summary.special_available && (
             <SpecialUnavailable technical={technical} />
           )}
-          {summary.rows.length === 0 ? (
+          {rows.length === 0 ? (
             <p className="hint">Нет доступных групп.</p>
+          ) : visible.length === 0 ? (
+            <p className="hint">Под выбранные условия ни одна группа не подошла.</p>
           ) : (
             <div className="table-scroll"><table className="dash-table">
               <thead>
                 <tr>
-                  <th>Группа</th>
-                  <th>Студентов</th>
-                  <th>Несоверш.</th>
-                  <th>Бюджет / договор</th>
-                  <th>Без представителей</th>
-                  <th>Досье пустое</th>
+                  <SortHeader label="Группа" sortKey="group" sort={sort} onSort={onSort} />
+                  <SortHeader label="Студентов" sortKey="students" sort={sort} onSort={onSort} />
+                  <SortHeader label="Несоверш." sortKey="minors" sort={sort} onSort={onSort} />
+                  <SortHeader label="Бюджет / договор" sortKey="budget" sort={sort} onSort={onSort} />
+                  <SortHeader label="Без представителей" sortKey="no_guardians" sort={sort} onSort={onSort} />
+                  <SortHeader label="Досье пустое" sortKey="dossier_empty" sort={sort} onSort={onSort} />
                   {summary.categories.map((c) => (
-                    <th key={c.key}>{c.title}</th>
+                    <SortHeader key={c.key} label={c.title} sortKey={`cat:${c.key}`} sort={sort} onSort={onSort} />
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {[...summary.rows, ...(summary.rows.length > 1 ? [summary.totals] : [])].map((r, i, all) => {
-                  const isTotal = r.group_id === 0 && i === all.length - 1 && summary.rows.length > 1;
+                {[...visible, ...(visible.length > 1 && totals ? [totals] : [])].map((r, i, all) => {
+                  const isTotal = r.group_id === 0 && i === all.length - 1 && visible.length > 1;
                   return (
                     <tr
                       key={r.group_id}
@@ -244,6 +339,18 @@ function GroupView({ passport: p, onExport, onExportWord }: { passport: GroupPas
   const { user } = useAuth();
   const technical = inRoles(user?.role, DOSSIER_AUDIT_ROLES);
   const [part, setPart] = useState("info");
+  const [catQuery, setCatQuery] = useState("");
+  const [onlyMarked, setOnlyMarked] = useState(false);
+  const [catSort, setCatSort] = useState<SortState<string> | null>(null);
+  const shownCategories = useMemo(() => {
+    let list = p.categories;
+    if (onlyMarked) list = list.filter((c) => (c.count ?? 0) > 0);
+    list = filterByQuery(list, catQuery, (c) => `${c.title} ${c.names.join(" ")}`);
+    return sortRows(list, catSort, {
+      title: (c) => c.title, count: (c) => c.count, names: (c) => (c.names.length > 0 ? c.names[0] : null),
+    });
+  }, [p.categories, onlyMarked, catQuery, catSort]);
+  const catFiltered = onlyMarked || catQuery.trim() !== "";
   const marked = p.categories.filter((c) => (c.count ?? 0) > 0).length;
   return (
     <div className="student-card">
@@ -288,16 +395,32 @@ function GroupView({ passport: p, onExport, onExportWord }: { passport: GroupPas
       {!p.special_available && (
         <SpecialUnavailable technical={technical} />
       )}
+      <div className="toolbar toolbar--filters">
+        <input type="search" value={catQuery} onChange={(e) => setCatQuery(e.target.value)} placeholder="Категория или ФИО студента" aria-label="Поиск по категории или студенту" />
+        <div className="chip-filter" role="group" aria-label="Показать">
+          <button type="button" className={`chip-filter__item${!onlyMarked ? " is-active" : ""}`} aria-pressed={!onlyMarked} onClick={() => setOnlyMarked(false)}>Все категории</button>
+          <button type="button" className={`chip-filter__item${onlyMarked ? " is-active" : ""}`} aria-pressed={onlyMarked} onClick={() => setOnlyMarked(true)}>Только с отметками</button>
+        </div>
+      </div>
+      <ResultsBar
+        shown={shownCategories.length}
+        total={p.categories.length}
+        filtered={catFiltered}
+        onReset={() => { setCatQuery(""); setOnlyMarked(false); setCatSort(null); }}
+      />
       <div className="table-scroll"><table className="dash-table">
         <thead>
           <tr>
-            <th>Категория</th>
-            <th>Человек</th>
-            <th>Кто</th>
+            <SortHeader label="Категория" sortKey="title" sort={catSort} onSort={(k) => setCatSort((s) => nextSort(s, k))} />
+            <SortHeader label="Человек" sortKey="count" sort={catSort} onSort={(k) => setCatSort((s) => nextSort(s, k))} />
+            <SortHeader label="Кто" sortKey="names" sort={catSort} onSort={(k) => setCatSort((s) => nextSort(s, k))} />
           </tr>
         </thead>
         <tbody>
-          {p.categories.map((c) => (
+          {shownCategories.length === 0 && (
+            <tr><td colSpan={3}>Под выбранные условия ничего не нашлось.</td></tr>
+          )}
+          {shownCategories.map((c) => (
             <tr key={c.key}>
               <td data-label="Категория">{c.title}</td>
               <td data-label="Человек">{fmt(c.count)}</td>

@@ -109,14 +109,14 @@ describe("PassportPage — сводка", () => {
     mockApi();
     const { unmount } = renderPage(<PassportPage />, { role: "admin" });
     await screen.findByRole("cell", { name: "СА172" });
-    await user.selectOptions(await screen.findByRole("combobox"), "2");
+    await user.selectOptions(await screen.findByRole("combobox", { name: "Отделение" }), "2");
     await waitFor(() => expect(get).toHaveBeenCalledWith("/passport/summary?department_id=2"));
     unmount();
 
     mockApi();
     renderPage(<PassportPage />, { role: "curator" });
     await screen.findByRole("cell", { name: "СА172" });
-    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Отделение" })).not.toBeInTheDocument();
   });
 
   it("выгрузка сводки учитывает выбранное отделение; ошибка скачивания показывается", async () => {
@@ -124,7 +124,7 @@ describe("PassportPage — сводка", () => {
     mockApi();
     renderPage(<PassportPage />, { role: "admin" });
     await screen.findByRole("cell", { name: "СА172" });
-    await user.selectOptions(await screen.findByRole("combobox"), "2");
+    await user.selectOptions(await screen.findByRole("combobox", { name: "Отделение" }), "2");
     await user.click(screen.getByRole("button", { name: "Экспорт сводки в Excel" }));
     expect(download).toHaveBeenCalledWith("/passport/export?department_id=2", "social_passport.xlsx");
 
@@ -201,5 +201,80 @@ describe("PassportPage — паспорт группы", () => {
     renderPage(<PassportPage />, { route: "/passport?group=1", role: "admin" });
     await user.click(await screen.findByRole("button", { name: /К сводке по группам/ }));
     expect(await screen.findByRole("cell", { name: "ИИ112" })).toBeInTheDocument();
+  });
+});
+
+describe("PassportPage — поиск, фильтры и сортировка", () => {
+  const rows = () => screen.getAllByRole("row").slice(1).map((r) => within(r).getAllByRole("cell")[0].textContent);
+
+  function many() {
+    return summary({
+      rows: [
+        { ...row(1, "СА172", { orphan: 2, ovz: 0 }), course: 1, no_guardians: 0 },
+        { ...row(2, "ИИ212", { orphan: 0, ovz: 3 }), course: 2, students_total: 30, no_guardians: 4 },
+        { ...row(3, "ИС312", { orphan: null, ovz: null }), course: 3, students_total: 10, dossier_empty: 0 },
+      ],
+    });
+  }
+
+  it("поиск по названию группы сужает список и пересчитывает итог по видимым", async () => {
+    const user = userEvent.setup();
+    mockApi({ summary: many() });
+    renderPage(<PassportPage />, { role: "admin" });
+    await screen.findByRole("cell", { name: "СА172" });
+    await user.type(screen.getByLabelText("Поиск по группе или отделению"), "ИИ");
+    expect(rows()).toEqual(["ИИ212"]);
+    expect(screen.getByRole("status")).toHaveTextContent("Показано 1 из 3");
+    await user.click(screen.getByRole("button", { name: "Сбросить фильтры" }));
+    expect(rows()).toEqual(["СА172", "ИИ212", "ИС312", "Итого"]);
+  });
+
+  it("фильтры по курсу, «что показать» и особой категории", async () => {
+    const user = userEvent.setup();
+    mockApi({ summary: many() });
+    renderPage(<PassportPage />, { role: "admin" });
+    await screen.findByRole("cell", { name: "СА172" });
+    await user.selectOptions(screen.getByLabelText("Курс"), "2");
+    expect(rows()).toEqual(["ИИ212"]);
+    await user.selectOptions(screen.getByLabelText("Курс"), "all");
+    await user.selectOptions(screen.getByLabelText("Что показать"), "no_guardians");
+    expect(rows().filter((c) => c !== "Итого")).toEqual(["ИИ212", "ИС312"]);
+    await user.selectOptions(screen.getByLabelText("Что показать"), "all");
+    await user.selectOptions(screen.getByLabelText("Особая категория"), "orphan");
+    expect(rows()).toEqual(["СА172"]);
+  });
+
+  it("сортировка по клику на заголовок", async () => {
+    const user = userEvent.setup();
+    mockApi({ summary: many() });
+    renderPage(<PassportPage />, { role: "admin" });
+    await screen.findByRole("cell", { name: "СА172" });
+    await user.click(screen.getByRole("button", { name: /Студентов/ }));
+    expect(rows().slice(0, 3)).toEqual(["ИС312", "СА172", "ИИ212"]);
+    await user.click(screen.getByRole("button", { name: /Студентов/ }));
+    expect(rows().slice(0, 3)).toEqual(["ИИ212", "СА172", "ИС312"]);
+  });
+
+  it("если ничего не подошло — об этом написано", async () => {
+    const user = userEvent.setup();
+    mockApi({ summary: many() });
+    renderPage(<PassportPage />, { role: "admin" });
+    await screen.findByRole("cell", { name: "СА172" });
+    await user.type(screen.getByLabelText("Поиск по группе или отделению"), "ЯЯЯ");
+    expect(screen.getByText(/ни одна группа не подошла/)).toBeInTheDocument();
+  });
+
+  it("в паспорте группы: поиск по студенту и «только с отметками»", async () => {
+    const user = userEvent.setup();
+    mockApi();
+    renderPage(<PassportPage />, { role: "admin", route: "/passport?group=1" });
+    await user.click(await screen.findByRole("tab", { name: /Особые категории/ }));
+    expect(screen.getByRole("cell", { name: "ОВЗ" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Только с отметками" }));
+    expect(screen.queryByRole("cell", { name: "ОВЗ" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Все категории" }));
+    await user.type(screen.getByLabelText("Поиск по категории или студенту"), "Петров");
+    expect(screen.getByRole("cell", { name: "Сироты" })).toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "ОВЗ" })).not.toBeInTheDocument();
   });
 });
