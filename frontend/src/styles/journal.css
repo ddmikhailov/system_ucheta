@@ -190,10 +190,16 @@
   font-weight: 400;
 }
 
+/* Будущие дни доступны: на них можно заранее запланировать отметки (заявление, ИУП). */
 .month-cal__day.is-future {
   background: transparent;
-  color: var(--border-strong);
-  cursor: default;
+  color: var(--muted);
+  border-color: var(--border);
+}
+
+.month-cal__day.is-planned {
+  background: var(--primary-light);
+  color: var(--primary);
 }
 
 .month-cal__day.is-today::after {
@@ -250,6 +256,10 @@
 
 .legend-chip.is-off {
   background: var(--border-strong);
+}
+
+.legend-chip.is-planned {
+  background: var(--primary-light);
 }
 
 .journal__side .journal-rhythm {

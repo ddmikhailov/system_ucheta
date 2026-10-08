@@ -318,7 +318,9 @@ def get_roster(db: Session, study_group_id: int, date: datetime.date) -> dict:
         existing_marks = {row.student_id: row for row in rows}
 
     draft_marks: dict[int, AttendanceMark] = {}
-    is_draft = submission is None
+    # «Черновик со вчера» подставляется только для сегодняшнего и прошлых дней: на будущий день
+    # вчерашние отметки ничего не говорят, там могут стоять лишь заранее внесённые.
+    is_draft = submission is None and date <= today_local()
     if is_draft and student_ids:
         prev_day = calendar_service.previous_study_day(db, date, study_group_id=study_group_id)
         if prev_day is not None:
@@ -406,8 +408,11 @@ def submit_day(
     today: datetime.date | None = None,
     first_period: int | None = None,
     applying_approved_change: bool = False,
-) -> DaySubmission:
-    """Сдать (или пересдать) день. `applying_approved_change` — применение одобренной правки
+    plan_only: bool = False,
+) -> DaySubmission | None:
+    """Сдать (или пересдать) день. `plan_only` — запланировать отметки на ещё не наступивший день
+    (заявление, ИУП и т.п.): отметки записываются, но день не «сдаётся» и ничего не уведомляется;
+    когда день наступит, они уже стоят в журнале. `applying_approved_change` — применение одобренной правки
     прошлого дня: проверка «нужна ли проверка» пропускается, а кто и когда сдал день и «вовремя
     ли» остаются прежними — правка не делает сданный вовремя день опоздавшим."""
     if first_period is not None and not (MIN_FIRST_PERIOD <= first_period <= MAX_FIRST_PERIOD):
@@ -415,10 +420,17 @@ def submit_day(
             f"Пара должна быть от {MIN_FIRST_PERIOD} до {MAX_FIRST_PERIOD}, получено {first_period}"
         )
     today = today or today_local()
-    if not can_edit_date(user, date, today):
-        raise BackdateNotAllowed(f"Правка за {date} недоступна: это ещё не наступивший день.")
+    if plan_only:
+        if date <= today:
+            raise BackdateNotAllowed(
+                f"{date} уже наступил: отметки сегодняшнего и прошлых дней вносятся через сдачу дня."
+            )
+    elif not can_edit_date(user, date, today):
+        raise BackdateNotAllowed(
+            f"Правка за {date} недоступна: это ещё не наступивший день — запланируйте отметки через «Сохранить план»."
+        )
 
-    if not applying_approved_change and edit_requires_review(db, user, study_group_id, date, today):
+    if not plan_only and not applying_approved_change and edit_requires_review(db, user, study_group_id, date, today):
         raise ReviewRequired(
             "День уже сдан. Правка прошлого дня уходит на проверку зав. отделением — отправьте её с причиной."
         )
@@ -495,6 +507,11 @@ def submit_day(
             db.add(new_mark)
             db.flush()
             log_action(db, user, "mark.create", "attendance_mark", str(new_mark.id), new_value=mark_code.code)
+
+    if plan_only:
+        log_action(db, user, "day.plan", "day_submission", f"{study_group_id}:{date}")
+        db.commit()
+        return None
 
     submission = db.execute(
         select(DaySubmission).where(

@@ -68,11 +68,11 @@ export default function AbsencePeriodModal({
         </label>
         <label>
           С
-          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} max={todayIso()} />
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
         </label>
         <label>
           По
-          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} max={todayIso()} />
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
         </label>
         <label>
           Основание

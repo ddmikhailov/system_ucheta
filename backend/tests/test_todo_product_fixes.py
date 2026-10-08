@@ -115,16 +115,19 @@ def test_absence_period_rejects_reversed_dates(client, curator_headers, curator_
     assert r.status_code == 400
 
 
-def test_absence_period_rejects_future_dates(client, curator_headers, curator_group, db):
-    from app.models import Student
+def test_absence_period_may_start_in_the_future(client, curator_headers, curator_group, db, today):
+    """Заявление или ИУП известны заранее: период можно оформить вперёд, без ограничения по дате."""
+    from app.models import AttendanceMark, Student
 
     student = db.query(Student).filter(Student.study_group_id == curator_group.id).first()
-    far_future = (datetime.date.today() + datetime.timedelta(days=5)).isoformat()
+    start = today + datetime.timedelta(days=60)
     r = client.post(
         "/curator/absence-periods", headers=curator_headers,
-        json={"student_id": student.id, "mark_code": "б", "date_from": far_future, "date_to": far_future},
+        json={"student_id": student.id, "mark_code": "б", "date_from": start.isoformat(),
+              "date_to": (start + datetime.timedelta(days=6)).isoformat()},
     )
-    assert r.status_code == 400
+    assert r.status_code == 201
+    assert db.query(AttendanceMark).filter(AttendanceMark.student_id == student.id, AttendanceMark.date >= start).count() > 0
 
 
 def test_absence_period_rejects_non_excused_code(client, curator_headers, curator_group, db, today):

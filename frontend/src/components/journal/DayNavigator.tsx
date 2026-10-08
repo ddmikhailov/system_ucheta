@@ -5,20 +5,21 @@ import { addDaysIso, formatMonthTitle, formatWeekdayLong, toIso } from "../../ut
 const NON_WORKING = ["weekend", "holiday", "vacation"];
 const WEEKDAY_HEADERS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
-type DayState = "ok" | "late" | "missing" | "off" | "future";
+type DayState = "ok" | "late" | "missing" | "off" | "future" | "planned";
 
 const STATE_TEXT: Record<DayState, string> = {
   ok: "сдано вовремя",
   late: "сдано задним числом",
   missing: "не сдано",
   off: "нерабочий день",
-  future: "ещё не наступил",
+  future: "ещё не наступил — можно запланировать отметки",
+  planned: "ещё не наступил, отметки запланированы",
 };
 
 function dayState(status: MonthDayStatus | undefined, iso: string, today: string): DayState {
-  if (iso > today) return "future";
+  if (status && NON_WORKING.includes(status.day_type)) return "off";
+  if (iso > today) return (status?.marks_count ?? 0) > 0 ? "planned" : "future";
   if (!status) return "missing";
-  if (NON_WORKING.includes(status.day_type)) return "off";
   if (status.is_submitted) return status.is_on_time ? "ok" : "late";
   return "missing";
 }
@@ -79,7 +80,6 @@ export default function DayNavigator({
             type="date"
             aria-label="Дата"
             value={date}
-            max={today}
             onChange={(e) => e.target.value && onChange(e.target.value)}
           />
         </div>
@@ -87,7 +87,6 @@ export default function DayNavigator({
           type="button"
           className="day-nav__arrow"
           onClick={() => onChange(nextDay)}
-          disabled={nextDay > today}
           aria-label="Следующий учебный день"
         >
           ›
@@ -117,7 +116,6 @@ export default function DayNavigator({
             type="button"
             className="day-nav__arrow day-nav__arrow--small"
             onClick={() => onChange(nextMonthFirst)}
-            disabled={nextMonthFirst > today}
             aria-label="Следующий месяц"
           >
             ›
@@ -139,7 +137,6 @@ export default function DayNavigator({
                 key={iso}
                 type="button"
                 className={`month-cal__day is-${state}${iso === date ? " is-selected" : ""}${iso === today ? " is-today" : ""}`}
-                disabled={state === "future"}
                 aria-pressed={iso === date}
                 aria-label={`${day}, ${STATE_TEXT[state]}${remote ? ", ЭФО" : ""}`}
                 title={`${STATE_TEXT[state]}${remote ? " · ЭФО" : ""}`}
@@ -155,6 +152,7 @@ export default function DayNavigator({
           <span className="legend-chip is-late" /> задним числом
           <span className="legend-chip is-missing" /> не сдано
           <span className="legend-chip is-off" /> нерабочий
+          <span className="legend-chip is-planned" /> запланировано
         </p>
       </div>
     </div>

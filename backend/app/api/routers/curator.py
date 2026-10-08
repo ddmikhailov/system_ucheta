@@ -2,13 +2,14 @@ import datetime
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.deps import assert_can_access_group, assert_can_view_group, get_current_user
 from app.core.config import get_settings
 from app.core.time import today_local
 from app.db.session import get_db
-from app.models import DaySubmission, DayType, MarkCode, Student, StudyGroup, User
+from app.models import AttendanceMark, DaySubmission, DayType, MarkCode, Student, StudyGroup, User
 from app.schemas.curator import (
     AbsencePeriodCreate,
     ChangeRequestInput,
@@ -136,6 +137,28 @@ def submit_day(
     return _roster_for(db, user, study_group_id, date)
 
 
+@router.post("/groups/{study_group_id}/day/plan", response_model=RosterResponse)
+def plan_day(
+    study_group_id: int,
+    date: datetime.date,
+    payload: SubmitDayRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Заранее внести отметки на ещё не наступивший день (заявление, ИУП…), без ограничения по датам.
+    День при этом не сдаётся: он будет сдан обычным образом, когда наступит."""
+    assert_can_access_group(db, user, study_group_id, date)
+    try:
+        attendance_service.submit_day(
+            db, study_group_id, date, [e.model_dump() for e in payload.exceptions], user, plan_only=True,
+        )
+    except attendance_service.BackdateNotAllowed as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+    except attendance_service.InvalidSubmission as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+    return _roster_for(db, user, study_group_id, date)
+
+
 @router.post("/groups/{study_group_id}/day/mark-all-present", response_model=RosterResponse)
 def mark_all_present(
     study_group_id: int,
@@ -246,10 +269,7 @@ def month_status(
         date_to = datetime.date(year, 12, 31)
     else:
         date_to = datetime.date(year, month + 1, 1) - datetime.timedelta(days=1)
-    today = today_local()
-    if date_to > today:
-        date_to = today
-
+    # Весь месяц, включая ещё не наступившие дни: на них можно заранее запланировать отметки.
     submissions = {
         s.date: s
         for s in db.query(DaySubmission)
@@ -257,6 +277,15 @@ def month_status(
         .filter(DaySubmission.date >= date_from, DaySubmission.date <= date_to)
         .all()
     }
+
+    marks_per_day = dict(
+        db.query(AttendanceMark.date, func.count(AttendanceMark.id))
+        .join(Student, Student.id == AttendanceMark.student_id)
+        .filter(Student.study_group_id == study_group_id)
+        .filter(AttendanceMark.date >= date_from, AttendanceMark.date <= date_to)
+        .group_by(AttendanceMark.date)
+        .all()
+    )
 
     result = []
     current = date_from
@@ -272,6 +301,7 @@ def month_status(
                 day_type=resolved_type.value,
                 is_submitted=(submission is not None) if is_study else None,
                 is_on_time=submission.is_on_time if submission else None,
+                marks_count=marks_per_day.get(current, 0),
             )
         )
         current += datetime.timedelta(days=1)
@@ -292,15 +322,11 @@ def create_absence_period(
     # раньше, чем начинался (даты просто менялись местами при расчёте, и
     # период создавался пустым — 201 без единой отметки), тянуться на годы
     # вперёд (первый же такой period клал бы сервер расчётом study_days на
-    # тысячи дат) или уходить в будущее.
+    # тысячи дат). В будущее период уходить МОЖНО: заявление или ИУП известны заранее.
     if payload.date_to < payload.date_from:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Дата окончания раньше даты начала")
     if (payload.date_to - payload.date_from).days > 366:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Период не может быть длиннее года")
-    today = today_local()
-    if payload.date_to > today:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Период не может уходить в будущее")
-
     assert_can_access_group(db, user, student.study_group_id, payload.date_from)
     assert_can_access_group(db, user, student.study_group_id, payload.date_to)
 

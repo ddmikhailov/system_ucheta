@@ -69,6 +69,8 @@ class MonthDayStatus(BaseModel):
     day_type: str
     is_submitted: bool | None
     is_on_time: bool | None
+    # Сколько отметок уже стоит на этот день (для будущих дней — заранее внесённые).
+    marks_count: int = 0
 
 
 class AbsencePeriodCreate(BaseModel):

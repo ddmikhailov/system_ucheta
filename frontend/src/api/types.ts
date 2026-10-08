@@ -250,6 +250,8 @@ export interface MonthDayStatus {
   day_type: string;
   is_submitted: boolean | null;
   is_on_time: boolean | null;
+  /** Сколько отметок уже стоит на день (для будущих — заранее внесённые). */
+  marks_count?: number;
 }
 
 export interface MarkCodeOption {

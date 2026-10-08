@@ -311,17 +311,30 @@ describe("CuratorGroupPage — сданный день и правка прош�
     expect(screen.getByText(/Напишите причину исправления/)).toBeInTheDocument();
   });
 
-  it("стрелки и «Сегодня» листают дни; будущих дней нет", async () => {
+  it("стрелки и «Сегодня» листают дни; вперёд можно — планировать отметки", async () => {
     const user = userEvent.setup();
     mockApi(roster([entry(1, "Алексеев Пётр")]));
     open();
     await screen.findByRole("link", { name: "Алексеев Пётр" });
-    expect(screen.getByRole("button", { name: "Следующий учебный день" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Сегодня" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Предыдущий учебный день" }));
     await waitFor(() => expect(get).toHaveBeenCalledWith(expect.stringMatching(/\/curator\/groups\/7\/day\?date=/)));
     expect(screen.getByRole("button", { name: "Сегодня" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Следующий учебный день" })).toBeEnabled();
+  });
+
+  it("будущий день: вместо «Сдать день» — «Сохранить план», без «Все присутствуют»; план уходит на /day/plan", async () => {
+    const user = userEvent.setup();
+    mockApi(roster([entry(1, "Алексеев Пётр")]));
+    post.mockResolvedValue(roster([entry(1, "Алексеев Пётр", { mark_code: "б" })]));
+    open();
+    await screen.findByRole("link", { name: "Алексеев Пётр" });
+    await user.click(screen.getByRole("button", { name: "Следующий учебный день" }));
+    expect(await screen.findByText(/День ещё не наступил/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Все присутствуют" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Сдать день" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Сохранить план" }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith(expect.stringMatching(/\/day\/plan\?date=/), { exceptions: [] }));
   });
 
   it("вкладки группы: студенты — весь список со ссылками на карточки", async () => {

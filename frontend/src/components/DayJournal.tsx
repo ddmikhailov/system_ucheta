@@ -212,7 +212,7 @@ export default function DayJournal({
   }
 
   async function changeDate(next: string) {
-    if (next === date || next > today) return;
+    if (next === date) return;
     if (!(await confirmLeave("Сменить дату"))) return;
     setDate(next);
   }
@@ -282,6 +282,23 @@ export default function DayJournal({
 
   async function submitDay(allPresent: boolean, confirmed = false) {
     if (!groupId) return;
+    if (isFuture) {
+      // Ещё не наступивший день: отметки только планируются, день не сдаётся.
+      setBusy(true);
+      setError(null);
+      try {
+        applyRoster(await api.post<RosterResponse>(`/curator/groups/${groupId}/day/plan?date=${date}`, { exceptions: exceptions(false) }));
+        loadMonthStatus();
+        toast("План отметок сохранён");
+        scrollToTop();
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : "Не удалось сохранить план");
+        scrollToTop();
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     if (roster?.edit_requires_review) {
       await requestChange(allPresent);
       return;
@@ -328,6 +345,7 @@ export default function DayJournal({
   }
 
   const reviewMode = !!roster?.edit_requires_review;
+  const isFuture = date > today;
   const showForm = !!roster && !isNonWorkingDay && (!roster.is_submitted || editing);
   const pendingChange = roster?.pending_change ?? null;
   const lastChange = roster?.last_change ?? null;
@@ -428,7 +446,9 @@ export default function DayJournal({
                   ? reviewMode
                     ? "Исправление сданного дня — уйдёт на проверку зав. отделением, журнал изменится после одобрения"
                     : "Правка сданного дня"
-                  : notSubmittedText}
+                  : isFuture
+                    ? "День ещё не наступил. Внесите заранее известные отсутствия (заявление, ИУП) — сдать день можно будет, когда он наступит."
+                    : notSubmittedText}
                 {roster.is_submitted && (
                   <button
                     type="button"
@@ -450,7 +470,8 @@ export default function DayJournal({
                 busy={busy}
                 firstPeriod={firstPeriod}
                 onFirstPeriodChange={setFirstPeriod}
-                submitLabel={reviewMode ? "Отправить на проверку" : roster.is_submitted ? "Сохранить изменения" : submitLabel}
+                planMode={isFuture}
+                submitLabel={isFuture ? "Сохранить план" : reviewMode ? "Отправить на проверку" : roster.is_submitted ? "Сохранить изменения" : submitLabel}
                 onAllPresent={async () => {
                   if (
                     absentCount > 0 &&

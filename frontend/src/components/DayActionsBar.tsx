@@ -11,6 +11,7 @@ export default function DayActionsBar({
   onAllPresent,
   onSubmit,
   submitLabel = "Сдать день",
+  planMode = false,
 }: {
   absentCount: number;
   busy: boolean;
@@ -19,16 +20,21 @@ export default function DayActionsBar({
   onAllPresent: () => void;
   onSubmit: () => void;
   submitLabel?: string;
+  /** Будущий день: отметки только планируются — без «Все присутствуют» и выбора пары. */
+  planMode?: boolean;
 }) {
   return (
     <div className="day-actions">
       <span className="absent-counter">Отсутствуют: {absentCount}</span>
-      <button onClick={onAllPresent} disabled={busy}>
-        Все присутствуют
-      </button>
+      {!planMode && (
+        <button onClick={onAllPresent} disabled={busy}>
+          Все присутствуют
+        </button>
+      )}
       <button onClick={onSubmit} disabled={busy}>
         {submitLabel}
       </button>
+      {!planMode && (
       <label className="day-actions__period">
         К какой паре пришли
         <select value={firstPeriod} onChange={(e) => onFirstPeriodChange(e.target.value)}>
@@ -40,6 +46,7 @@ export default function DayActionsBar({
           ))}
         </select>
       </label>
+      )}
     </div>
   );
 }
