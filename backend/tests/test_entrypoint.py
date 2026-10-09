@@ -147,17 +147,17 @@ def _pyproject(tmp_path, spec):
 
 
 def test_python_version_inside_the_range_is_accepted(tmp_path):
-    entrypoint.check_python_version((3, 14, 7), _pyproject(tmp_path, ">=3.14,<3.15"))
+    entrypoint.check_python_version((3, 12, 7), _pyproject(tmp_path, ">=3.12,<3.13"))
 
 
-@pytest.mark.parametrize("version", [(3, 13, 9), (3, 15, 0), (3, 12, 1)])
+@pytest.mark.parametrize("version", [(3, 11, 9), (3, 13, 0), (3, 14, 1)])
 def test_python_version_outside_the_range_stops_startup(tmp_path, capsys, version):
     with pytest.raises(SystemExit) as exc:
-        entrypoint.check_python_version(version, _pyproject(tmp_path, ">=3.14,<3.15"))
+        entrypoint.check_python_version(version, _pyproject(tmp_path, ">=3.12,<3.13"))
 
     assert exc.value.code == 1
     err = capsys.readouterr().err
-    assert ">=3.14,<3.15" in err and f"{version[0]}.{version[1]}" in err
+    assert ">=3.12,<3.13" in err and "Установите Python 3.12" in err and f"{version[0]}.{version[1]}" in err
 
 
 def test_missing_pyproject_does_not_block_startup(tmp_path):

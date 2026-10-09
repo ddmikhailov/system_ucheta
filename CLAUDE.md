@@ -28,7 +28,7 @@ npm run build                         # tsc -b && vite build
 npx oxlint                            # линтер
 ```
 
-Dev-сервер фронтенда — `.claude/launch.json` (имя `frontend`, порт 5173). Python 3.14, Node ≥ 22.
+Dev-сервер фронтенда — `.claude/launch.json` (имя `frontend`, порт 5173). Python 3.12, Node ≥ 22.
 
 ## Архитектура backend (`backend/app`)
 

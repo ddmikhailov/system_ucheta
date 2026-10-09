@@ -9,7 +9,7 @@ RUN npm ci
 COPY frontend/ .
 RUN npm run build
 
-FROM python:3.14-slim
+FROM python:3.12-slim
 WORKDIR /app
 
 # fonts-dejavu-core — чтобы кириллица корректно рендерилась в PDF-экспорте (reportlab).
