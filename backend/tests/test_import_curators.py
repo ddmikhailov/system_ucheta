@@ -106,7 +106,7 @@ def test_group_is_looked_up_only_inside_its_department(kiber, db, tmp_path):
     db.add(Department(name="Техно"))
     db.commit()
 
-    with pytest.raises(RuntimeError, match="ИБС115 \(Техно\)"):
+    with pytest.raises(RuntimeError, match=r"ИБС115 \(Техно\)"):
         curators.run(write_list(tmp_path, ["Комлев Глеб Сергеевич	ИБС115	Техно"]), None, apply=True)
 
 

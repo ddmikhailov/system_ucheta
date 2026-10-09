@@ -226,8 +226,8 @@ def admin_guide(version: str) -> list:
     f: list = []
     f += cover(
         "Инструкция по развёртыванию на рабочем сервере", "для системного администратора организации", version,
-        [["Целевая среда", "MySQL 8.1.0 · Python 3.14 · Apache 2.4 (обратный прокси) · без Docker и без дополнительных сервисов"],
-         ["Версии ПО на сервере", "Не обновляются: Python 3.14 и MySQL 8.1.0 остаются как есть"],
+        [["Целевая среда", "MySQL 8.1.0 · Python 3.12 · Apache 2.4 (обратный прокси) · без Docker и без дополнительных сервисов"],
+         ["Версии ПО на сервере", "Не обновляются: Python 3.12 и MySQL 8.1.0 остаются как есть (платформа работает и на Python 3.13/3.14)"],
          ["Что получает администратор", "Архив kait20-" + version + ".zip (+ файл .sha256) и этот документ"]],
     )
 
@@ -251,7 +251,7 @@ def admin_guide(version: str) -> list:
         ["Звено", "Что делает", "Адрес"],
         ["Браузер пользователя", "Работает только с вашим доменом; сторонних сайтов, шрифтов и CDN платформа не использует", "https://&lt;домен&gt;/"],
         ["Apache 2.4", "HTTPS, перенаправление с http, обратный прокси на приложение", "порты 80 и 443"],
-        ["Приложение kait20", "Python 3.14, один процесс (служба systemd), интерфейс + API", "127.0.0.1:8000 (только локально)"],
+        ["Приложение kait20", "Python 3.12, один процесс (служба systemd), интерфейс + API", "127.0.0.1:8000 (только локально)"],
         ["MySQL 8.1.0", "Все данные; таблицы создаются и обновляются автоматически при запуске (миграции)", "127.0.0.1:3306"],
     ], [3.6, 9.4, 4.0]))
     f.append(Spacer(1, 6))
@@ -270,8 +270,8 @@ def admin_guide(version: str) -> list:
     f.append(P("2. Что нужно на сервере", "h1"))
     f.append(table([
         ["Компонент", "Требование", "Комментарий"],
-        ["Python", "<b>3.14.x</b> (уже установлен, не обновлять)", "Приложение не запустится на другой версии — это проверка на старте. Нужен модуль venv "
-         "(в Debian/Ubuntu — пакет python3.14-venv, если его нет)."],
+        ["Python", "<b>3.12.x</b> (уже установлен, не обновлять); допустимы также 3.13 и 3.14", "Приложение не запустится на версии вне диапазона 3.12–3.14 — это проверка на старте. Нужен модуль venv "
+         "(в Debian/Ubuntu — пакет python3.12-venv, если его нет)."],
         ["MySQL", "<b>8.1.0</b> (уже установлен, не обновлять), кодировка utf8mb4", "Используются только стандартные возможности MySQL 8.0+. "
          "max_connections — не меньше 60 (пул приложения до 30 соединений + запас для резервного копирования и обслуживания)."],
         ["Apache", "2.4 с модулями <b>proxy, proxy_http, headers, ssl</b>", "Если модули не включены: a2enmod proxy proxy_http headers ssl (Debian/Ubuntu) "
@@ -284,7 +284,7 @@ def admin_guide(version: str) -> list:
     ], [3.0, 5.4, 8.6]))
     f.append(Spacer(1, 6))
     f.append(P("<b>Устанавливать дополнительно не нужно:</b> Node.js и npm (интерфейс уже собран), Docker, компилятор и заголовочные файлы "
-               "(все Python-пакеты ставятся готовыми колёсами — проверено для Linux x86_64 и Python 3.14), mod_wsgi, Redis, RabbitMQ, "
+               "(все Python-пакеты ставятся готовыми колёсами — проверено для Linux x86_64 и Python 3.12), mod_wsgi, Redis, RabbitMQ, "
                "Nginx. Подключения к внешним сервисам не используются."))
 
     # 3 -----------------------------------------------------------------------------------------------------------
@@ -334,7 +334,7 @@ def admin_guide(version: str) -> list:
                "Здесь и далее <font name='DejaVuMono'>kurator.example.ru</font> — замените на реальный домен платформы."))
     f.append(P("4.1. Проверка версий (ничего не обновляя)", "h2"))
     f.append(code("""
-python3.14 --version          # должно быть Python 3.14.x
+python3.12 --version          # должно быть Python 3.12.x (или 3.13 / 3.14)
 mysql --version               # должно быть 8.1.0
 apache2ctl -v                 # 2.4.x   (RHEL: httpd -v)
 apache2ctl -M | grep -E 'proxy|headers|ssl'   # нужны: proxy, proxy_http, headers, ssl
@@ -363,7 +363,7 @@ ls /tmp/kait20-release/deploy  # конфигурации и инструкци�
     f.append(P("4.5. Виртуальное окружение и зависимости", "h2"))
     f.append(code("""
 cd /opt/kait20/backend
-sudo -u kait20 python3.14 -m venv .venv
+sudo -u kait20 python3.12 -m venv .venv
 sudo -u kait20 .venv/bin/pip install --require-hashes -r requirements.txt
 """))
     f.append(P("Ключ <font name='DejaVuMono'>--require-hashes</font> заставляет pip проверять подлинность каждого пакета по хэшу из requirements.txt. "
@@ -388,7 +388,7 @@ sudo -u kait20 env HOST=127.0.0.1 .venv/bin/python -m scripts.entrypoint
 # Остановить: Ctrl+C
 """))
     f.append(P("Скрипт запуска сам дожидается базы, применяет миграции, создаёт справочники и администратора и запускает приложение. "
-               "Если JWT_SECRET слабый или версия Python не 3.14, он остановится с понятным сообщением."))
+               "Если JWT_SECRET слабый или версия Python вне диапазона 3.12–3.14, он остановится с понятным сообщением."))
     f.append(P("4.8. Служба systemd", "h2"))
     f.append(P("Файл — deploy/kait20.service из архива (текст — приложение B). Установка:"))
     f.append(code("""
@@ -497,7 +497,7 @@ sudo systemctl start kait20 && curl -s http://127.0.0.1:8000/health
         "TRUSTED_PROXY_COUNT=1, если перед приложением ровно один Apache. Если между Apache и пользователями есть ещё балансировщик — значение 2; "
         "если приложение вдруг доступно напрямую без прокси — 0. Неверное значение ломает лимит попыток входа (все пользователи сольются в один адрес).",
         "Файлы с реальными ФИО (реестр, списки кураторов) после загрузки удалять с сервера (<font name='DejaVuMono'>shred -u</font> или стандартное безопасное удаление).",
-        "Регулярные обновления ОС и Apache — как обычно; <b>Python 3.14 и MySQL 8.1.0 не обновлять</b> без согласования с разработчиком.",
+        "Регулярные обновления ОС и Apache — как обычно; <b>Python 3.12 и MySQL 8.1.0 не обновлять</b> без согласования с разработчиком.",
     ])
 
     # 7 -----------------------------------------------------------------------------------------------------------
@@ -595,7 +595,7 @@ $RUN scripts.import_curators $DATA/curators.tsv                       # пров
     f.append(table([
         ["Симптом", "Причина", "Что сделать"],
         ["Приложение не запускается: «JWT_SECRET не задан или слишком короткий»", "Секрет пустой/предсказуемый", "Сгенерировать JWT_SECRET (п. 4.6), перезапустить"],
-        ["«Требуется Python &gt;=3.14,&lt;3.15»", "venv создан другой версией Python", "Пересоздать venv командой python3.14 -m venv"],
+        ["«Требуется Python &gt;=3.12,&lt;3.15»", "venv создан версией Python вне диапазона 3.12–3.14", "Пересоздать venv командой python3.12 -m venv"],
         ["«DOSSIER_ENCRYPTION_KEY некорректен»", "Ключ испорчен при копировании", "Ключ Fernet — 44 символа, заканчивается на «=»; вставить без пробелов и кавычек"],
         ["Apache отвечает 502/503", "Служба kait20 не запущена или падает", "systemctl status kait20; journalctl -u kait20 -n 100"],
         ["Вход проходит, но сразу выбрасывает на экран входа", "Сайт открыт по http, а cookie помечена Secure", "Настроить HTTPS (раздел 6)"],
@@ -607,7 +607,7 @@ $RUN scripts.import_curators $DATA/curators.tsv                       # пров
         ["Импорт: «отделение … не найдено на платформе»", "Опечатка в названии или отделения ещё нет", "Исправить название (оно должно совпадать с «Админка → Отделения») или включить «Создавать новые отделения»"],
         ["Импорт: запись невозможна, в списке ошибки", "В файле есть строки с ошибками", "Исправить указанные листы и строки, загрузить файл заново (повторная загрузка безопасна)"],
         ["Импорт: «Файл не принят» / «Не удалось прочитать файл»", "Не .xlsx (например .xls или .csv) или повреждён", "Сохранить как «Книга Excel (.xlsx)» из шаблона платформы; размер до 5 МБ"],
-        ["pip install не может скачать пакеты", "Нет доступа к pypi.org", "Скачать колёса на компьютере с интернетом: pip download -r requirements.txt --only-binary=:all: --python-version 3.14 -d wheels, перенести папку и ставить с --no-index --find-links wheels --require-hashes"],
+        ["pip install не может скачать пакеты", "Нет доступа к pypi.org", "Скачать колёса на компьютере с интернетом: pip download -r requirements.txt --only-binary=:all: --python-version 3.12 -d wheels, перенести папку и ставить с --no-index --find-links wheels --require-hashes"],
     ], [5.3, 5.2, 6.5]))
 
     # 9 -----------------------------------------------------------------------------------------------------------
@@ -637,7 +637,7 @@ $RUN scripts.import_curators $DATA/curators.tsv                       # пров
     f.append(table([
         ["Что", "Linux", "Windows"],
         ["Папка приложения", "/opt/kait20/backend", "C:\\kait20\\backend"],
-        ["Виртуальное окружение", "python3.14 -m venv .venv", "py -3.14 -m venv .venv (запуск: .venv\\Scripts\\python.exe)"],
+        ["Виртуальное окружение", "python3.12 -m venv .venv", "py -3.12 -m venv .venv (запуск: .venv\\Scripts\\python.exe)"],
         ["Запуск при загрузке сервера", "служба systemd", "задача Планировщика заданий «kait20» (приложение E)"],
         ["Учётная запись", "пользователь kait20 (без входа)", "локальная учётная запись kait20svc без прав администратора"],
         ["Права на .env", "chmod 600", "icacls: только kait20svc и Администраторы"],
@@ -648,7 +648,7 @@ $RUN scripts.import_curators $DATA/curators.tsv                       # пров
     f.append(P("10.1. Установка", "h2"))
     f.append(code("""
 # PowerShell «от имени администратора»
-py -3.14 --version                                   # Python 3.14.x
+py -3.12 --version                                   # Python 3.12.x
 mysql --version                                      # 8.1.0  (папка MySQL\\bin — в PATH или полный путь)
 New-Item -ItemType Directory C:\\kait20, C:\\kait20\\logs
 Expand-Archive C:\\Temp\\kait20-""" + version + """.zip C:\\kait20\\unpacked      # backend, deploy, frontend
@@ -658,7 +658,7 @@ Copy-Item C:\\kait20\\unpacked\\deploy\\kait20-*.ps1 C:\\kait20\\    # сцен�
 net user kait20svc * /add /passwordchg:no /expires:never
 icacls C:\\kait20 /grant "kait20svc:(OI)(CI)M"
 cd C:\\kait20\\backend
-py -3.14 -m venv .venv
+py -3.12 -m venv .venv
 .venv\\Scripts\\pip install --require-hashes -r requirements.txt
 copy .env.example .env                               # заполнить по п. 4.6 (HOST/PORT задаёт задача)
 icacls .env /inheritance:r /grant "kait20svc:R" /grant "Administrators:F"

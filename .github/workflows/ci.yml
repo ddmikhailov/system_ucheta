@@ -7,24 +7,30 @@ on:
 
 jobs:
   backend:
+    # Сервер колледжа работает на Python 3.12, облачный запуск — на 3.14: проверяем обе границы поддерживаемого диапазона.
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.14"]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version-file: backend/.python-version
+          python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
         working-directory: backend
         run: pip install -r requirements-dev.txt
 
       - name: Lock-файлы соответствуют requirements*.in
+        if: matrix.python-version == '3.12'
         working-directory: backend
         run: |
           pip install uv==0.12.21
-          uv pip compile requirements.in --universal --generate-hashes --python-version 3.14 -o requirements.txt -q
-          uv pip compile requirements-dev.in --universal --generate-hashes --python-version 3.14 -c requirements.txt -o requirements-dev.txt -q
+          uv pip compile requirements.in --universal --generate-hashes --python-version 3.12 -o requirements.txt -q
+          uv pip compile requirements-dev.in --universal --generate-hashes --python-version 3.12 -c requirements.txt -o requirements-dev.txt -q
           git diff --exit-code -- requirements.txt requirements-dev.txt
 
       - name: pytest

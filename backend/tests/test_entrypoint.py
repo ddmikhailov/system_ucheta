@@ -146,18 +146,26 @@ def _pyproject(tmp_path, spec):
     return path
 
 
-def test_python_version_inside_the_range_is_accepted(tmp_path):
-    entrypoint.check_python_version((3, 14, 7), _pyproject(tmp_path, ">=3.14,<3.15"))
+@pytest.mark.parametrize("version", [(3, 12, 3), (3, 13, 9), (3, 14, 7)])
+def test_python_version_inside_the_range_is_accepted(tmp_path, version):
+    entrypoint.check_python_version(version, _pyproject(tmp_path, ">=3.12,<3.15"))
 
 
-@pytest.mark.parametrize("version", [(3, 13, 9), (3, 15, 0), (3, 12, 1)])
+@pytest.mark.parametrize("version", [(3, 11, 9), (3, 15, 0), (3, 9, 1)])
 def test_python_version_outside_the_range_stops_startup(tmp_path, capsys, version):
     with pytest.raises(SystemExit) as exc:
-        entrypoint.check_python_version(version, _pyproject(tmp_path, ">=3.14,<3.15"))
+        entrypoint.check_python_version(version, _pyproject(tmp_path, ">=3.12,<3.15"))
 
     assert exc.value.code == 1
     err = capsys.readouterr().err
-    assert ">=3.14,<3.15" in err and f"{version[0]}.{version[1]}" in err
+    assert ">=3.12,<3.15" in err and f"{version[0]}.{version[1]}" in err
+    assert "Нужна версия 3.12–3.14" in err  # подсказка называет допустимые версии, а не одну
+
+
+def test_real_project_requirement_accepts_3_12_to_3_14():
+    """Сервер колледжа работает на Python 3.12 — проверка на старте не должна его отвергать."""
+    for version in ((3, 12, 3), (3, 13, 0), (3, 14, 0)):
+        entrypoint.check_python_version(version, entrypoint.PYPROJECT)
 
 
 def test_missing_pyproject_does_not_block_startup(tmp_path):

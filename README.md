@@ -8,7 +8,7 @@
 
 ## Стек
 
-- Backend: Python 3.14, FastAPI, SQLAlchemy 2, Alembic, PyMySQL
+- Backend: Python 3.12–3.14 (сервер колледжа — 3.12, облачный запуск — 3.14), FastAPI, SQLAlchemy 2, Alembic, PyMySQL
 - БД: MySQL 8.4 LTS, InnoDB, utf8mb4
 - Frontend: React + TypeScript, Vite — собирается в статику, её отдаёт backend
 - Упаковка: Docker Compose, 2 контейнера (`app` + `db`)
@@ -277,7 +277,7 @@ docker exec -i kait20_db mysql -u root -p"$DB_ROOT_PASSWORD" kait20 < backup_202
 
 ## Зависимости и версии
 
-**Версии.** Python **3.14** (`backend/pyproject.toml` → `requires-python`, `backend/.python-version`, образ `python:3.14-slim`, CI), Node **22+** (`frontend/package.json` → `engines`, `frontend/.nvmrc`; `frontend/.npmrc` включает `engine-strict`, так что на неподходящей версии `npm ci` откажется ставить), MySQL **8.4**. `scripts/entrypoint.py` не стартует на другой версии Python, а `tests/test_versions.py` следит, чтобы объявленные версии, Dockerfile и lock-файлы не разошлись.
+**Версии.** Python **3.12–3.14** (`backend/pyproject.toml` → `requires-python = ">=3.12,<3.15"`; `backend/.python-version` — нижняя граница 3.12, на ней работает сервер колледжа; образ `python:3.14-slim` для облака; CI гоняет тесты на обеих границах — 3.12 и 3.14), Node **22+** (`frontend/package.json` → `engines`, `frontend/.nvmrc`; `frontend/.npmrc` включает `engine-strict`, так что на неподходящей версии `npm ci` откажется ставить), MySQL **8.1+** (CI — 8.4). `scripts/entrypoint.py` не стартует на версии вне диапазона, а `tests/test_versions.py` следит, чтобы объявленные версии, Dockerfile и lock-файлы не разошлись.
 
 **Backend: два файла на каждый список.**
 
@@ -294,8 +294,8 @@ Lock универсальный: один файл подходит и для Li
 ```bash
 pip install uv==0.12.21   # только для пересборки, на сервере не нужен
 cd backend
-uv pip compile requirements.in --universal --generate-hashes --python-version 3.14 -o requirements.txt
-uv pip compile requirements-dev.in --universal --generate-hashes --python-version 3.14 -c requirements.txt -o requirements-dev.txt
+uv pip compile requirements.in --universal --generate-hashes --python-version 3.12 -o requirements.txt
+uv pip compile requirements-dev.in --universal --generate-hashes --python-version 3.12 -c requirements.txt -o requirements-dev.txt
 ```
 
 CI пересобирает lock теми же командами и падает, если файл изменился (значит, `.in` поправили, а lock забыли), а `pip-audit` проверяет весь lock на известные уязвимости.

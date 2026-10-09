@@ -61,7 +61,7 @@ def log(message: str) -> None:
 def check_python_version(
     version_info: Sequence[int] = sys.version_info, pyproject: Path = PYPROJECT
 ) -> None:
-    """Версия Python берётся из requires-python в pyproject.toml (">=3.14,<3.15").
+    """Версия Python берётся из requires-python в pyproject.toml (">=3.12,<3.15": проверены 3.12, 3.13 и 3.14).
     На другой версии зависимости из lock-файла могут не встать или повести себя
     иначе, поэтому на сервере лучше остановиться сразу и понятно."""
     if not pyproject.is_file():
@@ -75,9 +75,11 @@ def check_python_version(
     too_old = low is not None and current < (int(low[1]), int(low[2]))
     too_new = high is not None and current >= (int(high[1]), int(high[2]))
     if too_old or too_new:
+        wanted = f"{low[1]}.{low[2]}" if low else "подходящая"
+        if low and high:
+            wanted += f"–{high[1]}.{int(high[2]) - 1}"
         print(
-            f"[entrypoint] Требуется Python {spec}, а запущен {current[0]}.{current[1]}. "
-            "Установите Python 3.14.",
+            f"[entrypoint] Требуется Python {spec}, а запущен {current[0]}.{current[1]}. Нужна версия {wanted}.",
             file=sys.stderr, flush=True,
         )
         raise SystemExit(1)
