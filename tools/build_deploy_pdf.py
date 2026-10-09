@@ -293,14 +293,15 @@ def admin_guide(version: str) -> list:
     f.append(table([
         ["Что", "Откуда", "Куда"],
         ["Архив kait20-" + version + ".zip и kait20-" + version + ".zip.sha256", "готовит разработчик: python tools/build_release.py", "на сервер, в /tmp"],
-        ["Этот документ", "—", "администратору"],
-        ["Файлы vhost, службы и резервного копирования (приложения A–C)", "docs/deploy в репозитории или текст из приложений", "см. раздел 4"],
+        ["Этот документ (PDF)", "также лежит в архиве, папка deploy/", "администратору"],
+        ["Конфигурации Apache, службы и резервного копирования — Linux и Windows", "папка deploy/ внутри архива (тексты — в приложениях A–F)", "см. разделы 4 и 10"],
         ["Файлы с данными для загрузки (реестр контингента, список кураторов)", "передаются отдельно, НЕ через git и НЕ в составе архива", "/var/lib/kait20/import"],
     ], [7.0, 6.0, 4.0]))
     f.append(Spacer(1, 4))
-    f.append(P("Внутри архива две папки: <b>backend</b> (приложение: код, готовый интерфейс в backend/static, миграции БД, скрипты загрузки данных, "
-               "список зависимостей requirements.txt, шаблон настроек .env.example) и <b>frontend</b> (исходники интерфейса — на сервере не нужны, "
-               "их можно не распаковывать). Тестов, файлов с реальными данными и секретов в архиве нет."))
+    f.append(P("Внутри архива три папки: <b>backend</b> (приложение: код, готовый интерфейс в backend/static, миграции БД, скрипты загрузки данных, "
+               "список зависимостей requirements.txt, шаблон настроек .env.example), <b>deploy</b> (конфигурации Apache, службы и резервного копирования, "
+               "эта инструкция, README.txt) и <b>frontend</b> (исходники интерфейса — на сервере не нужны). "
+               "Тестов, файлов с реальными данными и секретов в архиве нет."))
     f.append(P("3.2. Что НЕ переносится", "h2"))
     f += bullets([
         "Файл .env разработки и любые пароли тестового окружения. Для рабочего сервера создаются <b>новые</b> секреты.",
@@ -353,8 +354,11 @@ sudo chmod 700 /var/lib/kait20/import /var/backups/kait20
     f.append(code("""
 cd /tmp
 sha256sum -c kait20-""" + version + """.zip.sha256              # должно быть: OK
-sudo -u kait20 unzip -q kait20-""" + version + """.zip 'backend/*' -d /opt/kait20
+unzip -q kait20-""" + version + """.zip -d /tmp/kait20-release     # backend/, deploy/, frontend/
+sudo cp -a /tmp/kait20-release/backend /opt/kait20/backend
+sudo chown -R kait20:kait20 /opt/kait20/backend
 ls /opt/kait20/backend         # app, alembic, scripts, static, requirements.txt, .env.example
+ls /tmp/kait20-release/deploy  # конфигурации и инструкция — понадобятся в п. 4.8, 4.9 и 5.2
 """))
     f.append(P("4.5. Виртуальное окружение и зависимости", "h2"))
     f.append(code("""
@@ -386,8 +390,9 @@ sudo -u kait20 env HOST=127.0.0.1 .venv/bin/python -m scripts.entrypoint
     f.append(P("Скрипт запуска сам дожидается базы, применяет миграции, создаёт справочники и администратора и запускает приложение. "
                "Если JWT_SECRET слабый или версия Python не 3.14, он остановится с понятным сообщением."))
     f.append(P("4.8. Служба systemd", "h2"))
-    f.append(P("Файл — в приложении B (docs/deploy/kait20.service). Установка:"))
+    f.append(P("Файл — deploy/kait20.service из архива (текст — приложение B). Установка:"))
     f.append(code("""
+cd /tmp/kait20-release/deploy
 sudo cp kait20.service /etc/systemd/system/kait20.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now kait20
@@ -395,8 +400,9 @@ sudo systemctl status kait20            # active (running)
 journalctl -u kait20 -n 50 --no-pager   # журнал запуска
 """))
     f.append(P("4.9. Apache", "h2"))
-    f.append(P("Файл — в приложении A (docs/deploy/kait20-apache.conf): впишите домен и пути к сертификату.", "p"))
+    f.append(P("Файл — deploy/kait20-apache.conf из архива (текст — приложение A): впишите домен и пути к сертификату.", "p"))
     f.append(code("""
+cd /tmp/kait20-release/deploy
 sudo cp kait20-apache.conf /etc/apache2/sites-available/kait20.conf
 #   (RHEL-семейство: /etc/httpd/conf.d/kait20.conf)
 sudo a2enmod proxy proxy_http headers ssl
@@ -435,10 +441,11 @@ sudo systemctl reload apache2
         ["Проверка доступности (для мониторинга)", "GET https://&lt;домен&gt;/health → 200"],
     ], [7.0, 10.0]))
     f.append(P("5.2. Резервное копирование", "h2"))
-    f.append(P("Скрипт — приложение C (docs/deploy/kait20-backup.sh). Делает сжатый дамп БД, проверяет, что архив читается и содержит таблицы, "
+    f.append(P("Скрипт — deploy/kait20-backup.sh из архива (текст — приложение C). Делает сжатый дамп БД, проверяет, что архив читается и содержит таблицы, "
                "хранит 30 дней. Настройка:"))
     f.append(code("""
-sudo cp kait20-backup.sh /opt/kait20/kait20-backup.sh && sudo chmod 755 /opt/kait20/kait20-backup.sh
+sudo cp /tmp/kait20-release/deploy/kait20-backup.sh /opt/kait20/
+sudo chmod 755 /opt/kait20/kait20-backup.sh
 # учётные данные для mysqldump (чтобы пароль не светился в списке процессов):
 sudo -u kait20 sh -c 'printf "[client]\\nuser=kait20\\npassword=<пароль БД>\\n" > ~/.my.cnf'
 sudo -u kait20 chmod 600 ~kait20/.my.cnf
@@ -464,7 +471,7 @@ sudo cp -a /opt/kait20/backend /opt/kait20/backend.prev
 # 2. остановить, заменить код (сохранив .env и .venv), обновить зависимости, запустить
 sudo systemctl stop kait20
 cd /tmp && sha256sum -c kait20-<версия>.zip.sha256
-sudo -u kait20 unzip -q kait20-<версия>.zip 'backend/*' -d /tmp/kait20-new
+unzip -q kait20-<версия>.zip -d /tmp/kait20-new
 sudo rsync -a --exclude .env --exclude .venv /tmp/kait20-new/backend/ /opt/kait20/backend/
 sudo chown -R kait20:kait20 /opt/kait20/backend
 cd /opt/kait20/backend && sudo -u kait20 .venv/bin/pip install --require-hashes -r requirements.txt
@@ -608,7 +615,8 @@ $RUN scripts.import_curators $DATA/curators.tsv                       # пров
     f.append(P("Перед подготовкой этого документа проведена проверка репозитория, конфигурации и сборки. Итог:"))
     f.append(table([
         ["Область", "Результат"],
-        ["Сборка архива для сервера (tools/build_release.py)", "Найдено и исправлено: служебный комментарий в коде содержал название стороннего хостинга, из-за чего сборка архива останавливалась. После исправления архив собирается (344 файла, 2,4 МБ), без тестов, секретов и Docker-файлов."],
+        ["Версия и автоматические проверки", "Версия " + version + ". Проверки на GitHub (серверные тесты на SQLite и на MySQL 8.4, тесты интерфейса) — зелёные. В среде подготовки (Python 3.13) 817 серверных тестов прошли; 20 тестов, которые требуют именно Python 3.14, там не запускаются, на 3.14 в CI они проходят."],
+        ["Сборка и состав архива (tools/build_release.py)", "Найдено и исправлено: служебный комментарий в коде содержал название стороннего хостинга, из-за чего сборка архива останавливалась. Итоговый архив собран штатным инструментом, распакован и проверен: в нём backend, deploy и frontend; тестов, файлов с реальными данными, секретов и служебных файлов хостинга нет; контрольная сумма SHA-256 прилагается. Приложение из распакованного архива запускалось на тестовой БД: интерфейс, вход, миграции."],
         ["Зависимости на Python 3.14", "Все 41 пакет из requirements.txt получены готовыми колёсами для Linux x86_64 / CPython 3.14: компилятор на сервере не нужен. Для другой архитектуры (например ARM) нужна отдельная проверка."],
         ["Работа за Apache", "Проверено на живом Apache 2.4 с TLS: проксирование, перенаправление http→https, открытие страниц по прямому адресу и обновление (F5), вход (cookie Secure + HttpOnly + SameSite=Strict), заголовки HSTS и CSP, выгрузки Excel. Приложены проверенные файлы конфигурации."],
         ["Вход по http без сертификата", "Раньше при ENVIRONMENT=production вход по http не работал вообще (браузер отбрасывал Secure-cookie). Добавлена настройка SESSION_COOKIE_SECURE (по умолчанию включено; временно можно выключить)."],
@@ -643,7 +651,9 @@ $RUN scripts.import_curators $DATA/curators.tsv                       # пров
 py -3.14 --version                                   # Python 3.14.x
 mysql --version                                      # 8.1.0  (папка MySQL\\bin — в PATH или полный путь)
 New-Item -ItemType Directory C:\\kait20, C:\\kait20\\logs
-Expand-Archive C:\\Temp\\kait20-""" + version + """.zip C:\\kait20\\unpacked   # затем перенести папку backend в C:\\kait20
+Expand-Archive C:\\Temp\\kait20-""" + version + """.zip C:\\kait20\\unpacked      # backend, deploy, frontend
+Move-Item C:\\kait20\\unpacked\\backend C:\\kait20\\backend
+Copy-Item C:\\kait20\\unpacked\\deploy\\kait20-*.ps1 C:\\kait20\\    # сценарии службы и копий
 # учётная запись службы и права на папку (пароль придумать длинный, сохранить в сейф)
 net user kait20svc * /add /passwordchg:no /expires:never
 icacls C:\\kait20 /grant "kait20svc:(OI)(CI)M"
@@ -700,20 +710,20 @@ $f = "C:\\kait20\\import\\контингент.xlsx"
 
     # Приложения --------------------------------------------------------------------------------------------------
     f.append(PageBreak())
-    f.append(P("Приложение A. Виртуальный хост Apache — Linux (docs/deploy/kait20-apache.conf)", "h1"))
+    f.append(P("Приложение A. Виртуальный хост Apache — Linux (deploy/kait20-apache.conf)", "h1"))
     f.append(code(read("kait20-apache.conf"), wrap=True))
     f.append(PageBreak())
-    f.append(P("Приложение B. Служба systemd (docs/deploy/kait20.service)", "h1"))
+    f.append(P("Приложение B. Служба systemd (deploy/kait20.service)", "h1"))
     f.append(code(read("kait20.service"), wrap=True))
-    f.append(P("Приложение C. Резервное копирование — Linux (docs/deploy/kait20-backup.sh)", "h1"))
+    f.append(P("Приложение C. Резервное копирование — Linux (deploy/kait20-backup.sh)", "h1"))
     f.append(code(read("kait20-backup.sh"), wrap=True))
     f.append(PageBreak())
-    f.append(P("Приложение D. Виртуальный хост Apache — Windows (docs/deploy/kait20-apache-windows.conf)", "h1"))
+    f.append(P("Приложение D. Виртуальный хост Apache — Windows (deploy/kait20-apache-windows.conf)", "h1"))
     f.append(code(read("kait20-apache-windows.conf"), wrap=True))
-    f.append(P("Приложение E. Запуск приложения задачей Планировщика — Windows (docs/deploy/kait20-service.ps1)", "h1"))
+    f.append(P("Приложение E. Запуск приложения задачей Планировщика — Windows (deploy/kait20-service.ps1)", "h1"))
     f.append(code(read("kait20-service.ps1"), wrap=True))
     f.append(PageBreak())
-    f.append(P("Приложение F. Резервное копирование — Windows (docs/deploy/kait20-backup.ps1)", "h1"))
+    f.append(P("Приложение F. Резервное копирование — Windows (deploy/kait20-backup.ps1)", "h1"))
     f.append(code(read("kait20-backup.ps1"), wrap=True))
     return f
 

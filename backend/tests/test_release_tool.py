@@ -91,3 +91,25 @@ def test_find_problems_ignores_binary_files(tool, tmp_path):
     _tree(tmp_path, {"backend/a.py": "x\n", "frontend/b.ts": "x\n"})
     (tmp_path / "frontend" / "logo.webp").write_bytes(b"RIFF\x00docker\xff")
     assert tool.find_problems(tmp_path) == []
+
+
+def test_select_deploy_files_takes_admin_materials_only(tool):
+    paths = [
+        "docs/deploy/kait20-apache.conf", "docs/deploy/kait20.service", "docs/deploy/kait20-backup.sh",
+        "docs/deploy/kait20-service.ps1", "docs/deploy/kait20-instrukciya-administratoru.pdf", "docs/deploy/README.txt",
+        # не для администратора сервера:
+        "docs/deploy/kait20-zagruzka-dannyh-varianty.pdf", "docs/install-guide.md", "docs/deploy/sub/x.conf",
+        "backend/app/main.py", "tools/build_deploy_pdf.py",
+    ]
+    assert tool.select_deploy_files(paths) == sorted([
+        "docs/deploy/kait20-apache.conf", "docs/deploy/kait20.service", "docs/deploy/kait20-backup.sh",
+        "docs/deploy/kait20-service.ps1", "docs/deploy/kait20-instrukciya-administratoru.pdf", "docs/deploy/README.txt",
+    ])
+
+
+def test_find_problems_accepts_deploy_folder_but_requires_backend_and_frontend(tool, tmp_path):
+    _tree(tmp_path, {"backend/a.py": "x\n", "frontend/b.ts": "x\n", "deploy/kait20.service": "x\n"})
+    assert tool.find_problems(tmp_path) == []
+    other = tmp_path / "other"
+    _tree(other, {"backend/a.py": "x\n", "deploy/kait20.service": "x\n"})
+    assert any("в корне должно быть ровно" in p for p in tool.find_problems(other))
