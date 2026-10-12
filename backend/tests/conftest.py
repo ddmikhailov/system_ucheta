@@ -7,6 +7,8 @@ import os
 os.environ.setdefault("JWT_SECRET", "Tq8vXn4Lw2KzR7pYb5HdJ9cMfA3sUe6G")
 # Тестовый ключ Fernet для шифрования особых полей досье (не используется нигде, кроме тестов).
 os.environ.setdefault("DOSSIER_ENCRYPTION_KEY", "Zm9yLXRlc3RzLW9ubHktMzItYnl0ZXMta2V5LTAwMDA=")
+# Набор тестов проверяет полный функционал; релизный режим (3.5.0) включается в тестах явно.
+os.environ.setdefault("ENABLED_MODULES", "all")
 
 import pytest
 from argon2 import PasswordHasher

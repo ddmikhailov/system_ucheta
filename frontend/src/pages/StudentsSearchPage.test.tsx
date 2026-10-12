@@ -2,6 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "../api/client";
+import { RELEASE_MODULES } from "../constants/modules";
 import { renderPage } from "../test/utils";
 import StudentsSearchPage from "./StudentsSearchPage";
 import { chooseOption } from "../test/searchSelect";
@@ -92,5 +93,13 @@ describe("StudentsSearchPage", () => {
   it("блок загрузки досье из Excel доступен на странице", async () => {
     renderPage(<StudentsSearchPage />, { role: "admin" });
     expect(await screen.findByRole("button", { name: /Загрузить досье из Excel/ })).toBeInTheDocument();
+  });
+});
+
+describe("StudentsSearchPage — релизный набор модулей (3.5.0)", () => {
+  it("без модуля «Досье» нет блока импорта досье, поиск работает", async () => {
+    const { container } = renderPage(<StudentsSearchPage />, { role: "admin", user: { modules: [...RELEASE_MODULES] } });
+    expect(await screen.findByRole("link", { name: "Алексеев Пётр" })).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/Импорт досье|досье/i);
   });
 });

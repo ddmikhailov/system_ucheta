@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/useAuth";
+import { MODULE } from "../constants/modules";
+import { isModuleOn } from "../utils/modules";
 import type { DepartmentAdmin, UserActivityEntry, UserActivityPage, UserProfile } from "../api/types";
 import { Kpi, ProfileHero } from "../components/ProfileHero";
 import { TabBar, TabPanel, type TabItem } from "../components/Tabs";
@@ -164,9 +166,13 @@ export default function UserProfilePage() {
             <dl className="stat-list">
               <div><dt>Отметок поставлено</dt><dd>{profile.marks_created_30d}</dd></div>
               <div><dt>Дней сдано лично</dt><dd>{profile.days_submitted_30d}</dd></div>
-              <div><dt>Записей индивидуальной работы</dt><dd>{profile.notes_written_30d}</dd></div>
-              <div><dt>Открытых «вернуться к вопросу»</dt><dd>{profile.follow_ups_open}</dd></div>
-              <div><dt>Просмотров досье</dt><dd>{profile.dossier_views_30d}</dd></div>
+              {isModuleOn(me, MODULE.INDIVIDUAL_WORK) && (
+                <>
+                  <div><dt>Записей индивидуальной работы</dt><dd>{profile.notes_written_30d}</dd></div>
+                  <div><dt>Открытых «вернуться к вопросу»</dt><dd>{profile.follow_ups_open}</dd></div>
+                </>
+              )}
+              {isModuleOn(me, MODULE.DOSSIER) && <div><dt>Просмотров досье</dt><dd>{profile.dossier_views_30d}</dd></div>}
             </dl>
             <p className="hint">В системе с {parseServerDateTime(profile.created_at).toLocaleDateString("ru-RU")}.</p>
           </section>

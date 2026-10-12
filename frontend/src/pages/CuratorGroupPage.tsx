@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
+import { MODULE } from "../constants/modules";
+import type { ModuleName } from "../constants/modules";
+import { isModuleOn } from "../utils/modules";
 import { useAuth } from "../auth/useAuth";
 import type { GroupSummary, RosterResponse } from "../api/types";
 import DayJournal from "../components/DayJournal";
@@ -20,6 +23,15 @@ import ReportPage from "./ReportPage";
 
 const TABS = ["journal", "students", "meals", "work", "passport", "plan", "report", "my-id"] as const;
 type GroupTab = (typeof TABS)[number];
+// Вкладки, которые есть только при включённом модуле (релиз 3.5.0: «Журнал» и «Студенты» — посещаемость, всегда).
+const TAB_MODULE: Partial<Record<GroupTab, ModuleName>> = {
+  meals: MODULE.MEALS,
+  work: MODULE.INDIVIDUAL_WORK,
+  passport: MODULE.PASSPORT,
+  plan: MODULE.PLAN,
+  report: MODULE.REPORTS,
+  "my-id": MODULE.MY_ID,
+};
 // Параметры вкладок (год, семестр, раздел) — свои у каждой; при смене вкладки они сбрасываются.
 const TAB_SCOPED_PARAMS = ["part", "section", "year", "semester", "date"];
 
@@ -32,7 +44,9 @@ export default function CuratorGroupPage() {
   const { user } = useAuth();
   const [params, setParams] = useSearchParams();
   const rawTab = params.get("tab");
-  const tab: GroupTab = (TABS as readonly string[]).includes(rawTab ?? "") ? (rawTab as GroupTab) : "journal";
+  const visibleTabs = TABS.filter((t) => !TAB_MODULE[t] || isModuleOn(user, TAB_MODULE[t]));
+  // Ссылка на выключенную вкладку (?tab=passport из закладки) открывает «Журнал».
+  const tab: GroupTab = (visibleTabs as readonly string[]).includes(rawTab ?? "") ? (rawTab as GroupTab) : "journal";
   const [summary, setSummary] = useState<GroupSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -110,7 +124,7 @@ export default function CuratorGroupPage() {
           { key: "plan", label: "План группы" },
           { key: "report", label: "Отчёт" },
           { key: "my-id", label: "Мой ID" },
-        ]}
+        ].filter((t) => (visibleTabs as readonly string[]).includes(t.key))}
         active={tab}
         onChange={setTab}
         label="Разделы группы"
@@ -130,7 +144,7 @@ export default function CuratorGroupPage() {
         />
       </TabPanel>
       <TabPanel idPrefix="group" tabKey="students" active={tab}>
-        <GroupStudents groupId={groupId} groupCode={summary.code} />
+        <GroupStudents groupId={groupId} groupCode={summary.code} documents={isModuleOn(user, MODULE.DOSSIER)} />
       </TabPanel>
       <TabPanel idPrefix="group" tabKey="meals" active={tab}>
         <GroupMealsPanel groupId={groupId} />
@@ -156,7 +170,7 @@ export default function CuratorGroupPage() {
 
 /** Весь список группы: поиск, посещаемость с начала семестра, группа риска; ФИО — переход в карточку
  * студента. Здесь же — «Список для печати» и «Личные карточки» в Word. */
-function GroupStudents({ groupId, groupCode }: { groupId: number; groupCode: string }) {
+function GroupStudents({ groupId, groupCode, documents }: { groupId: number; groupCode: string; documents: boolean }) {
   const [roster, setRoster] = useState<RosterResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -179,14 +193,16 @@ function GroupStudents({ groupId, groupCode }: { groupId: number; groupCode: str
           Поиск по ФИО
           <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Начните вводить фамилию" />
         </label>
-        <span className="journal__tools">
-          <button type="button" className="btn-secondary" onClick={() => setListOpen(true)}>
-            Список для печати
-          </button>
-          <button type="button" className="btn-secondary" onClick={() => setCardsOpen(true)}>
-            Личные карточки
-          </button>
-        </span>
+        {documents && (
+          <span className="journal__tools">
+            <button type="button" className="btn-secondary" onClick={() => setListOpen(true)}>
+              Список для печати
+            </button>
+            <button type="button" className="btn-secondary" onClick={() => setCardsOpen(true)}>
+              Личные карточки
+            </button>
+          </span>
+        )}
       </div>
       {error && <div className="error-text">{error}</div>}
       {!roster ? (

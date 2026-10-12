@@ -9,6 +9,9 @@ import LoginPage from "./pages/LoginPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 import CuratorCabinetPage from "./pages/CuratorCabinetPage";
 import CuratorGroupPage from "./pages/CuratorGroupPage";
+import { MODULE } from "./constants/modules";
+import type { ModuleName } from "./constants/modules";
+import { isModuleOn } from "./utils/modules";
 import { DOSSIER_STAFF_ROLES, MANAGEMENT_ROLES, MEAL_VIEW_ROLES, ROLE, TASK_MANAGER_ROLES, VIEWER_ROLES, inRoles } from "./constants/roles";
 import MyDayPage from "./pages/MyDayPage";
 import MyIdPanel from "./components/MyIdPanel";
@@ -54,6 +57,14 @@ function RequireAuthOnly({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="loading-screen">Загрузка…</div>;
   if (!user) return <Navigate to="/login" replace />;
+  return children;
+}
+
+// Раздел выключенного модуля (ENABLED_MODULES, релиз 3.5.0) не открывается и по прямой ссылке — человек попадает
+// на главную. Сама страница и её код остаются в проекте: модуль включается переменной окружения.
+function RequireModule({ name, children }: { name: ModuleName; children: ReactElement }) {
+  const { user } = useAuth();
+  if (!isModuleOn(user, name)) return <Navigate to="/" replace />;
   return children;
 }
 
@@ -164,11 +175,13 @@ export default function App() {
               path="/meals"
               element={
                 <RequireAuth>
-                  <RequireMealViewer>
-                    <Layout>
-                      <MealsPage />
-                    </Layout>
-                  </RequireMealViewer>
+                  <RequireModule name={MODULE.MEALS}>
+                    <RequireMealViewer>
+                      <Layout>
+                        <MealsPage />
+                      </Layout>
+                    </RequireMealViewer>
+                  </RequireModule>
                 </RequireAuth>
               }
             />
@@ -200,11 +213,13 @@ export default function App() {
               path="/tasks"
               element={
                 <RequireAuth>
-                  <RequireTaskManager>
-                    <Layout>
-                      <TasksPage />
-                    </Layout>
-                  </RequireTaskManager>
+                  <RequireModule name={MODULE.TASKS}>
+                    <RequireTaskManager>
+                      <Layout>
+                        <TasksPage />
+                      </Layout>
+                    </RequireTaskManager>
+                  </RequireModule>
                 </RequireAuth>
               }
             />
@@ -212,9 +227,11 @@ export default function App() {
               path="/my-tasks"
               element={
                 <RequireAuth>
-                  <Layout>
-                    <MyTasksPage />
-                  </Layout>
+                  <RequireModule name={MODULE.TASKS}>
+                    <Layout>
+                      <MyTasksPage />
+                    </Layout>
+                  </RequireModule>
                 </RequireAuth>
               }
             />
@@ -222,9 +239,11 @@ export default function App() {
               path="/tasks/assignment/:assignmentId"
               element={
                 <RequireAuth>
-                  <Layout>
-                    <TaskAssignmentPage />
-                  </Layout>
+                  <RequireModule name={MODULE.TASKS}>
+                    <Layout>
+                      <TaskAssignmentPage />
+                    </Layout>
+                  </RequireModule>
                 </RequireAuth>
               }
             />
@@ -232,9 +251,11 @@ export default function App() {
               path="/passport"
               element={
                 <RequireAuth>
-                  <Layout>
-                    <PassportPage />
-                  </Layout>
+                  <RequireModule name={MODULE.PASSPORT}>
+                    <Layout>
+                      <PassportPage />
+                    </Layout>
+                  </RequireModule>
                 </RequireAuth>
               }
             />
@@ -242,9 +263,11 @@ export default function App() {
               path="/individual-work"
               element={
                 <RequireAuth>
-                  <Layout>
-                    <IndividualWorkPage />
-                  </Layout>
+                  <RequireModule name={MODULE.INDIVIDUAL_WORK}>
+                    <Layout>
+                      <IndividualWorkPage />
+                    </Layout>
+                  </RequireModule>
                 </RequireAuth>
               }
             />
@@ -252,9 +275,11 @@ export default function App() {
               path="/plan"
               element={
                 <RequireAuth>
-                  <Layout>
-                    <PlanPage />
-                  </Layout>
+                  <RequireModule name={MODULE.PLAN}>
+                    <Layout>
+                      <PlanPage />
+                    </Layout>
+                  </RequireModule>
                 </RequireAuth>
               }
             />
@@ -262,9 +287,11 @@ export default function App() {
               path="/report"
               element={
                 <RequireAuth>
-                  <Layout>
-                    <ReportPage />
-                  </Layout>
+                  <RequireModule name={MODULE.REPORTS}>
+                    <Layout>
+                      <ReportPage />
+                    </Layout>
+                  </RequireModule>
                 </RequireAuth>
               }
             />
@@ -272,9 +299,11 @@ export default function App() {
               path="/my-id"
               element={
                 <RequireAuth>
-                  <Layout>
-                    <MyIdPanel />
-                  </Layout>
+                  <RequireModule name={MODULE.MY_ID}>
+                    <Layout>
+                      <MyIdPanel />
+                    </Layout>
+                  </RequireModule>
                 </RequireAuth>
               }
             />

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.roles import DEPARTMENT_SCOPED_ROLES, DOSSIER_STAFF_ROLES, MEAL_VIEW_ROLES, is_department_scoped
 from app.core.config import get_settings
+from app.core.modules import module_enabled
 from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models import RoleCode, StudyGroup, User
@@ -74,6 +75,16 @@ def require_roles(*roles: RoleCode):
         if RoleCode(user.role.code) not in roles:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Недостаточно прав")
         return user
+
+    return dependency
+
+
+def require_module(name: str):
+    """Зависимость для отдельных эндпоинтов внутри «всегда включённого» роутера: модуль выключен — 404, как будто
+    такого адреса нет (целые роутеры выключенных модулей просто не подключаются, см. main.MODULE_ROUTERS)."""
+    def dependency() -> None:
+        if not module_enabled(name):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Раздел отключён")
 
     return dependency
 

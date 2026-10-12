@@ -7,6 +7,7 @@ from app.core.config import get_settings
 from app.core.password_policy import validate_password_strength
 from app.core.rate_limit import check_rate_limit, client_ip, is_blocked, register_failure, reset_failures
 from app.core.security import create_access_token, decode_access_token, hash_password, verify_password
+from app.core.modules import enabled_modules
 from app.core.time import today_local
 from app.db.session import get_db
 from app.models import CuratorAssignment, RoleCode, User
@@ -155,6 +156,7 @@ def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
         groups=groups,
         dept_head_name=dept_head_name,
         must_change_password=user.must_change_password,
+        modules=sorted(enabled_modules()),
     )
 
 

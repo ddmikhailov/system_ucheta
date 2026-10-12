@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "../api/client";
 import { AuthContext } from "../auth/authContextObject";
 import type { StudentCard } from "../api/types";
+import { RELEASE_MODULES } from "../constants/modules";
 import { makeUser } from "../test/utils";
 import { todayIso } from "../utils/date";
 import StudentCardPage from "./StudentCardPage";
@@ -61,14 +62,14 @@ function Where() {
   return <div data-testid="where">{l.pathname + l.search + JSON.stringify(l.state ?? null)}</div>;
 }
 
-function open(role: string, c: StudentCard = card(), tab?: string) {
+function open(role: string, c: StudentCard = card(), tab?: string, modules?: string[]) {
   get.mockImplementation(async (path: string) => {
     if (path === "/students/10") return c;
     if (path === "/admin/groups") return GROUPS;
     throw new Error(`неожиданный запрос ${path}`);
   });
   render(
-    <AuthContext.Provider value={{ user: makeUser(role), loading: false, login: vi.fn(), logout: vi.fn(), refresh: vi.fn() }}>
+    <AuthContext.Provider value={{ user: makeUser(role, modules ? { modules } : {}), loading: false, login: vi.fn(), logout: vi.fn(), refresh: vi.fn() }}>
       <MemoryRouter initialEntries={[tab ? `/students/10?tab=${tab}` : "/students/10"]}>
         <Routes>
           <Route path="/students/:studentId" element={<StudentCardPage />} />
@@ -321,5 +322,23 @@ describe("StudentCardPage — управление", () => {
     await user.click(screen.getByRole("button", { name: "Удалить студента насовсем" }));
     expect(await screen.findByText("Нет прав")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Удалить студента насовсем" })).toBeEnabled();
+  });
+});
+
+describe("StudentCardPage — релизный набор модулей (3.5.0)", () => {
+  it("остаются обзор, посещаемость и история; досье, представители и индивидуальная работа скрыты", async () => {
+    open("admin", card(), undefined, [...RELEASE_MODULES]);
+    await screen.findByRole("heading", { name: "Алексеев Пётр Андреевич" });
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Обзор", "Посещаемость", "История", "Управление"]);
+    expect(screen.queryByText("Записи работы")).not.toBeInTheDocument();
+    expect(screen.queryByText("Вернуться к вопросу")).not.toBeInTheDocument();
+    expect(screen.queryByText(/журнал просмотров=/)).not.toBeInTheDocument();
+  });
+
+  it("ссылка на скрытую вкладку открывает обзор", async () => {
+    open("admin", card(), "dossier", [...RELEASE_MODULES]);
+    await screen.findByRole("heading", { name: "Алексеев Пётр Андреевич" });
+    expect(screen.getByRole("tab", { name: "Обзор" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByText(/раздел profile/)).not.toBeInTheDocument();
   });
 });

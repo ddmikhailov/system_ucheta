@@ -38,7 +38,7 @@ const STEPS = ["Что сделать", "Кому", "Форма ответа", "
 
 const MODE_HINTS: Record<string, string> = {
   group: "Один ответ от группы: видеовизитка, план работы.",
-  student: "Строка на каждого студента: кружки, согласия, справки. Поля можно связать с досье.",
+  student: "Строка на каждого студента: кружки, согласия, справки.",
   selected: "Куратор сам отмечает, кого задача касается, и заполняет только их.",
 };
 
@@ -444,7 +444,7 @@ export default function TaskCreateForm({ onCreated, afterTask }: { onCreated: (t
                 <label key={v} className={`choice-card${mode === v ? " is-selected" : ""}`}>
                   <input type="radio" name="mode" value={v} checked={mode === v} onChange={() => setMode(v)} />
                   <b>{l}</b>
-                  <span>{MODE_HINTS[v]}</span>
+                  <span>{MODE_HINTS[v]}{v === "student" && targets.length > 0 ? " Поля можно связать с досье." : ""}</span>
                 </label>
               ))}
             </fieldset>
