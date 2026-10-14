@@ -6,7 +6,6 @@
     python -m scripts.seed
 """
 import os
-import secrets
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -14,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.core.security import hash_password
 from app.db import base as db_base
 from app.models import Department, MarkCode, Role, RoleCode, User
+from app.services.password_service import generate_temporary_password
 
 PILOT_DEPARTMENT_NAME = "Диджитал"
 
@@ -79,7 +79,7 @@ def run() -> None:
         admin = db.query(User).filter(User.username == admin_username).one_or_none()
         if admin is None:
             provided_password = os.environ.get("ADMIN_PASSWORD")
-            admin_password = provided_password or secrets.token_urlsafe(12)
+            admin_password = provided_password or generate_temporary_password()
             admin = User(
                 username=admin_username,
                 full_name="Администратор",

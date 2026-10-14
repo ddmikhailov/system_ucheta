@@ -1763,3 +1763,25 @@ th.sortable-th:hover {
 .table-scroll {
   max-width: 100%;
 }
+
+/* Чек-лист требований к паролю (смена пароля, «Задать свой пароль»). */
+.password-rules {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.password-rules ul {
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.password-rules__ok {
+  color: var(--ok);
+}
+
+.password-rules p {
+  margin: 0;
+}

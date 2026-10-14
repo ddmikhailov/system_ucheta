@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.core.password_policy import MAX_PASSWORD_LENGTH
+
 _DayTypeLiteral = Literal["study_day", "weekend", "holiday", "vacation", "remote"]
 
 
@@ -167,7 +169,7 @@ class SetPasswordRequest(BaseModel):
     # Пусто — сгенерировать временный пароль самим, иначе — использовать
     # заданный администратором. В обоих случаях выставляется
     # must_change_password, чтобы человек задал свой пароль при входе.
-    password: str | None = Field(default=None, min_length=8)
+    password: str | None = Field(default=None, max_length=MAX_PASSWORD_LENGTH)
 
 
 class SetPasswordResponse(BaseModel):

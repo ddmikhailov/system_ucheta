@@ -216,7 +216,7 @@ describe("UserProfilePage — управление учётной записью
     expect(await screen.findByText("Gen-Pass-777")).toBeInTheDocument();
   });
 
-  it("свой пароль: короче 10 символов не отправляется, подходящий уходит в запрос", async () => {
+  it("свой пароль: не выполняющий требования не отправляется, подходящий уходит в запрос", async () => {
     const u = await manage();
     await u.click(screen.getByRole("button", { name: "Задать свой пароль" }));
     const input = screen.getByPlaceholderText("Свой пароль");
@@ -224,6 +224,12 @@ describe("UserProfilePage — управление учётной записью
     await u.type(input, "ninechars");
     await u.click(screen.getByRole("button", { name: "Задать" }));
     expect(post).not.toHaveBeenCalled();
+
+    await u.clear(input);
+    await u.type(input, "longenough12"); // длина есть, но нет заглавной и спецсимвола
+    await u.click(screen.getByRole("button", { name: "Задать" }));
+    expect(post).not.toHaveBeenCalled();
+    expect(screen.getByText("Пароль не выполняет требования под полем")).toBeInTheDocument();
 
     post.mockResolvedValue({ username: "user2", password: "LongEnough1!" });
     await u.clear(input);
@@ -238,7 +244,7 @@ describe("UserProfilePage — управление учётной записью
     const u = await manage();
     await u.click(screen.getByRole("button", { name: "Задать свой пароль" }));
     post.mockRejectedValue(new ApiError(400, "Пароль слишком простой"));
-    await u.type(screen.getByPlaceholderText("Свой пароль"), "password123");
+    await u.type(screen.getByPlaceholderText("Свой пароль"), "Password2026!"); // форма пропускает, словарь — на сервере
     await u.click(screen.getByRole("button", { name: "Задать" }));
     expect(await screen.findByText("Пароль слишком простой")).toBeInTheDocument();
   });

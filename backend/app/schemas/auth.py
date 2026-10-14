@@ -1,5 +1,7 @@
 from pydantic import BaseModel, Field
 
+from app.core.password_policy import MAX_PASSWORD_LENGTH
+
 
 class LoginRequest(BaseModel):
     username: str
@@ -34,5 +36,6 @@ class MeResponse(BaseModel):
 
 class ChangePasswordRequest(BaseModel):
     current_password: str | None = None
-    new_password: str = Field(min_length=8)
+    # Длина и сложность — в validate_password_strength (понятные сообщения вместо 422).
+    new_password: str = Field(max_length=MAX_PASSWORD_LENGTH)
 

@@ -255,7 +255,7 @@ def test_access_follows_student_access(client, curator_group, curator_headers, d
     s = _first_student(db, curator_group)
     d = _study_days(db, curator_group, today)
     _mark(client, curator_headers, curator_group, s, "н", d[-1])
-    other = _login(client, db_second_curator.username, "SecondCurator123!")
+    other = _login(client, db_second_curator.username, "SecondCura#58x!")
     assert _get(client, other, s.id, d[-2], d[-1]).status_code == 403
     assert _get(client, admin_headers, s.id, d[-2], d[-1]).status_code == 200
     assert _get(client, admin_headers, 999999, d[-2], d[-1]).status_code == 404

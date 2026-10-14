@@ -33,20 +33,20 @@ def test_guessing_passwords_does_not_lock_the_account_owner(client, admin_header
         assert _login(client, "wrong", ip="203.0.113.7").status_code == 401
 
     # Злоумышленник с того же адреса: даже верный пароль уже не принимается.
-    assert _login(client, "AdminTest123!", ip="203.0.113.7").status_code == 429
+    assert _login(client, "GlavTest#58x!", ip="203.0.113.7").status_code == 429
     # Владелец с другого адреса входит как обычно.
-    assert _login(client, "AdminTest123!", ip="198.51.100.9").status_code == 200
+    assert _login(client, "GlavTest#58x!", ip="198.51.100.9").status_code == 200
 
 
 def test_ordinary_account_has_the_looser_limit(client, admin_headers, imported, db):
     from app.models import User
 
     target = db.query(User).filter(User.role.has(code="curator")).first()
-    client.post(f"/admin/users/{target.id}/set-password", headers=admin_headers, json={"password": "TempPassword1"})
+    client.post(f"/admin/users/{target.id}/set-password", headers=admin_headers, json={"password": "Lemur#58xQz"})
     for _ in range(settings.max_failed_login_attempts):
         assert _login(client, "wrong", username=target.username, ip="203.0.113.7").status_code == 401
-    assert _login(client, "TempPassword1", username=target.username, ip="203.0.113.7").status_code == 429
-    assert _login(client, "TempPassword1", username=target.username, ip="198.51.100.9").status_code == 200
+    assert _login(client, "Lemur#58xQz", username=target.username, ip="203.0.113.7").status_code == 429
+    assert _login(client, "Lemur#58xQz", username=target.username, ip="198.51.100.9").status_code == 200
 
 
 def test_privileged_account_is_guarded_stricter_and_attempt_is_audited(client, admin_headers, db):
@@ -56,11 +56,11 @@ def test_privileged_account_is_guarded_stricter_and_attempt_is_audited(client, a
     assert n < settings.max_failed_login_attempts
     for _ in range(n):
         assert _login(client, "wrong", ip="203.0.113.7").status_code == 401
-    assert _login(client, "AdminTest123!", ip="203.0.113.7").status_code == 429
+    assert _login(client, "GlavTest#58x!", ip="203.0.113.7").status_code == 429
     entry = db.query(AuditLog).filter(AuditLog.action == "auth.bruteforce_blocked").one()
     assert entry.new_value == "203.0.113.7"
     # владелец с другого адреса не заблокирован
-    assert _login(client, "AdminTest123!", ip="198.51.100.9").status_code == 200
+    assert _login(client, "GlavTest#58x!", ip="198.51.100.9").status_code == 200
 
 
 def test_failures_are_counted_per_ip_and_login(client, admin_headers, monkeypatch):
@@ -74,10 +74,10 @@ def test_failures_are_counted_per_ip_and_login(client, admin_headers, monkeypatc
 def test_successful_login_resets_failure_counter(client, admin_headers):
     for _ in range(PRIV - 1):
         assert _login(client, "wrong").status_code == 401
-    assert _login(client, "AdminTest123!").status_code == 200
+    assert _login(client, "GlavTest#58x!").status_code == 200
     for _ in range(PRIV - 1):
         assert _login(client, "wrong").status_code == 401
-    assert _login(client, "AdminTest123!").status_code == 200
+    assert _login(client, "GlavTest#58x!").status_code == 200
 
 
 def test_unknown_and_existing_login_give_identical_errors(client, admin_headers):

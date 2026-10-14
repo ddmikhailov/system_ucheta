@@ -90,7 +90,7 @@ def test_no_yesterdays_draft_on_future_days(db, curator_group, curator_user, tod
 def test_only_people_with_access_to_the_group_can_plan(client, db_second_curator, curator_group, future_day):
     from tests.conftest import _login
 
-    headers = _login(client, db_second_curator.username, "SecondCurator123!")
+    headers = _login(client, db_second_curator.username, "SecondCura#58x!")
     r = client.post(f"/curator/groups/{curator_group.id}/day/plan?date={future_day}", headers=headers, json={"exceptions": []})
     assert r.status_code == 403
 

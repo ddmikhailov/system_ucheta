@@ -60,9 +60,9 @@ def test_display_title_shows_in_me_response(client, admin_headers, db):
         },
     )
     uid = r.json()["id"]
-    client.post(f"/admin/users/{uid}/set-password", headers=admin_headers, json={"password": "AdvisorPass1"})
+    client.post(f"/admin/users/{uid}/set-password", headers=admin_headers, json={"password": "Fjord#58xQz"})
 
-    r = client.post("/auth/login", json={"username": "advisor2", "password": "AdvisorPass1"})
+    r = client.post("/auth/login", json={"username": "advisor2", "password": "Fjord#58xQz"})
     token = r.json()["access_token"]
 
     r = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})

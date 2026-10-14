@@ -245,7 +245,7 @@ def test_curator_sees_only_own_group(client, curator_headers, db_second_curator,
 
 def test_other_curator_group_is_not_visible(client, curator_group, db_second_curator, imported):
     from tests.conftest import _login
-    headers = _login(client, db_second_curator.username, "SecondCurator123!")
+    headers = _login(client, db_second_curator.username, "SecondCura#58x!")
     ids = [g["id"] for g in client.get("/my-day", headers=headers).json()["groups"]]
     assert curator_group.id not in ids
 
@@ -319,7 +319,7 @@ def test_absence_message_window_is_clamped_and_old_marks_dropped(client, curator
 def test_absence_message_follows_student_access(client, curator_group, db_second_curator, curator_headers, imported, db, admin_headers):
     from tests.conftest import _login
     s = _students(db, curator_group)[0]
-    other = _login(client, db_second_curator.username, "SecondCurator123!")
+    other = _login(client, db_second_curator.username, "SecondCura#58x!")
     assert client.get(f"/students/{s.id}/absence-message", headers=other).status_code == 403
     assert client.get(f"/students/{s.id}/absence-message", headers=admin_headers).status_code == 200
     assert client.get("/students/999999/absence-message", headers=admin_headers).status_code == 404
@@ -405,7 +405,7 @@ def test_group_rhythm_endpoint_matches_my_day_and_respects_access(
     assert [d["kind"] for d in r.json()] == [d.kind for d in built]
 
     # Чужой куратор журнал этой группы не видит — и ритм тоже.
-    other = _login(client, db_second_curator.username, "SecondCurator123!")
+    other = _login(client, db_second_curator.username, "SecondCura#58x!")
     assert client.get(f"/curator/groups/{curator_group.id}/rhythm", headers=other).status_code in (403, 404)
     assert client.get(f"/curator/groups/{curator_group.id}/rhythm").status_code == 401
 
