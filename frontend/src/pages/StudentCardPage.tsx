@@ -18,6 +18,8 @@ import type { DeleteResult, StudentCard, StudyGroupAdmin } from "../api/types";
 import { formatDateRu, todayIso } from "../utils/date";
 import SearchSelect from "../components/SearchSelect";
 import { dialogs } from "../utils/feedback";
+import { MODULE } from "../constants/modules";
+import { isModuleOn } from "../utils/modules";
 
 const STUDENT_TABS = ["overview", "dossier", "guardians", "work", "attendance", "history", "manage"] as const;
 
@@ -38,7 +40,9 @@ export default function StudentCardPage() {
   const [notice, setNotice] = useState<string | null>(null);
   useScrollToTopOnChange(error, notice);
   const [tab, setTab] = useTabParam(STUDENT_TABS, "overview");
-  const dossierState = useDossier(Number(studentId));
+  const dossierOn = isModuleOn(user, MODULE.DOSSIER);
+  const workOn = dossierOn && isModuleOn(user, MODULE.INDIVIDUAL_WORK);
+  const dossierState = useDossier(Number(studentId), dossierOn);
 
   const load = useCallback(() => {
     api
@@ -90,13 +94,19 @@ export default function StudentCardPage() {
   const openFollowUps = dossier?.notes.filter((n) => n.follow_up_on && !n.follow_up_done).length ?? 0;
   const tabs: TabItem[] = [
     { key: "overview", label: "Обзор" },
-    { key: "dossier", label: "Досье" },
-    { key: "guardians", label: "Представители", badge: dossier?.guardians.length || undefined },
-    { key: "work", label: "Индивидуальная работа", badge: dossier?.notes.length || undefined },
+    ...(dossierOn
+      ? [
+          { key: "dossier", label: "Досье" },
+          { key: "guardians", label: "Представители", badge: dossier?.guardians.length || undefined },
+        ]
+      : []),
+    ...(workOn ? [{ key: "work", label: "Индивидуальная работа", badge: dossier?.notes.length || undefined }] : []),
     { key: "attendance", label: "Посещаемость" },
     { key: "history", label: "История" },
     ...(canManage ? [{ key: "manage", label: "Управление" }] : []),
   ];
+  // Ссылка на скрытую вкладку (?tab=dossier из закладки) открывает «Обзор».
+  const activeTab = tabs.some((t) => t.key === tab) ? tab : "overview";
   const percentTone = stats.in_list === 0 ? undefined : stats.percent >= 85 ? "ok" : stats.percent >= 70 ? "warn" : "hot";
 
   return (
@@ -121,13 +131,13 @@ export default function StudentCardPage() {
         <Kpi label="Посещаемость, 30 дней" value={stats.in_list === 0 ? "—" : `${stats.percent}%`} tone={percentTone} />
         <Kpi label="Пропуски без причины" value={String(stats.absent_unexcused)} tone={stats.absent_unexcused > 0 ? "hot" : undefined} />
         <Kpi label="Опоздания" value={String(stats.late)} />
-        <Kpi label="Записи работы" value={dossier ? String(dossier.notes.length) : "…"} />
-        <Kpi label="Вернуться к вопросу" value={dossier ? String(openFollowUps) : "…"} tone={openFollowUps > 0 ? "warn" : undefined} />
+        {workOn && <Kpi label="Записи работы" value={dossier ? String(dossier.notes.length) : "…"} />}
+        {workOn && <Kpi label="Вернуться к вопросу" value={dossier ? String(openFollowUps) : "…"} tone={openFollowUps > 0 ? "warn" : undefined} />}
       </ProfileHero>
 
-      <TabBar tabs={tabs} active={tab} onChange={setTab} label="Разделы карточки студента" idPrefix="student" />
+      <TabBar tabs={tabs} active={activeTab} onChange={setTab} label="Разделы карточки студента" idPrefix="student" />
 
-      <TabPanel idPrefix="student" tabKey="overview" active={tab}>
+      <TabPanel idPrefix="student" tabKey="overview" active={activeTab}>
         <dl className="student-card__grid">
           <Item label="Группа" value={`${card.group.code} · ${card.group.course} курс`} />
           <Item label="Форма обучения" value={card.group.study_form ?? "—"} />
@@ -144,19 +154,25 @@ export default function StudentCardPage() {
         </div>
       </TabPanel>
 
-      <TabPanel idPrefix="student" tabKey="dossier" active={tab}>
-        <DossierSection state={dossierState} section="profile" studentId={card.id} isAdmin={isAdminViewer} />
-      </TabPanel>
+      {dossierOn && (
+        <TabPanel idPrefix="student" tabKey="dossier" active={activeTab}>
+          <DossierSection state={dossierState} section="profile" studentId={card.id} isAdmin={isAdminViewer} />
+        </TabPanel>
+      )}
 
-      <TabPanel idPrefix="student" tabKey="guardians" active={tab}>
-        <DossierSection state={dossierState} section="guardians" studentId={card.id} isAdmin={isAdminViewer} />
-      </TabPanel>
+      {dossierOn && (
+        <TabPanel idPrefix="student" tabKey="guardians" active={activeTab}>
+          <DossierSection state={dossierState} section="guardians" studentId={card.id} isAdmin={isAdminViewer} />
+        </TabPanel>
+      )}
 
-      <TabPanel idPrefix="student" tabKey="work" active={tab}>
-        <DossierSection state={dossierState} section="notes" studentId={card.id} isAdmin={isAdminViewer} />
-      </TabPanel>
+      {workOn && (
+        <TabPanel idPrefix="student" tabKey="work" active={activeTab}>
+          <DossierSection state={dossierState} section="notes" studentId={card.id} isAdmin={isAdminViewer} />
+        </TabPanel>
+      )}
 
-      <TabPanel idPrefix="student" tabKey="attendance" active={tab}>
+      <TabPanel idPrefix="student" tabKey="attendance" active={activeTab}>
         <h3 className="student-card__section">
           Посещаемость за 30 дней ({formatDateRu(stats.date_from)} — {formatDateRu(stats.date_to)})
         </h3>
@@ -217,7 +233,7 @@ export default function StudentCardPage() {
         )}
       </TabPanel>
 
-      <TabPanel idPrefix="student" tabKey="history" active={tab}>
+      <TabPanel idPrefix="student" tabKey="history" active={activeTab}>
         <h3 className="student-card__section">История групп</h3>
         <table className="dash-table">
           <thead>
@@ -237,11 +253,11 @@ export default function StudentCardPage() {
             ))}
           </tbody>
         </table>
-        <DossierSection state={dossierState} section="log" studentId={card.id} isAdmin={isAdminViewer} />
+        {dossierOn && <DossierSection state={dossierState} section="log" studentId={card.id} isAdmin={isAdminViewer} />}
       </TabPanel>
 
       {canManage && (
-        <TabPanel idPrefix="student" tabKey="manage" active={tab}>
+        <TabPanel idPrefix="student" tabKey="manage" active={activeTab}>
           <ManageSection
             // Форма заполняется из карточки один раз при создании; после
             // сохранения данные меняются — key пересоздаёт форму с ними.

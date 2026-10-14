@@ -121,3 +121,21 @@ def test_min_password_length_matches_the_frontend():
 
     text = (ROLES_TS.parent / "password.ts").read_text(encoding="utf-8")
     assert int(re.search(r"MIN_PASSWORD_LENGTH = (\d+)", text).group(1)) == MIN_PASSWORD_LENGTH
+
+
+MODULES_TS = Path(__file__).resolve().parents[2] / "frontend" / "src" / "constants" / "modules.ts"
+
+
+def test_frontend_module_names_match_backend():
+    """Имена модулей и релизный набор во frontend/src/constants/modules.ts — те же, что в app/core/modules.py
+    (по ним интерфейс прячет разделы из ответа /auth/me)."""
+    from app.core import modules
+
+    text = MODULES_TS.read_text(encoding="utf-8")
+    block = text.split("export const MODULE = {")[1].split("} as const;")[0]
+    frontend_names = set(re.findall(r':\s*"(\w+)"', block))
+    assert frontend_names == set(modules.ALL_MODULES)
+
+    release = text.split("export const RELEASE_MODULES")[1].split("];")[0]
+    release_names = {re.search(r':\s*"(\w+)"', block.split(key)[1]).group(1) for key in re.findall(r"MODULE\.(\w+)", release)}
+    assert release_names == set(modules.RELEASE_MODULES)

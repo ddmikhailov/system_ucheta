@@ -94,3 +94,35 @@ def test_missing_file_like_path_is_404_not_the_page(client, path):
 
 def test_extensionless_spa_routes_still_return_the_page(client):
     assert "<title>КАИТ-20</title>" in client.get("/some/client/route").text
+
+
+def test_hidden_module_api_answers_404_not_the_index_page(tmp_path):
+    """Релиз 3.5.0: адрес API выключенного модуля при запросе данных (не при открытии страницы в браузере) — честный 404,
+    а не «200 с главной страницей» из SPA-фоллбэка."""
+    import re
+
+    static = tmp_path / "static"
+    static.mkdir()
+    (static / "index.html").write_text("<!doctype html><title>КАИТ-20</title>", encoding="utf-8")
+    app = FastAPI()
+    register_spa(app, static, hidden_api=(re.compile(r"^/passport/summary$"), re.compile(r"^/students/(?P<student_id>[^/]+)/dossier$")))
+    client = TestClient(app)
+
+    assert client.get("/passport/summary", headers=FETCH).status_code == 404
+    assert client.get("/students/7/dossier", headers=FETCH).status_code == 404
+    assert client.get("/passport/summary").status_code == 404  # curl: ни Accept: text/html, ни Sec-Fetch-Dest
+    # человек открыл адрес в браузере — страница интерфейса (React сам уведёт на главную)
+    assert "<title>КАИТ-20</title>" in client.get("/passport/summary", headers=PAGE).text
+    # обычные страницы интерфейса не задеты
+    assert "<title>КАИТ-20</title>" in client.get("/students/7", headers=FETCH).text
+
+
+def test_hidden_api_patterns_follow_enabled_modules():
+    from app.core.modules import parse_modules
+    from app.main import hidden_api_patterns
+
+    release = hidden_api_patterns(parse_modules(""))
+    assert any(p.match("/passport/summary") for p in release)
+    assert any(p.match("/students/7/dossier") for p in release)
+    assert not any(p.match("/students/7") or p.match("/meals/overview") or p.match("/tasks/my") for p in release)
+    assert hidden_api_patterns(parse_modules("all")) == ()

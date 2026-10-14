@@ -2,6 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api/client";
+import { RELEASE_MODULES } from "../constants/modules";
 import { renderPage } from "../test/utils";
 import Layout from "./Layout";
 
@@ -176,5 +177,33 @@ describe("Layout — заголовок страницы", () => {
     expect(pageTitle("/students/12")).toBe("Карточка студента");
     expect(pageTitle("/passport")).toBe("Социальный паспорт");
     expect(pageTitle("/что-то-другое")).toBe("Цифровой куратор");
+  });
+});
+
+describe("Layout — релизный набор модулей (3.5.0)", () => {
+  function releaseMenu(role: string, groups: { id: number; code: string; course: number }[] = []) {
+    renderPage(<Layout><div>содержимое</div></Layout>, { role, user: { groups, modules: [...RELEASE_MODULES] } });
+    const nav = screen.getByRole("navigation", { name: "Разделы" });
+    return within(nav).queryAllByRole("link").map((a) => a.querySelector(".nav-link__label")?.textContent);
+  }
+
+  it.each([
+    ["curator", ["Мой день", "Мои группы", "Мои задачи"]],
+    ["admin", ["Задачи", "Витрины", "Студенты", "Мой ID", "Питание", "Админка"]],
+    ["edu_department", ["Задачи", "Витрины", "Студенты", "Мой ID", "Питание", "Админка"]],
+    ["dept_head", ["Задачи", "Витрины", "Студенты", "Мой ID", "Питание", "Админка"]],
+    ["tutor", ["Задачи", "Витрины", "Студенты", "Мой ID", "Питание", "Админка"]],
+    ["social_pedagogue", ["Витрины", "Студенты", "Мой ID"]],
+    ["psychologist", ["Витрины", "Студенты", "Мой ID"]],
+    ["meal_manager", ["Питание"]],
+  ])("роль %s не видит скрытые разделы", (role, expected) => {
+    expect(releaseMenu(role)).toEqual(expected);
+  });
+
+  it("без задач и питания пропадают и их пункты", () => {
+    renderPage(<Layout><div>содержимое</div></Layout>, { role: "admin", user: { modules: ["attendance", "my_id"] } });
+    const nav = screen.getByRole("navigation", { name: "Разделы" });
+    const labels = within(nav).queryAllByRole("link").map((a) => a.querySelector(".nav-link__label")?.textContent);
+    expect(labels).toEqual(["Витрины", "Студенты", "Мой ID", "Админка"]);
   });
 });

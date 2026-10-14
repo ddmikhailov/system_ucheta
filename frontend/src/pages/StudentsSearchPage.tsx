@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import DossierImport from "../components/DossierImport";
+import { useAuth } from "../auth/useAuth";
+import { MODULE } from "../constants/modules";
+import { isModuleOn } from "../utils/modules";
 import { STUDENT_STATUS_LABELS } from "../constants/studentStatus";
 import type { StudyGroupAdmin } from "../api/types";
 import SearchSelect from "../components/SearchSelect";
@@ -16,6 +19,7 @@ interface StudentRow {
 // Поиск студента по ФИО/группе — вход в карточку и досье для соц. педагога,
 // психолога и администрации. Фильтр группы живёт в адресной строке.
 export default function StudentsSearchPage() {
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const groupId = searchParams.get("group") ?? "";
   const [query, setQuery] = useState("");
@@ -57,7 +61,7 @@ export default function StudentsSearchPage() {
 
   return (
     <div>
-      <DossierImport />
+      {isModuleOn(user, MODULE.DOSSIER) && <DossierImport />}
       <div className="toolbar">
         <input
           type="search"

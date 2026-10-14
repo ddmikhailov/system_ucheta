@@ -12,6 +12,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.core.modules import module_enabled
 from app.models import Student, StudentNote, StudentProfile, TaskAssignment, User
 from app.schemas.dossier import ProfileFields
 from app.services.audit_service import log_action
@@ -32,6 +33,8 @@ FUNDING_BY_CODE = {code: label for label, code in FUNDING_LABELS.items()}
 
 
 def targets_list() -> list[dict]:
+    if not module_enabled("dossier"):
+        return []  # модуль «Досье» выключен (релиз 3.5.0): привязывать не к чему
     return [{"key": k, "label": label, "types": list(types)} for k, (label, types) in TARGETS.items()]
 
 
@@ -40,6 +43,8 @@ def validate_links(fields: list[dict], collect_mode: str) -> str | None:
     linked = [f for f in fields if f.get("dossier_field")]
     if not linked:
         return None
+    if not module_enabled("dossier"):
+        return "Привязка к досье недоступна: раздел «Досье» отключён"
     if collect_mode == "group":
         return "Связать поле с досье можно только в задачах по студентам (ответ по группе не относится к студенту)"
     seen: set[str] = set()
@@ -108,7 +113,7 @@ def linked_fields(fields: list[dict]) -> list[dict]:
 def prefill(db: Session, fields: list[dict], student_ids: list[int]) -> dict[int, dict[str, Any]]:
     """{student_id: {ключ поля формы: значение из досье}} — только непустые."""
     linked = linked_fields(fields)
-    if not linked or not student_ids:
+    if not linked or not student_ids or not module_enabled("dossier"):
         return {}
     profiles = {p.student_id: p for p in db.query(StudentProfile).filter(StudentProfile.student_id.in_(student_ids))}
     result: dict[int, dict[str, Any]] = {}
@@ -126,8 +131,8 @@ def prefill(db: Session, fields: list[dict], student_ids: list[int]) -> dict[int
 def apply_accepted(db: Session, actor: User, assignment: TaskAssignment, fields: list[dict]) -> int:
     """Записывает принятые ответы в досье. Возвращает число обновлённых студентов (без commit)."""
     linked = linked_fields(fields)
-    if not linked:
-        return 0
+    if not linked or not module_enabled("dossier"):
+        return 0  # старая задача с привязкой в релизе принимается как обычная: в досье не пишем
     task = assignment.task
     rows = [r for r in assignment.rows if r.is_included]
     if not rows:

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/useAuth";
+import { MODULE } from "../constants/modules";
+import { isModuleOn } from "../utils/modules";
 import AbsencePeriodModal from "./AbsencePeriodModal";
 import DayActionsBar from "./DayActionsBar";
 import MarkCodeButtons from "./MarkCodeButtons";
@@ -386,7 +388,7 @@ export default function DayJournal({
               }}
             />
           )}
-          {showGroupTools && (
+          {showGroupTools && isModuleOn(user, MODULE.DOSSIER) && (
             <span className="journal__tools">
               <button type="button" className="btn-secondary" onClick={() => setListOpen(true)} title="Список группы для печати (Word): выберите столбцы">
                 Список для печати

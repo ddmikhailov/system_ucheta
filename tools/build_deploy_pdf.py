@@ -42,10 +42,16 @@ TOO_LONG: list[str] = []
 MAX_CODE_COLS = 104  # столько знаков моноширинного шрифта 7,2 pt помещается в рамку
 
 
+# Если DejaVu нет (например, сборка на Windows) — Arial и Consolas из системной папки: тоже с кириллицей.
+FALLBACK_FONTS = {"DejaVuSans.ttf": "arial.ttf", "DejaVuSans-Bold.ttf": "arialbd.ttf", "DejaVuSansMono.ttf": "consola.ttf"}
+
+
 def register_fonts() -> None:
     names = {"DejaVuSans": "DejaVuSans.ttf", "DejaVuSans-Bold": "DejaVuSans-Bold.ttf", "DejaVuMono": "DejaVuSansMono.ttf"}
     for font, file in names.items():
         path = next((d / file for d in FONT_DIRS if (d / file).is_file()), None)
+        if path is None:
+            path = next((d / FALLBACK_FONTS[file] for d in FONT_DIRS if (d / FALLBACK_FONTS[file]).is_file()), None)
         if path is None:
             raise SystemExit(f"Не найден шрифт {file} (нужен DejaVu с кириллицей).")
         pdfmetrics.registerFont(TTFont(font, str(path)))
@@ -199,6 +205,10 @@ JWT_SECRET=<сгенерировать>
 # Ключ шифрования особых полей досье (здоровье, соц. статус, учёт). Хранить ОТДЕЛЬНО от БД и не менять!
 DOSSIER_ENCRYPTION_KEY=<сгенерировать или взять действующий — см. п. 3.3>
 
+# Разделы платформы. Не задавать — действует релизный набор (посещаемость, задачи, Мой ID, питание).
+# Вернуть скрытые разделы (досье, соц. паспорт и др.): ENABLED_MODULES=all и перезапуск службы
+# ENABLED_MODULES=attendance,tasks,my_id,meals
+
 # Логин и ВРЕМЕННЫЙ пароль первого администратора; при первом входе платформа потребует сменить пароль
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=<временный пароль>
@@ -227,7 +237,7 @@ def admin_guide(version: str) -> list:
     f += cover(
         "Инструкция по развёртыванию на рабочем сервере", "для системного администратора организации", version,
         [["Целевая среда", "MySQL 8.1.0 · Python 3.12 · Apache 2.4 (обратный прокси) · без Docker и без дополнительных сервисов"],
-         ["Версии ПО на сервере", "Не обновляются: Python 3.12 и MySQL 8.1.0 остаются как есть"],
+         ["Версии ПО на сервере", "Не обновляются: Python 3.12 и MySQL 8.1.0 остаются как есть (платформа работает и на Python 3.13/3.14)"],
          ["Что получает администратор", "Архив kait20-" + version + ".zip (+ файл .sha256) и этот документ"]],
     )
 
@@ -270,7 +280,7 @@ def admin_guide(version: str) -> list:
     f.append(P("2. Что нужно на сервере", "h1"))
     f.append(table([
         ["Компонент", "Требование", "Комментарий"],
-        ["Python", "<b>3.12.x</b> (уже установлен, не обновлять)", "Приложение не запустится на другой версии — это проверка на старте. Нужен модуль venv "
+        ["Python", "<b>3.12.x</b> (уже установлен, не обновлять); допустимы также 3.13 и 3.14", "Приложение не запустится на версии вне диапазона 3.12–3.14 — это проверка на старте. Нужен модуль venv "
          "(в Debian/Ubuntu — пакет python3.12-venv, если его нет)."],
         ["MySQL", "<b>8.1.0</b> (уже установлен, не обновлять), кодировка utf8mb4", "Используются только стандартные возможности MySQL 8.0+. "
          "max_connections — не меньше 60 (пул приложения до 30 соединений + запас для резервного копирования и обслуживания)."],
@@ -293,14 +303,15 @@ def admin_guide(version: str) -> list:
     f.append(table([
         ["Что", "Откуда", "Куда"],
         ["Архив kait20-" + version + ".zip и kait20-" + version + ".zip.sha256", "готовит разработчик: python tools/build_release.py", "на сервер, в /tmp"],
-        ["Этот документ", "—", "администратору"],
-        ["Файлы vhost, службы и резервного копирования (приложения A–C)", "docs/deploy в репозитории или текст из приложений", "см. раздел 4"],
+        ["Этот документ (PDF)", "также лежит в архиве, папка deploy/", "администратору"],
+        ["Конфигурации Apache, службы и резервного копирования — Linux и Windows", "папка deploy/ внутри архива (тексты — в приложениях A–F)", "см. разделы 4 и 10"],
         ["Файлы с данными для загрузки (реестр контингента, список кураторов)", "передаются отдельно, НЕ через git и НЕ в составе архива", "/var/lib/kait20/import"],
     ], [7.0, 6.0, 4.0]))
     f.append(Spacer(1, 4))
-    f.append(P("Внутри архива две папки: <b>backend</b> (приложение: код, готовый интерфейс в backend/static, миграции БД, скрипты загрузки данных, "
-               "список зависимостей requirements.txt, шаблон настроек .env.example) и <b>frontend</b> (исходники интерфейса — на сервере не нужны, "
-               "их можно не распаковывать). Тестов, файлов с реальными данными и секретов в архиве нет."))
+    f.append(P("Внутри архива три папки: <b>backend</b> (приложение: код, готовый интерфейс в backend/static, миграции БД, скрипты загрузки данных, "
+               "список зависимостей requirements.txt, шаблон настроек .env.example), <b>deploy</b> (конфигурации Apache, службы и резервного копирования, "
+               "эта инструкция, README.txt) и <b>frontend</b> (исходники интерфейса — на сервере не нужны). "
+               "Тестов, файлов с реальными данными и секретов в архиве нет."))
     f.append(P("3.2. Что НЕ переносится", "h2"))
     f += bullets([
         "Файл .env разработки и любые пароли тестового окружения. Для рабочего сервера создаются <b>новые</b> секреты.",
@@ -333,7 +344,7 @@ def admin_guide(version: str) -> list:
                "Здесь и далее <font name='DejaVuMono'>kurator.example.ru</font> — замените на реальный домен платформы."))
     f.append(P("4.1. Проверка версий (ничего не обновляя)", "h2"))
     f.append(code("""
-python3.12 --version          # должно быть Python 3.12.x
+python3.12 --version          # должно быть Python 3.12.x (или 3.13 / 3.14)
 mysql --version               # должно быть 8.1.0
 apache2ctl -v                 # 2.4.x   (RHEL: httpd -v)
 apache2ctl -M | grep -E 'proxy|headers|ssl'   # нужны: proxy, proxy_http, headers, ssl
@@ -353,8 +364,11 @@ sudo chmod 700 /var/lib/kait20/import /var/backups/kait20
     f.append(code("""
 cd /tmp
 sha256sum -c kait20-""" + version + """.zip.sha256              # должно быть: OK
-sudo -u kait20 unzip -q kait20-""" + version + """.zip 'backend/*' -d /opt/kait20
+unzip -q kait20-""" + version + """.zip -d /tmp/kait20-release     # backend/, deploy/, frontend/
+sudo cp -a /tmp/kait20-release/backend /opt/kait20/backend
+sudo chown -R kait20:kait20 /opt/kait20/backend
 ls /opt/kait20/backend         # app, alembic, scripts, static, requirements.txt, .env.example
+ls /tmp/kait20-release/deploy  # конфигурации и инструкция — понадобятся в п. 4.8, 4.9 и 5.2
 """))
     f.append(P("4.5. Виртуальное окружение и зависимости", "h2"))
     f.append(code("""
@@ -375,6 +389,12 @@ $PY -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().deco
 """))
     f.append(P("Содержимое .env для рабочего сервера:"))
     f.append(code(ENV_SERVER))
+    f.append(callout("<b>Разделы платформы (версия 3.5.0).</b> В релизном наборе работают посещаемость, задачи, «Мой ID» и питание; соц. паспорт, "
+                     "досье студента, индивидуальная работа, план группы, родительские собрания, отчёт куратора и связанные выгрузки скрыты для всех "
+                     "ролей (и в интерфейсе, и в API). Переменную ENABLED_MODULES задавать не нужно. Вернуть скрытое: ENABLED_MODULES=all (или список "
+                     "имён: attendance, tasks, my_id, meals, dossier, passport, individual_work, plan, meetings, reports) и sudo systemctl restart kait20. "
+                     "Опечатка в имени остановит запуск с понятным сообщением. Данные скрытых разделов остаются в базе; "
+                     "<b>DOSSIER_ENCRYPTION_KEY всё равно задать и сохранить</b> — он понадобится при возврате раздела «Досье».", "ok"))
     f.append(P("4.7. Пробный запуск вручную", "h2"))
     f.append(code("""
 cd /opt/kait20/backend
@@ -384,10 +404,11 @@ sudo -u kait20 env HOST=127.0.0.1 .venv/bin/python -m scripts.entrypoint
 # Остановить: Ctrl+C
 """))
     f.append(P("Скрипт запуска сам дожидается базы, применяет миграции, создаёт справочники и администратора и запускает приложение. "
-               "Если JWT_SECRET слабый или версия Python не 3.12, он остановится с понятным сообщением."))
+               "Если JWT_SECRET слабый или версия Python вне диапазона 3.12–3.14, он остановится с понятным сообщением."))
     f.append(P("4.8. Служба systemd", "h2"))
-    f.append(P("Файл — в приложении B (docs/deploy/kait20.service). Установка:"))
+    f.append(P("Файл — deploy/kait20.service из архива (текст — приложение B). Установка:"))
     f.append(code("""
+cd /tmp/kait20-release/deploy
 sudo cp kait20.service /etc/systemd/system/kait20.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now kait20
@@ -395,8 +416,9 @@ sudo systemctl status kait20            # active (running)
 journalctl -u kait20 -n 50 --no-pager   # журнал запуска
 """))
     f.append(P("4.9. Apache", "h2"))
-    f.append(P("Файл — в приложении A (docs/deploy/kait20-apache.conf): впишите домен и пути к сертификату.", "p"))
+    f.append(P("Файл — deploy/kait20-apache.conf из архива (текст — приложение A): впишите домен и пути к сертификату.", "p"))
     f.append(code("""
+cd /tmp/kait20-release/deploy
 sudo cp kait20-apache.conf /etc/apache2/sites-available/kait20.conf
 #   (RHEL-семейство: /etc/httpd/conf.d/kait20.conf)
 sudo a2enmod proxy proxy_http headers ssl
@@ -417,6 +439,9 @@ sudo systemctl reload apache2
         ["8", "Админка → Пользователи → профиль → «Выдать пароль»", "Временный пароль показывается"],
         ["9", "Остановить приложение (systemctl stop kait20) и открыть сайт", "Apache отвечает 503/502; после запуска всё работает без других действий"],
         ["10", "Перезагрузить сервер", "kait20, MySQL и Apache поднимаются сами; сайт открывается"],
+        ["11", "Войти администратором и посмотреть меню слева", "Есть «Задачи», «Витрины», «Студенты», «Мой ID», «Питание», «Админка»; нет «Соц. паспорт», «Индивидуальная работа», «План группы», «Отчёт куратора»"],
+        ["12", "Открыть /passport, /plan, /report", "Происходит возврат на главную страницу (разделы скрыты)"],
+        ["13", "curl -i http://127.0.0.1:8000/passport/summary", "HTTP 404 (раздел скрыт и в API)"],
     ], [0.9, 8.1, 8.0]))
     f.append(P("4.11. Первый вход", "h2"))
     f.append(P("Логин — значение ADMIN_USERNAME, пароль — ADMIN_PASSWORD из .env. Пароль <b>временный</b>: при первом входе платформа требует задать новый. "
@@ -435,10 +460,11 @@ sudo systemctl reload apache2
         ["Проверка доступности (для мониторинга)", "GET https://&lt;домен&gt;/health → 200"],
     ], [7.0, 10.0]))
     f.append(P("5.2. Резервное копирование", "h2"))
-    f.append(P("Скрипт — приложение C (docs/deploy/kait20-backup.sh). Делает сжатый дамп БД, проверяет, что архив читается и содержит таблицы, "
+    f.append(P("Скрипт — deploy/kait20-backup.sh из архива (текст — приложение C). Делает сжатый дамп БД, проверяет, что архив читается и содержит таблицы, "
                "хранит 30 дней. Настройка:"))
     f.append(code("""
-sudo cp kait20-backup.sh /opt/kait20/kait20-backup.sh && sudo chmod 755 /opt/kait20/kait20-backup.sh
+sudo cp /tmp/kait20-release/deploy/kait20-backup.sh /opt/kait20/
+sudo chmod 755 /opt/kait20/kait20-backup.sh
 # учётные данные для mysqldump (чтобы пароль не светился в списке процессов):
 sudo -u kait20 sh -c 'printf "[client]\\nuser=kait20\\npassword=<пароль БД>\\n" > ~/.my.cnf'
 sudo -u kait20 chmod 600 ~kait20/.my.cnf
@@ -464,7 +490,7 @@ sudo cp -a /opt/kait20/backend /opt/kait20/backend.prev
 # 2. остановить, заменить код (сохранив .env и .venv), обновить зависимости, запустить
 sudo systemctl stop kait20
 cd /tmp && sha256sum -c kait20-<версия>.zip.sha256
-sudo -u kait20 unzip -q kait20-<версия>.zip 'backend/*' -d /tmp/kait20-new
+unzip -q kait20-<версия>.zip -d /tmp/kait20-new
 sudo rsync -a --exclude .env --exclude .venv /tmp/kait20-new/backend/ /opt/kait20/backend/
 sudo chown -R kait20:kait20 /opt/kait20/backend
 cd /opt/kait20/backend && sudo -u kait20 .venv/bin/pip install --require-hashes -r requirements.txt
@@ -588,7 +614,7 @@ $RUN scripts.import_curators $DATA/curators.tsv                       # пров
     f.append(table([
         ["Симптом", "Причина", "Что сделать"],
         ["Приложение не запускается: «JWT_SECRET не задан или слишком короткий»", "Секрет пустой/предсказуемый", "Сгенерировать JWT_SECRET (п. 4.6), перезапустить"],
-        ["«Требуется Python &gt;=3.12,&lt;3.13»", "venv создан другой версией Python", "Пересоздать venv командой python3.12 -m venv"],
+        ["«Требуется Python &gt;=3.12,&lt;3.15»", "venv создан версией Python вне диапазона 3.12–3.14", "Пересоздать venv командой python3.12 -m venv"],
         ["«DOSSIER_ENCRYPTION_KEY некорректен»", "Ключ испорчен при копировании", "Ключ Fernet — 44 символа, заканчивается на «=»; вставить без пробелов и кавычек"],
         ["Apache отвечает 502/503", "Служба kait20 не запущена или падает", "systemctl status kait20; journalctl -u kait20 -n 100"],
         ["Вход проходит, но сразу выбрасывает на экран входа", "Сайт открыт по http, а cookie помечена Secure", "Настроить HTTPS (раздел 6)"],
@@ -608,15 +634,16 @@ $RUN scripts.import_curators $DATA/curators.tsv                       # пров
     f.append(P("Перед подготовкой этого документа проведена проверка репозитория, конфигурации и сборки. Итог:"))
     f.append(table([
         ["Область", "Результат"],
-        ["Сборка архива для сервера (tools/build_release.py)", "Найдено и исправлено: служебный комментарий в коде содержал название стороннего хостинга, из-за чего сборка архива останавливалась. После исправления архив собирается (344 файла, 2,4 МБ), без тестов, секретов и Docker-файлов."],
-        ["Зависимости на Python 3.12", "Все 41 пакет из requirements.txt получены готовыми колёсами для Linux x86_64 / CPython 3.12: компилятор на сервере не нужен. Для другой архитектуры (например ARM) нужна отдельная проверка."],
+        ["Версия и автоматические проверки", "Версия " + version + ". На Python 3.12.1 (версия сервера колледжа; прогон на Windows) прошли 861 серверный тест; не прошли 2 теста, которые проверяют права файла 0o600 — они применимы только к Linux и на Windows дают 0o666 (в предыдущей версии на Linux проходили). Тесты интерфейса — 738, проверка кода без замечаний. Новый функционал версии (выключаемые разделы) покрыт отдельными тестами: каждый адрес скрытых разделов отвечает 404, остальное работает под куратором. Проверки на GitHub настроены на обе границы поддерживаемого диапазона (Python 3.12 и 3.14) и на MySQL 8.4."],
+        ["Сборка и состав архива (tools/build_release.py)", "Найдено и исправлено: служебный комментарий в коде содержал название стороннего хостинга, из-за чего сборка архива останавливалась. Итоговый архив собран штатным инструментом, распакован и проверен: в нём backend, deploy и frontend; тестов, файлов с реальными данными, секретов и служебных файлов хостинга нет; контрольная сумма SHA-256 прилагается. Приложение из распакованного архива запускалось на тестовой БД: интерфейс, вход, миграции."],
+        ["Зависимости на Python 3.12", "Все 41 пакет из requirements.txt (с хэшами) установлены в чистое окружение Python 3.12 и доступны готовыми колёсами для Linux x86_64 как для 3.12, так и для 3.14: компилятор на сервере не нужен. Для другой архитектуры (например ARM) нужна отдельная проверка."],
         ["Работа за Apache", "Проверено на живом Apache 2.4 с TLS: проксирование, перенаправление http→https, открытие страниц по прямому адресу и обновление (F5), вход (cookie Secure + HttpOnly + SameSite=Strict), заголовки HSTS и CSP, выгрузки Excel. Приложены проверенные файлы конфигурации."],
         ["Вход по http без сертификата", "Раньше при ENVIRONMENT=production вход по http не работал вообще (браузер отбрасывал Secure-cookie). Добавлена настройка SESSION_COOKIE_SECURE (по умолчанию включено; временно можно выключить)."],
         ["Загрузка файлов больше 5 МБ", "Через Apache отказ приходил общей ошибкой 500 вместо понятного сообщения. Теперь размер проверяется в интерфейсе заранее."],
         ["Резервное копирование", "В скрипте добавлен --no-tablespaces: без него mysqldump на MySQL 8.0+ под обычным пользователем БД завершается ошибкой (нужна привилегия PROCESS)."],
         ["Загрузка контингента (раздел 7)", "Экран «Импорт», единый шаблон Excel и консольная команда покрыты тестами (22 серверных, 9 интерфейса): ошибки блокируют запись, повторная загрузка не меняет данные, перевод/возврат/выбытие, замена кураторов, пароли, права (только администратор), выгрузка шаблона «туда-обратно» без изменений. Нагрузка: 1000 студентов, 44 группы, 60 кураторов — менее секунды. Экран проверен в браузере на десктопе и 375 px."],
         ["Прежние скрипты реестра и кураторов", "Сохранены и доработаны (предохранитель на удаление, выдача паролей списком, даты и адреса площадок из настроек, отчёт в файл); проверены на синтетических данных."],
-        ["MySQL 8.1.0", "Автоматические тесты платформы в CI идут на MySQL 8.4 и на SQLite; на 8.1.0 они не запускались. В коде и миграциях используются только стандартные возможности MySQL 8.0+ (без JSON-колонок, функциональных индексов и специфичного синтаксиса 8.4), поэтому несовместимости не ожидается, но <b>первый запуск на тестовой копии БД обязателен</b> (п. 4.7)."],
+        ["MySQL 8.1.0 и Python 3.12", "Из распакованного архива, в чистом окружении Python 3.12 (только рабочий список зависимостей) выполнен полный запуск scripts.entrypoint на реальном сервере БД (MariaDB 10.11): ожидание базы, все миграции, справочники, старт приложения, вход с обязательной сменой временного пароля, загрузка контингента, повторная загрузка без изменений, выгрузки Excel. На самом MySQL 8.1.0 этот запуск не выполнялся: в коде и миграциях используются только стандартные возможности MySQL 8.0+, но <b>первый запуск на тестовой копии БД обязателен</b> (п. 4.7)."],
         ["Не проверялось", "Установка на самом рабочем сервере и под systemd (шаблон службы составлен по документации, не запускался на реальной машине); ARM; нагрузочные испытания на реальном числе пользователей. Для Windows подготовлены конфигурации и сценарии PowerShell (раздел 10), на Windows они не запускались."],
     ], [5.0, 12.0]))
 
@@ -643,7 +670,9 @@ $RUN scripts.import_curators $DATA/curators.tsv                       # пров
 py -3.12 --version                                   # Python 3.12.x
 mysql --version                                      # 8.1.0  (папка MySQL\\bin — в PATH или полный путь)
 New-Item -ItemType Directory C:\\kait20, C:\\kait20\\logs
-Expand-Archive C:\\Temp\\kait20-""" + version + """.zip C:\\kait20\\unpacked   # затем перенести папку backend в C:\\kait20
+Expand-Archive C:\\Temp\\kait20-""" + version + """.zip C:\\kait20\\unpacked      # backend, deploy, frontend
+Move-Item C:\\kait20\\unpacked\\backend C:\\kait20\\backend
+Copy-Item C:\\kait20\\unpacked\\deploy\\kait20-*.ps1 C:\\kait20\\    # сценарии службы и копий
 # учётная запись службы и права на папку (пароль придумать длинный, сохранить в сейф)
 net user kait20svc * /add /passwordchg:no /expires:never
 icacls C:\\kait20 /grant "kait20svc:(OI)(CI)M"
@@ -700,20 +729,20 @@ $f = "C:\\kait20\\import\\контингент.xlsx"
 
     # Приложения --------------------------------------------------------------------------------------------------
     f.append(PageBreak())
-    f.append(P("Приложение A. Виртуальный хост Apache — Linux (docs/deploy/kait20-apache.conf)", "h1"))
+    f.append(P("Приложение A. Виртуальный хост Apache — Linux (deploy/kait20-apache.conf)", "h1"))
     f.append(code(read("kait20-apache.conf"), wrap=True))
     f.append(PageBreak())
-    f.append(P("Приложение B. Служба systemd (docs/deploy/kait20.service)", "h1"))
+    f.append(P("Приложение B. Служба systemd (deploy/kait20.service)", "h1"))
     f.append(code(read("kait20.service"), wrap=True))
-    f.append(P("Приложение C. Резервное копирование — Linux (docs/deploy/kait20-backup.sh)", "h1"))
+    f.append(P("Приложение C. Резервное копирование — Linux (deploy/kait20-backup.sh)", "h1"))
     f.append(code(read("kait20-backup.sh"), wrap=True))
     f.append(PageBreak())
-    f.append(P("Приложение D. Виртуальный хост Apache — Windows (docs/deploy/kait20-apache-windows.conf)", "h1"))
+    f.append(P("Приложение D. Виртуальный хост Apache — Windows (deploy/kait20-apache-windows.conf)", "h1"))
     f.append(code(read("kait20-apache-windows.conf"), wrap=True))
-    f.append(P("Приложение E. Запуск приложения задачей Планировщика — Windows (docs/deploy/kait20-service.ps1)", "h1"))
+    f.append(P("Приложение E. Запуск приложения задачей Планировщика — Windows (deploy/kait20-service.ps1)", "h1"))
     f.append(code(read("kait20-service.ps1"), wrap=True))
     f.append(PageBreak())
-    f.append(P("Приложение F. Резервное копирование — Windows (docs/deploy/kait20-backup.ps1)", "h1"))
+    f.append(P("Приложение F. Резервное копирование — Windows (deploy/kait20-backup.ps1)", "h1"))
     f.append(code(read("kait20-backup.ps1"), wrap=True))
     return f
 

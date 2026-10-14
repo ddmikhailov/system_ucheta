@@ -21,6 +21,7 @@ from app.models import (
 from app.schemas.my_day import (
     AbsenceLine, AbsenceMessage, AttentionStudent, Birthday, DayGroup, DayTask, MyDay, ReviewWaiting, RhythmDay,
 )
+from app.core.modules import module_enabled
 from app.services import attendance_service, calendar_service, individual_work_service
 from app.services import task_service
 from app.services.access_service import get_curator_group_ids
@@ -166,6 +167,8 @@ def day_tasks(db: Session, groups: list[StudyGroup], today: datetime.date) -> li
 
 def day_attention(db: Session, groups: list[StudyGroup], today: datetime.date) -> tuple[list[AttentionStudent], int]:
     items: list[AttentionStudent] = []
+    if not module_enabled("individual_work"):
+        return items, 0
     for g in groups:
         for r in individual_work_service.group_overview(db, g.id, today):
             follow_today = r.next_follow_up_on == today
@@ -195,6 +198,8 @@ def next_birthday(born: datetime.date, today: datetime.date) -> datetime.date:
 
 
 def day_birthdays(db: Session, groups: list[StudyGroup], today: datetime.date) -> list[Birthday]:
+    if not module_enabled("dossier"):
+        return []  # дата рождения хранится в досье
     students: list[tuple[Student, StudyGroup]] = []
     for g in groups:
         students.extend((s, g) for s in attendance_service.get_active_students(db, g.id, today))

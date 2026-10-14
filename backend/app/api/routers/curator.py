@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.api.deps import assert_can_access_group, assert_can_view_group, get_current_user
+from app.api.deps import assert_can_access_group, assert_can_view_group, get_current_user, require_module
 from app.core.config import get_settings
 from app.core.time import today_local
 from app.db.session import get_db
@@ -206,7 +206,7 @@ def group_rhythm(study_group_id: int, user: User = Depends(get_current_user), db
 DOCX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
-@router.get("/groups/{study_group_id}/roster-sheet")
+@router.get("/groups/{study_group_id}/roster-sheet", dependencies=[Depends(require_module("dossier"))])
 def roster_sheet(
     study_group_id: int,
     fields: str = Query(..., description="Столбцы через запятую, например full_name,phone,email"),
@@ -350,7 +350,7 @@ def create_absence_period(
     return {"id": period.id}
 
 
-@router.get("/groups/{study_group_id}/cards")
+@router.get("/groups/{study_group_id}/cards", dependencies=[Depends(require_module("dossier"))])
 def group_cards(
     study_group_id: int,
     fields: str = Query(..., description="Поля карточки через запятую, например full_name,group,birth_date"),

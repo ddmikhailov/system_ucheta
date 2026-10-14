@@ -6,6 +6,9 @@ import type { ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { api } from "../api/client";
 import { useAuth } from "../auth/useAuth";
+import { MODULE } from "../constants/modules";
+import type { ModuleName } from "../constants/modules";
+import { isModuleOn } from "../utils/modules";
 import { MANAGEMENT_ROLES, MEAL_VIEW_ROLES, TASK_MANAGER_ROLES, VIEWER_ROLES, inRoles, leadsGroups } from "../constants/roles";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import type { MeResponse } from "../api/types";
@@ -28,16 +31,17 @@ interface NavItem {
   end?: boolean;
 }
 
-/** Разделы по роли — в том же порядке, что и раньше в верхнем меню. */
+/** Разделы по роли и по включённым модулям (релиз 3.5.0) — в том же порядке, что и раньше в верхнем меню. */
 function navItems(user: MeResponse | null): NavItem[] {
   const items: NavItem[] = [];
   const role = user?.role;
+  const on = (name: ModuleName) => isModuleOn(user, name);
   if (leadsGroups(user)) {
     items.push({ to: "/my-day", label: "Мой день", icon: "day", counter: "my_day" });
     items.push({ to: "/cabinet", label: "Мои группы", short: "Группы", icon: "groups" });
-    items.push({ to: "/my-tasks", label: "Мои задачи", short: "Задачи", icon: "inbox", counter: "my_tasks" });
+    if (on(MODULE.TASKS)) items.push({ to: "/my-tasks", label: "Мои задачи", short: "Задачи", icon: "inbox", counter: "my_tasks" });
   }
-  if (inRoles(role, TASK_MANAGER_ROLES)) items.push({ to: "/tasks", label: "Задачи", icon: "tasks", counter: "review", end: true });
+  if (inRoles(role, TASK_MANAGER_ROLES) && on(MODULE.TASKS)) items.push({ to: "/tasks", label: "Задачи", icon: "tasks", counter: "review", end: true });
   if (inRoles(role, VIEWER_ROLES)) {
     items.push({ to: "/dashboards", label: "Витрины", icon: "charts" });
     items.push({ to: "/students", label: "Студенты", icon: "students" });
@@ -45,13 +49,13 @@ function navItems(user: MeResponse | null): NavItem[] {
   // Куратору соц. паспорт, индивидуальная работа, план и отчёт — во вкладках его группы («Мои группы»);
   // отдельными разделами меню они остаются у тех, кто смотрит много групп.
   if (inRoles(role, VIEWER_ROLES)) {
-    items.push({ to: "/passport", label: "Соц. паспорт", short: "Паспорт", icon: "passport" });
-    items.push({ to: "/individual-work", label: "Индивидуальная работа", short: "Работа", icon: "individual" });
-    items.push({ to: "/plan", label: "План группы", short: "План", icon: "plan" });
-    items.push({ to: "/report", label: "Отчёт куратора", short: "Отчёт", icon: "report" });
-    items.push({ to: "/my-id", label: "Мой ID", short: "ID", icon: "id" });
+    if (on(MODULE.PASSPORT)) items.push({ to: "/passport", label: "Соц. паспорт", short: "Паспорт", icon: "passport" });
+    if (on(MODULE.INDIVIDUAL_WORK)) items.push({ to: "/individual-work", label: "Индивидуальная работа", short: "Работа", icon: "individual" });
+    if (on(MODULE.PLAN)) items.push({ to: "/plan", label: "План группы", short: "План", icon: "plan" });
+    if (on(MODULE.REPORTS)) items.push({ to: "/report", label: "Отчёт куратора", short: "Отчёт", icon: "report" });
+    if (on(MODULE.MY_ID)) items.push({ to: "/my-id", label: "Мой ID", short: "ID", icon: "id" });
   }
-  if (inRoles(role, MEAL_VIEW_ROLES)) items.push({ to: "/meals", label: "Питание", icon: "meals" });
+  if (inRoles(role, MEAL_VIEW_ROLES) && on(MODULE.MEALS)) items.push({ to: "/meals", label: "Питание", icon: "meals" });
   if (inRoles(role, MANAGEMENT_ROLES)) items.push({ to: "/admin", label: "Админка", icon: "admin", counter: "journal_changes" });
   return items;
 }

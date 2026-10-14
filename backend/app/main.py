@@ -1,4 +1,5 @@
 import logging
+import re
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -8,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.routers import admin, attendance_changes, auth, curator, dashboards, dossier, dossier_import, export, individual_work, my_day, notifications, passport, students, tasks, events, meetings, reports, my_id, meals, contingent_import
 from app.core.config import get_settings
+from app.core.modules import enabled_modules
 from app.core.observability import init_sentry
 from app.core.rate_limit import client_ip
 from app.core.request_context import set_client_ip
@@ -34,7 +36,7 @@ app = FastAPI(
     # общий VERSION-файл сюда не даёт выигрыша, см. TODO.md 5), поэтому при
     # бампе версии меняйте все три места;
     # tests/test_versions.py проверяет, что они не разошлись.
-    version="3.3.0",
+    version="3.5.0",
     docs_url="/docs" if _docs_enabled else None,
     redoc_url="/redoc" if _docs_enabled else None,
     openapi_url="/openapi.json" if _docs_enabled else None,
@@ -87,26 +89,49 @@ async def security_headers(request, call_next):
     )
     return response
 
-app.include_router(auth.router)
-app.include_router(curator.router)
-app.include_router(attendance_changes.router)
-app.include_router(dashboards.router)
-app.include_router(admin.router)
-app.include_router(export.router)
-app.include_router(notifications.router)
-app.include_router(students.router)
-app.include_router(dossier.router)
-app.include_router(events.router)
-app.include_router(meetings.router)
-app.include_router(reports.router)
-app.include_router(my_id.router)
-app.include_router(dossier_import.router)
-app.include_router(individual_work.router)
-app.include_router(my_day.router)
-app.include_router(passport.router)
-app.include_router(tasks.router)
-app.include_router(meals.router)
-app.include_router(contingent_import.router)
+# Роутер → модуль, без которого он не подключается (404). Не перечисленные — всегда (посещаемость, вход, админка,
+# уведомления, «Мой день», выгрузки). Набор модулей — app/core/modules.py.
+MODULE_ROUTERS = (
+    (auth.router, None),
+    (curator.router, None),
+    (attendance_changes.router, None),
+    (dashboards.router, None),
+    (admin.router, None),
+    (export.router, None),
+    (notifications.router, None),
+    (students.router, None),
+    (dossier.router, "dossier"),
+    (events.router, "plan"),
+    (meetings.router, "meetings"),
+    (reports.router, "reports"),
+    (my_id.router, "my_id"),
+    (dossier_import.router, "dossier"),
+    (individual_work.router, "individual_work"),
+    (my_day.router, None),
+    (passport.router, "passport"),
+    (tasks.router, "tasks"),
+    (meals.router, "meals"),
+    (contingent_import.router, None),
+)
+
+
+def include_module_routers(application: FastAPI, modules: frozenset[str]) -> None:
+    for router, module in MODULE_ROUTERS:
+        if module is None or module in modules:
+            application.include_router(router)
+
+
+include_module_routers(app, enabled_modules())
+
+
+def hidden_api_patterns(modules: frozenset[str]) -> tuple[re.Pattern, ...]:
+    """Адреса API выключенных модулей. Нужны SPA-фоллбэку: без них запрос данных на такой адрес получал бы «200 с главной
+    страницей» вместо 404 (роутер модуля не подключён, а фоллбэк отвечает на любой GET)."""
+    patterns: list[re.Pattern] = []
+    for router, module in MODULE_ROUTERS:
+        if module is not None and module not in modules:
+            patterns.extend(route.path_regex for route in router.routes if hasattr(route, "path_regex"))
+    return tuple(patterns)
 
 
 @app.get("/health")
@@ -155,8 +180,9 @@ def is_browser_navigation(method: str, path: str, headers) -> bool:
     return "text/html" in headers.get("accept", "")
 
 
-def register_spa(application: FastAPI, static_dir: Path) -> None:
-    """Подключает собранный интерфейс: /assets, отдачу страниц при переходе по адресу и SPA-фоллбэк."""
+def register_spa(application: FastAPI, static_dir: Path, hidden_api: tuple[re.Pattern, ...] = ()) -> None:
+    """Подключает собранный интерфейс: /assets, отдачу страниц при переходе по адресу и SPA-фоллбэк.
+    `hidden_api` — адреса API выключенных модулей: запрос данных на них (не открытие страницы) даёт 404."""
     assets_dir = static_dir / "assets"
     if assets_dir.is_dir():
         application.mount("/assets", _ImmutableStaticFiles(directory=assets_dir), name="assets")
@@ -179,6 +205,8 @@ def register_spa(application: FastAPI, static_dir: Path) -> None:
     # удалённые ассеты, и получить белый экран (см. TODO.md 5).
     @application.get("/{full_path:path}")
     async def spa_fallback(full_path: str):
+        if any(pattern.match("/" + full_path) for pattern in hidden_api):
+            raise HTTPException(status_code=404, detail="Раздел отключён")
         candidate = resolve_static_file(full_path, static_dir)
         segments = full_path.split("/")
         if candidate is None and ("." in segments[-1] or any(seg.startswith(".") for seg in segments)):
@@ -191,4 +219,4 @@ def register_spa(application: FastAPI, static_dir: Path) -> None:
 
 
 if STATIC_DIR.is_dir():
-    register_spa(app, STATIC_DIR)
+    register_spa(app, STATIC_DIR, hidden_api_patterns(enabled_modules()))

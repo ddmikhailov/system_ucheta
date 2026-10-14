@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "./api/client";
 import App from "./App";
+import { RELEASE_MODULES } from "./constants/modules";
 import { makeUser } from "./test/utils";
 
 vi.mock("./api/client", async (importOriginal) => {
@@ -143,5 +144,25 @@ describe("App — защита маршрутов", () => {
     visit("/tasks", "curator");
     expect(await screen.findByText("страница: мой день")).toBeInTheDocument();
     expect(screen.queryByText("страница: задачи")).not.toBeInTheDocument();
+  });
+});
+
+describe("App — скрытые модули релиза 3.5.0", () => {
+  it.each([["/passport"], ["/individual-work"], ["/plan"], ["/report"]])(
+    "%s по прямой ссылке ведёт на главную",
+    async (path) => {
+      visit(path, "admin", { modules: [...RELEASE_MODULES] });
+      expect(await screen.findByText("страница: витрины")).toBeInTheDocument();
+    },
+  );
+
+  it("питание и задачи в релизном наборе открываются", async () => {
+    visit("/meals", "admin", { modules: [...RELEASE_MODULES] });
+    expect(await screen.findByText("страница: питание")).toBeInTheDocument();
+  });
+
+  it("с включённым модулем паспорт открывается", async () => {
+    visit("/passport", "admin", { modules: [...RELEASE_MODULES, "passport"] });
+    expect(await screen.findByText("страница: соц. паспорт")).toBeInTheDocument();
   });
 });

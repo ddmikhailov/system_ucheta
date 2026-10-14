@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "../api/client";
 import type { RosterEntry, RosterResponse } from "../api/types";
+import { RELEASE_MODULES } from "../constants/modules";
 import { renderPage } from "../test/utils";
 import { todayIso } from "../utils/date";
 import CuratorGroupPage from "./CuratorGroupPage";
@@ -363,5 +364,38 @@ describe("CuratorGroupPage — сданный день и правка прош�
     get.mockImplementation(async (path: string) => (path === "/curator/groups" ? [] : []));
     open();
     expect(await screen.findByText("Эта группа не закреплена за вами")).toBeInTheDocument();
+  });
+});
+
+describe("CuratorGroupPage — релизный набор модулей (3.5.0)", () => {
+  function openRelease(tab?: string) {
+    return renderPage(<CuratorGroupPage />, {
+      role: "curator",
+      user: { modules: [...RELEASE_MODULES] },
+      route: `/cabinet/groups/7${tab ? `?tab=${tab}` : ""}`,
+      path: "/cabinet/groups/:groupId",
+    });
+  }
+
+  it("вкладки группы: журнал, студенты, питание и Мой ID", async () => {
+    mockApi(roster([entry(1, "Алексеев Пётр")]));
+    openRelease();
+    await screen.findByText("День ещё не сдан — можно заполнить");
+    expect(screen.getAllByRole("tab").map((t) => t.textContent?.replace(/\d+$/, ""))).toEqual(["Журнал", "Студенты", "Питание", "Мой ID"]);
+  });
+
+  it("ссылка на скрытую вкладку открывает журнал", async () => {
+    mockApi(roster([entry(1, "Алексеев Пётр")]));
+    openRelease("passport");
+    expect(await screen.findByText("День ещё не сдан — можно заполнить")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Журнал" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("во вкладке «Студенты» нет выгрузок «Список для печати» и «Личные карточки»", async () => {
+    mockApi(roster([entry(1, "Алексеев Пётр")]));
+    openRelease("students");
+    await screen.findByRole("link", { name: "Алексеев Пётр" });
+    expect(screen.queryByRole("button", { name: "Список для печати" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Личные карточки" })).not.toBeInTheDocument();
   });
 });

@@ -54,7 +54,12 @@ def test_python_version_file_matches_requires_python():
 def test_dockerfile_base_images_match_declared_versions():
     dockerfile = (REPO / "Dockerfile").read_text(encoding="utf-8")
     python_tag = re.search(r"^FROM python:(\d+\.\d+)", dockerfile, re.M)[1]
-    assert python_tag == (BACKEND / ".python-version").read_text(encoding="utf-8").strip()
+    # Образ может быть новее минимальной версии (облако на 3.14, сервер колледжа на 3.12), но обязан входить в поддерживаемый диапазон.
+    spec = _pyproject()["requires-python"]
+    low = re.search(r">=\s*(\d+)\.(\d+)", spec)
+    high = re.search(r"<\s*(\d+)\.(\d+)", spec)
+    tag = tuple(int(x) for x in python_tag.split("."))
+    assert (int(low[1]), int(low[2])) <= tag < (int(high[1]), int(high[2]))
 
     node_major = re.search(r"^FROM node:(\d+)", dockerfile, re.M)[1]
     assert node_major == (FRONTEND / ".nvmrc").read_text(encoding="utf-8").strip()

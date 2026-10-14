@@ -172,6 +172,8 @@ export interface MeResponse {
   groups: MeGroupInfo[];
   dept_head_name: string | null;
   must_change_password: boolean;
+  /** Включённые модули платформы (backend: ENABLED_MODULES); нет поля — считаем, что включено всё. */
+  modules?: string[];
   // Заполнено только в ответе POST /auth/change-password.
   access_token?: string | null;
 }

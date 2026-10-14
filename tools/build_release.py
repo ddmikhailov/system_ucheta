@@ -1,7 +1,8 @@
 """Сборка версии для передачи системному администратору.
 
-В результате — архив release/kait20-<версия>.zip, в корне которого ровно две
-папки: backend/ и frontend/. Никаких файлов Docker, Amvera, CI, тестов и
+В результате — архив release/kait20-<версия>.zip, в корне которого папки
+backend/, frontend/ и deploy/ (конфигурации Apache/службы/резервных копий для Linux и
+Windows и PDF-инструкция из docs/deploy). Никаких файлов Docker, Amvera, CI, тестов и
 служебных документов репозитория в нём нет; сборка фронтенда уже лежит в
 backend/static, поэтому на сервере Node не нужен.
 
@@ -28,6 +29,9 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 OUT_ROOT = REPO / "release"
 INSTALL_GUIDE = REPO / "docs" / "install-guide.md"
+DEPLOY_SOURCE = "docs/deploy/"
+# Документ для принятия решений (не для администратора сервера) в архив не кладём; генератор PDF — тоже.
+DEPLOY_EXCLUDE_BASENAMES = {"kait20-zagruzka-dannyh-varianty.pdf"}
 
 INCLUDE_ROOTS = ("backend/", "frontend/")
 EXCLUDE_PREFIXES = ("backend/tests/",)
@@ -40,7 +44,8 @@ EXCLUDE_BASENAMES = {
 }
 FORBIDDEN_PATH = re.compile(r"(^|/)(Dockerfile[^/]*|\.dockerignore|docker-compose[^/]*|amvera[^/]*|\.github)(/|$)", re.I)
 FORBIDDEN_TEXT = re.compile(r"docker|amvera|контейнер", re.I)
-EXPECTED_TOP_LEVEL = {"backend", "frontend"}
+REQUIRED_TOP_LEVEL = {"backend", "frontend"}
+ALLOWED_TOP_LEVEL = REQUIRED_TOP_LEVEL | {"deploy"}
 TEXT_SUFFIXES = {
     ".py", ".ts", ".tsx", ".js", ".mjs", ".css", ".html", ".json", ".md", ".txt", ".in", ".ini",
     ".toml", ".yml", ".yaml", ".mako", ".example", ".svg", ".map", ".cfg", "",
@@ -63,13 +68,24 @@ def select_files(paths: Iterable[str]) -> list[str]:
     return sorted(selected)
 
 
+def select_deploy_files(paths: Iterable[str]) -> list[str]:
+    """Файлы docs/deploy, которые кладутся в папку deploy/ архива (плоско, по именам)."""
+    return sorted(
+        p for p in paths
+        if p.startswith(DEPLOY_SOURCE) and "/" not in p[len(DEPLOY_SOURCE):]
+        and p.rsplit("/", 1)[-1] not in DEPLOY_EXCLUDE_BASENAMES
+    )
+
+
 def find_problems(root: Path) -> list[str]:
     """Что в собранной папке не должно быть: лишние верхнеуровневые папки/файлы,
     запрещённые имена файлов и упоминания Docker/Amvera/контейнеров в тексте."""
     problems: list[str] = []
     top_level = {entry.name for entry in root.iterdir()}
-    if top_level != EXPECTED_TOP_LEVEL:
-        problems.append(f"в корне должно быть ровно {sorted(EXPECTED_TOP_LEVEL)}, а там {sorted(top_level)}")
+    if not REQUIRED_TOP_LEVEL <= top_level or not top_level <= ALLOWED_TOP_LEVEL:
+        problems.append(
+            f"в корне должно быть ровно {sorted(REQUIRED_TOP_LEVEL)} (и по желанию deploy), а там {sorted(top_level)}"
+        )
 
     for file in sorted(root.rglob("*")):
         if not file.is_file():
@@ -117,7 +133,7 @@ def build_frontend() -> None:
         subprocess.run([npm, *command], cwd=REPO / "frontend", check=True)
 
 
-def assemble(destination: Path, files: list[str]) -> None:
+def assemble(destination: Path, files: list[str], deploy_files: list[str] | None = None) -> None:
     if destination.exists():
         shutil.rmtree(destination)
     for relative in files:
@@ -132,6 +148,13 @@ def assemble(destination: Path, files: list[str]) -> None:
     if not (dist / "index.html").is_file():
         sys.exit("Нет frontend/dist/index.html — соберите фронтенд (убрав --skip-frontend-build).")
     shutil.copytree(dist, destination / "backend" / "static")
+
+    for relative in deploy_files or []:
+        source = REPO / relative
+        if source.is_file():
+            target = destination / "deploy" / source.name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, target)
 
 
 def make_zip(source_dir: Path, archive: Path) -> str:
@@ -159,9 +182,13 @@ def main() -> None:
         build_frontend()
 
     version = backend_version()
-    files = select_files(tracked_and_new_files())
+    all_files = tracked_and_new_files()
+    files = select_files(all_files)
+    deploy_files = select_deploy_files(all_files)
+    if not any(p.endswith("kait20-instrukciya-administratoru.pdf") for p in deploy_files):
+        print("ВНИМАНИЕ: в docs/deploy нет PDF-инструкции — соберите её (python tools/build_deploy_pdf.py) и добавьте в git.")
     destination = OUT_ROOT / f"kait20-{version}"
-    assemble(destination, files)
+    assemble(destination, files, deploy_files)
 
     problems = find_problems(destination)
     if problems:

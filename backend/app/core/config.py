@@ -85,6 +85,11 @@ class Settings(BaseSettings):
     # Сгенерировать: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     dossier_encryption_key: str = ""
 
+    # Какие модули включены (см. app/core/modules.py): имена через запятую или all. Пусто — релизный набор
+    # «посещаемость, задачи, Мой ID, питание»; досье, соц. паспорт, индивидуальная работа, план, собрания
+    # и отчёт скрыты (код и данные остаются).
+    enabled_modules: str = ""
+
     @property
     def cookie_secure(self) -> bool:
         return self.session_cookie_secure if self.session_cookie_secure is not None else self.environment != "development"
@@ -116,4 +121,8 @@ def get_settings() -> Settings:
     # проверяет validate_jwt_secret() напрямую и его не использует).
     if not os.environ.get("PYTEST_SKIP_SECRET_CHECK"):
         validate_jwt_secret(settings.jwt_secret)
+    # Опечатка в ENABLED_MODULES останавливает запуск, а не молча меняет набор разделов.
+    from app.core.modules import parse_modules
+
+    parse_modules(settings.enabled_modules)
     return settings
