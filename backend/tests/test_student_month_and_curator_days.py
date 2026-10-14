@@ -105,7 +105,7 @@ def _foreign_department_head(db):
     role = db.query(Role).filter(Role.code == RoleCode.DEPT_HEAD.value).one()
     user = User(
         username="chuzhoy_zav", full_name="Чужой зав", role_id=role.id, department_id=other.id,
-        password_hash=hash_password("ChuzhoyZav123!"),
+        password_hash=hash_password("Tundra#58xQz"),
     )
     db.add(user)
     db.commit()
@@ -168,7 +168,7 @@ def test_curator_days_only_for_dept_head_of_that_department(
     assert client.get(url, headers=admin_headers).status_code == 403  # по просьбе: только зав. отделением
 
     _foreign_department_head(db)
-    login = client.post("/auth/login", json={"username": "chuzhoy_zav", "password": "ChuzhoyZav123!"})
+    login = client.post("/auth/login", json={"username": "chuzhoy_zav", "password": "Tundra#58xQz"})
     assert login.status_code == 200, login.text
     foreign_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
     assert client.get(url, headers=foreign_headers).status_code == 403

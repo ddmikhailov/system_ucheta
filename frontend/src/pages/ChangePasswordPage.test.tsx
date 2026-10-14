@@ -100,6 +100,20 @@ describe("ChangePasswordPage — обычная смена", () => {
     expect(await screen.findByText("Не удалось сменить пароль")).toBeInTheDocument();
   });
 
+  it("пароль без заглавной буквы и спецсимвола не отправляется; чек-лист отмечает выполненное", async () => {
+    const user = userEvent.setup();
+    open(false);
+    const f = fields();
+    await user.type(f.current!, "OldPassword123");
+    await user.type(f.next, "longenough12");
+    await user.type(f.repeat, "longenough12");
+    expect(screen.getByText(/Не короче 10 символов/).closest("li")).toHaveClass("password-rules__ok");
+    expect(screen.getByText("Заглавная буква").closest("li")).not.toHaveClass("password-rules__ok");
+    await user.click(screen.getByRole("button", { name: "Сохранить пароль" }));
+    expect(await screen.findByText("Новый пароль не выполняет требования ниже")).toBeInTheDocument();
+    expect(post).not.toHaveBeenCalled();
+  });
+
   it("«Отмена» возвращает на предыдущую страницу", async () => {
     const user = userEvent.setup();
     open(false);
@@ -114,7 +128,7 @@ describe("ChangePasswordPage — временный пароль", () => {
     post.mockResolvedValue(makeUser("curator"));
     open(true);
     expect(screen.getByRole("heading", { name: "Новый пароль" })).toBeInTheDocument();
-    expect(screen.getByText(/Администратор выдал временный пароль/)).toBeInTheDocument();
+    expect(screen.getByText(/временный или не соответствует требованиям безопасности/)).toBeInTheDocument();
     expect(screen.queryByLabelText("Текущий пароль")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Отмена" })).not.toBeInTheDocument();
     const f = fields();

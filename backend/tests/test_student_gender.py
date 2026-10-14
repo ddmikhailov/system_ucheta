@@ -55,7 +55,7 @@ def test_gender_change_is_audited_without_the_value(client, curator_headers, cur
 def test_other_curator_cannot_set_gender(client, curator_group, db_second_curator, imported, db):
     from tests.conftest import _login
     s = _first_student(db, curator_group)
-    other = _login(client, db_second_curator.username, "SecondCurator123!")
+    other = _login(client, db_second_curator.username, "SecondCura#58x!")
     assert client.put(_profile_url(s.id), headers=other, json={"gender": "male"}).status_code == 403
 
 

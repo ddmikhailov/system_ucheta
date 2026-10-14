@@ -33,10 +33,10 @@ from app.models import (  # noqa: F401 -- регистрирует все таб
 # хеша, поэтому проверка паролей работает как в проде; боевой хешер не меняется.
 security._hasher = PasswordHasher(time_cost=1, memory_cost=8, parallelism=1)
 
-ADMIN_PASSWORD = "AdminTest123!"
+ADMIN_PASSWORD = "GlavTest#58x!"
 DEPT_HEAD_USERNAME = "zavotd"
-DEPT_HEAD_PASSWORD = "ZavOtd123!"
-CURATOR_PASSWORD = "CuratorTest123!"
+DEPT_HEAD_PASSWORD = "Rubin#58xQzw"
+CURATOR_PASSWORD = "CuraTest#58x!"
 
 
 @pytest.fixture()
@@ -237,7 +237,7 @@ def edu_department_user(db, seeded):
         username="vospitatel",
         full_name="Воспитательный отдел",
         role_id=role.id,
-        password_hash=hash_password("VospOtdel123!"),
+        password_hash=hash_password("VospOtdel#58x!"),
     )
     db.add(user)
     db.commit()
@@ -247,7 +247,7 @@ def edu_department_user(db, seeded):
 
 @pytest.fixture()
 def edu_department_headers(client, edu_department_user):
-    return _login(client, "vospitatel", "VospOtdel123!")
+    return _login(client, "vospitatel", "VospOtdel#58x!")
 
 
 @pytest.fixture()
@@ -276,7 +276,7 @@ def db_second_curator(db, imported, curator_user):
         .order_by(User.id)
         .first()
     )
-    user.password_hash = hash_password("SecondCurator123!")
+    user.password_hash = hash_password("SecondCura#58x!")
     db.commit()
     db.refresh(user)
     return user
@@ -307,7 +307,7 @@ def today() -> datetime.date:
     return day
 
 
-MEAL_MANAGER_PASSWORD = "MealManager123!"
+MEAL_MANAGER_PASSWORD = "MealManager#58x!"
 
 
 @pytest.fixture()

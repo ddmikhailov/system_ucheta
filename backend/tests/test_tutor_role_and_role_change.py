@@ -12,11 +12,11 @@ def _make_tutor(db, client):
     role = db.query(Role).filter(Role.code == "tutor").one()
     user = User(
         username="tutor1", full_name="Тьютор Тьюторович", role_id=role.id,
-        department_id=db.query(Department).order_by(Department.id).first().id, password_hash=hash_password("TutorPass1"),
+        department_id=db.query(Department).order_by(Department.id).first().id, password_hash=hash_password("Glacier#58xQ"),
     )
     db.add(user)
     db.commit()
-    r = client.post("/auth/login", json={"username": "tutor1", "password": "TutorPass1"})
+    r = client.post("/auth/login", json={"username": "tutor1", "password": "Glacier#58xQ"})
     assert r.status_code == 200, r.text
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
 

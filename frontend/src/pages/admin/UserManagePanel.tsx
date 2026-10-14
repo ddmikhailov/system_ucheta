@@ -1,7 +1,8 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { api, ApiError } from "../../api/client";
-import { MIN_PASSWORD_LENGTH } from "../../constants/password";
+import { MIN_PASSWORD_LENGTH, passwordRulesMet } from "../../constants/password";
+import PasswordRequirements from "../../components/PasswordRequirements";
 import type { DeleteResult, DepartmentAdmin, SetPasswordResult, UserAdmin } from "../../api/types";
 import { DEPARTMENT_REQUIRED_ROLES, DEPARTMENT_SCOPED_ROLES, ROLE_LABELS, assignableRoles, inRoles, type RoleCode } from "../../constants/roles";
 import { dialogs } from "../../utils/feedback";
@@ -67,8 +68,8 @@ export default function UserManagePanel({
 
   async function submitCustomPassword(e: FormEvent) {
     e.preventDefault();
-    if (customPasswordValue.length < MIN_PASSWORD_LENGTH) {
-      setError(`Пароль должен быть не короче ${MIN_PASSWORD_LENGTH} символов`);
+    if (!passwordRulesMet(customPasswordValue)) {
+      setError("Пароль не выполняет требования под полем");
       return;
     }
     setError(null);
@@ -170,20 +171,23 @@ export default function UserManagePanel({
         <p className="hint">Статус: {statusLabel(user)}</p>
 
         {customPasswordOpen ? (
-          <form className="inline-form" onSubmit={submitCustomPassword}>
-            <input
-              type="text"
-              placeholder="Свой пароль" aria-label="Свой пароль"
-              value={customPasswordValue}
-              onChange={(e) => setCustomPasswordValue(e.target.value)}
-              minLength={MIN_PASSWORD_LENGTH}
-              required
-            />
-            <button type="submit">Задать</button>
-            <button type="button" className="link-btn" onClick={() => setCustomPasswordOpen(false)}>
-              Отмена
-            </button>
-          </form>
+          <>
+            <form className="inline-form" onSubmit={submitCustomPassword}>
+              <input
+                type="text"
+                placeholder="Свой пароль" aria-label="Свой пароль"
+                value={customPasswordValue}
+                onChange={(e) => setCustomPasswordValue(e.target.value)}
+                minLength={MIN_PASSWORD_LENGTH}
+                required
+              />
+              <button type="submit">Задать</button>
+              <button type="button" className="link-btn" onClick={() => setCustomPasswordOpen(false)}>
+                Отмена
+              </button>
+            </form>
+            <PasswordRequirements password={customPasswordValue} />
+          </>
         ) : (
           <div className="admin-row-actions">
             <button className="link-btn" onClick={generatePassword}>

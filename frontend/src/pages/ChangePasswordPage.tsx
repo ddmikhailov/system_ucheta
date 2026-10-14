@@ -3,7 +3,8 @@ import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/useAuth";
-import { MIN_PASSWORD_LENGTH } from "../constants/password";
+import { MIN_PASSWORD_LENGTH, passwordRulesMet } from "../constants/password";
+import PasswordRequirements from "../components/PasswordRequirements";
 import type { MeResponse } from "../api/types";
 import { CollegeLogo } from "../components/BrandMark";
 
@@ -23,6 +24,10 @@ export default function ChangePasswordPage() {
     setError(null);
     if (newPassword !== confirmPassword) {
       setError("Пароли не совпадают");
+      return;
+    }
+    if (!passwordRulesMet(newPassword)) {
+      setError("Новый пароль не выполняет требования ниже");
       return;
     }
     setBusy(true);
@@ -49,7 +54,7 @@ export default function ChangePasswordPage() {
           <h2>{forced ? "Пора задать свой пароль" : "Смена пароля"}</h2>
           <p>
             {forced
-              ? "Администратор выдал временный пароль — прежде чем продолжить, задайте собственный."
+              ? "Текущий пароль временный или не соответствует требованиям безопасности — прежде чем продолжить, задайте новый."
               : "Введите текущий пароль и новый, который будете использовать дальше."}
           </p>
         </div>
@@ -83,8 +88,11 @@ export default function ChangePasswordPage() {
               autoFocus={forced}
               required
               minLength={MIN_PASSWORD_LENGTH}
+              autoComplete="new-password"
             />
           </label>
+
+          <PasswordRequirements password={newPassword} />
 
           <label>
             Повторите новый пароль
@@ -94,6 +102,7 @@ export default function ChangePasswordPage() {
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
               minLength={MIN_PASSWORD_LENGTH}
+              autoComplete="new-password"
             />
           </label>
 

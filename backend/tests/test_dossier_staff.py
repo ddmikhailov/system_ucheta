@@ -6,7 +6,7 @@ from app.core.security import hash_password
 from app.models import Department, Role, RoleCode, Student, StudyGroup, User
 from tests.conftest import _login
 
-PASSWORD = "StaffTest123!"
+PASSWORD = "StaffTest#58x!"
 
 
 @pytest.fixture(params=["social_pedagogue", "psychologist"])

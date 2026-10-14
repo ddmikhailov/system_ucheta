@@ -6,7 +6,7 @@ COOKIE = settings.session_cookie_name
 CSRF = {"X-Requested-With": "kait20"}
 
 
-def _login(client, password="AdminTest123!"):
+def _login(client, password="GlavTest#58x!"):
     return client.post("/auth/login", json={"username": "admin", "password": password})
 
 
@@ -39,10 +39,10 @@ def test_cookie_authenticates_safe_requests(client, admin_headers):
 def test_cookie_auth_requires_csrf_header_on_changes(client, admin_headers):
     token = _login(client).json()["access_token"]
     client.cookies.clear()
-    r = client.post("/auth/change-password", cookies={COOKIE: token}, json={"current_password": "x", "new_password": "Whatever12345"})
+    r = client.post("/auth/change-password", cookies={COOKIE: token}, json={"current_password": "x", "new_password": "Saffron#58xQ"})
     assert r.status_code == 403
     # Bearer-запросы (скрипты) заголовка не требуют — cookie там не участвует.
-    r = client.post("/auth/change-password", headers=admin_headers, json={"current_password": "wrong", "new_password": "Whatever12345"})
+    r = client.post("/auth/change-password", headers=admin_headers, json={"current_password": "wrong", "new_password": "Saffron#58xQ"})
     assert r.status_code == 400
 
 
@@ -79,7 +79,7 @@ def test_blocked_login_tells_when_to_retry(client, admin_headers):
 
 
 def test_change_password_refreshes_the_session_cookie(client, admin_headers):
-    r = client.post("/auth/change-password", headers=admin_headers, json={"current_password": "AdminTest123!", "new_password": "NewAdminPass123!"})
+    r = client.post("/auth/change-password", headers=admin_headers, json={"current_password": "GlavTest#58x!", "new_password": "Pebble#58xQ"})
     assert r.status_code == 200 and COOKIE in r.headers["set-cookie"]
 
 

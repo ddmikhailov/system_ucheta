@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import bearer_scheme, extract_token, get_current_user
 from app.core.config import get_settings
-from app.core.password_policy import validate_password_strength
+from app.core.password_policy import password_problems, validate_password_strength
 from app.core.rate_limit import check_rate_limit, client_ip, is_blocked, register_failure, reset_failures
 from app.core.security import create_access_token, decode_access_token, hash_password, verify_password
 from app.core.modules import enabled_modules
@@ -93,6 +93,14 @@ def login(payload: LoginRequest, request: Request, response: Response, db: Sessi
 
     reset_failures(fail_key)
 
+    # Пароли, заданные до ужесточения политики, проверяются при входе (только здесь
+    # сервер видит пароль открытым): слабый — вход проходит, но дальше работать
+    # можно только после смены пароля, как с временным паролем от администратора.
+    if not user.must_change_password and password_problems(payload.password, user.username, user.full_name):
+        user.must_change_password = True
+        log_action(db, user, "password.weak_on_login", "user", str(user.id))
+        db.commit()
+
     token = create_access_token(user.id, user.role.code, user.token_version)
     _set_session_cookie(response, token)
     return TokenResponse(access_token=token)
@@ -177,7 +185,7 @@ def change_password(
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Неверный текущий пароль")
 
     try:
-        validate_password_strength(payload.new_password, user.username)
+        validate_password_strength(payload.new_password, user.username, user.full_name)
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
 

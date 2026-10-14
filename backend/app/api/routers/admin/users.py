@@ -249,7 +249,7 @@ def set_password(
     password = payload.password or generate_temporary_password()
     if payload.password is not None:
         try:
-            validate_password_strength(password, target.username)
+            validate_password_strength(password, target.username, target.full_name)
         except ValueError as exc:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
     target.password_hash = hash_password(password)

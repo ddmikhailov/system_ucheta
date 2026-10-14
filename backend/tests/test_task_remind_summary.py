@@ -76,9 +76,9 @@ def test_dept_head_of_other_department_cannot_remind_or_see_summary(client, admi
     db.add(other)
     db.flush()
     role = db.query(Role).filter(Role.code == RoleCode.DEPT_HEAD.value).one()
-    db.add(User(username="zav2", full_name="Зав. Чужим", role_id=role.id, department_id=other.id, password_hash=hash_password("Zav2Pass123!")))
+    db.add(User(username="zav2", full_name="Зав. Чужим", role_id=role.id, department_id=other.id, password_hash=hash_password("Velvet#58xQz")))
     db.commit()
-    headers = {"Authorization": "Bearer " + client.post("/auth/login", json={"username": "zav2", "password": "Zav2Pass123!"}).json()["access_token"]}
+    headers = {"Authorization": "Bearer " + client.post("/auth/login", json={"username": "zav2", "password": "Velvet#58xQz"}).json()["access_token"]}
     task = _create(client, admin_headers, collect_mode="group", fields=[{"label": "Сдано", "type": "bool"}])
     assert client.post(f"/tasks/{task['id']}/remind", headers=headers).status_code == 403
     assert client.get(f"/tasks/{task['id']}/summary", headers=headers).status_code == 403

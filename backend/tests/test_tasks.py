@@ -258,7 +258,7 @@ def test_access_is_limited_to_assignee_reviewer_and_scoped_managers(
     aid = _my_assignment_id(client, curator_headers, task["id"])
     from tests.conftest import _login
 
-    other_headers = _login(client, db_second_curator.username, "SecondCurator123!")
+    other_headers = _login(client, db_second_curator.username, "SecondCura#58x!")
     other_group_aid = next(
         a["id"] for a in task["assignments"] if a["study_group_id"] != curator_group.id
     )
@@ -283,9 +283,9 @@ def test_dept_head_of_another_department_sees_nothing(client, admin_headers, imp
     db.flush()
     role = db.query(Role).filter(Role.code == "dept_head").one()
     db.add(User(username="other_dh", full_name="Чужой зав", role_id=role.id, department_id=other.id,
-                password_hash=hash_password("Other123!")))
+                password_hash=hash_password("Walnut#58xQz")))
     db.commit()
-    headers = _login(client, "other_dh", "Other123!")
+    headers = _login(client, "other_dh", "Walnut#58xQz")
     task = _create(client, admin_headers)
     assert client.get("/tasks", headers=headers).json() == []
     assert client.get(f"/tasks/{task['id']}", headers=headers).status_code == 403

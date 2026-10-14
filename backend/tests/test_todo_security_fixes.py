@@ -6,7 +6,7 @@ import datetime
 from app.core.security import hash_password
 
 
-def _make_user(db, role_code, username, department_id=None, password="Password123!"):
+def _make_user(db, role_code, username, department_id=None, password="Yonder#58xQz"):
     from app.models import Role, User
 
     role = db.query(Role).filter(Role.code == role_code).one()
@@ -20,7 +20,7 @@ def _make_user(db, role_code, username, department_id=None, password="Password12
     return user
 
 
-def _login(client, username, password="Password123!"):
+def _login(client, username, password="Yonder#58xQz"):
     r = client.post("/auth/login", json={"username": username, "password": password})
     assert r.status_code == 200, r.text
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
@@ -53,7 +53,7 @@ def test_edu_department_cannot_reset_admin_password(client, admin_headers, impor
     edu_role = db.query(Role).filter(Role.code == "edu_department").one()
     edu_user = User(
         username="vosp_sec_test", full_name="Воспитательный отдел",
-        role_id=edu_role.id, password_hash=hash_password("Password123!"),
+        role_id=edu_role.id, password_hash=hash_password("Yonder#58xQz"),
     )
     db.add(edu_user)
     db.commit()
@@ -238,15 +238,15 @@ def test_admin_password_reset_revokes_existing_session(client, admin_headers, im
 
     curator_role = db.query(Role).filter(Role.code == "curator").one()
     target = db.query(User).filter(User.role_id == curator_role.id).first()
-    target.password_hash = hash_password("OldPassword1")
+    target.password_hash = hash_password("Ember#58xQzw")
     target.must_change_password = False
     db.commit()
 
-    old_headers = _login(client, target.username, "OldPassword1")
+    old_headers = _login(client, target.username, "Ember#58xQzw")
     r = client.get("/auth/me", headers=old_headers)
     assert r.status_code == 200
 
-    client.post(f"/admin/users/{target.id}/set-password", headers=admin_headers, json={"password": "NewPassword1"})
+    client.post(f"/admin/users/{target.id}/set-password", headers=admin_headers, json={"password": "Harbor#58xQz"})
 
     r = client.get("/auth/me", headers=old_headers)
     assert r.status_code == 401
@@ -257,15 +257,15 @@ def test_self_password_change_returns_fresh_token_and_revokes_old(client, import
 
     curator_role = db.query(Role).filter(Role.code == "curator").one()
     target = db.query(User).filter(User.role_id == curator_role.id).first()
-    target.password_hash = hash_password("OldPassword1")
+    target.password_hash = hash_password("Ember#58xQzw")
     target.must_change_password = False
     db.commit()
 
-    old_headers = _login(client, target.username, "OldPassword1")
+    old_headers = _login(client, target.username, "Ember#58xQzw")
 
     r = client.post(
         "/auth/change-password", headers=old_headers,
-        json={"current_password": "OldPassword1", "new_password": "BrandNewPass1"},
+        json={"current_password": "Ember#58xQzw", "new_password": "Zephyr#58xQ"},
     )
     assert r.status_code == 200
     new_token = r.json()["access_token"]
