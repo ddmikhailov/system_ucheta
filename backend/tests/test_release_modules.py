@@ -8,6 +8,7 @@ from app.core.modules import ALL_MODULES, HIDDEN_IN_RELEASE, RELEASE_MODULES, pa
 from app.db.session import get_db
 from app.main import MODULE_ROUTERS, include_module_routers
 import app.db.base as db_base
+from tests.conftest import CURATOR_PASSWORD
 
 
 @pytest.fixture()
@@ -89,7 +90,7 @@ def test_me_lists_every_module_in_all_mode(client, admin_headers, monkeypatch):
 
 def test_change_password_response_carries_modules(client, db, curator_user, curator_headers, release_mode):
     r = client.post("/auth/change-password", headers=curator_headers,
-                    json={"current_password": "CuratorTest123!", "new_password": "NewCurator456#Pass"})
+                    json={"current_password": CURATOR_PASSWORD, "new_password": "Kestrel#58xQz"})
     assert r.status_code == 200, r.text
     assert r.json()["modules"] == sorted(RELEASE_MODULES)
 
