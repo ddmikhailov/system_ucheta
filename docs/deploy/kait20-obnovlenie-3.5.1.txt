@@ -1,0 +1,101 @@
+Цифровой куратор (КАИТ №20) — обновление до версии 3.5.1
+
+Кому: системному администратору сервера колледжа.
+Откуда: с версии 3.5.0 (с более ранних — так же, миграции применятся сами при запуске).
+
+
+ЧТО НОВОГО
+
+Политика сложности паролей. Пароль пользователя платформы теперь:
+  - от 10 символов;
+  - обязательно строчная и заглавная буква, цифра и спецсимвол (например ! # $ % & * ?);
+  - без подряд идущих букв, цифр или клавиш (abc, 123, qwer), без одного символа три раза подряд,
+    без логина и ФИО, не из списка распространённых паролей (Password2026!, Qwerty..., Kurator...).
+
+Последствия для пользователей:
+  - кто входит со слабым паролем, заданным раньше, после входа обязан задать новый — это ожидаемо, не сбой;
+  - временные пароли, которые выдаёт платформа («Выдать пароль», импорт кураторов), — 14 символов со
+    спецсимволами; передавайте их точно, с учётом регистра.
+  Кураторов стоит предупредить до обновления.
+
+Что НЕ меняется: миграций БД нет, новых Python-пакетов нет (requirements.txt тот же), новых параметров
+в .env нет, конфигурации Apache и службы те же. Требования к серверу прежние: Python 3.12 (допустимы 3.13/3.14),
+MySQL 8.1.0+.
+
+
+ПЕРЕД ОБНОВЛЕНИЕМ
+
+  1. Проверить целостность архива (файл .sha256 лежит рядом с архивом):
+       Linux:    sha256sum -c kait20-3.5.1.zip.sha256
+       Windows:  Get-FileHash .\kait20-3.5.1.zip -Algorithm SHA256   (сравнить с содержимым .sha256)
+  2. Сделать резервную копию БД и копию текущей папки приложения (команды ниже).
+  3. Выбрать время, когда кураторы не отмечают посещаемость: перерыв в работе — 1–2 минуты.
+
+
+ОБНОВЛЕНИЕ — LINUX (пути и имена — как в инструкции администратору, раздел 5.4)
+
+  # 1. резервная копия БД и копия текущей версии
+  sudo -u kait20 /opt/kait20/kait20-backup.sh
+  sudo rm -rf /opt/kait20/backend.prev
+  sudo cp -a /opt/kait20/backend /opt/kait20/backend.prev
+
+  # 2. распаковать новую версию
+  cd /tmp && sha256sum -c kait20-3.5.1.zip.sha256
+  rm -rf /tmp/kait20-new && unzip -q kait20-3.5.1.zip -d /tmp/kait20-new
+
+  # 3. остановить, заменить код (сохранив .env и .venv), проверить зависимости, запустить
+  sudo systemctl stop kait20
+  sudo rsync -a --exclude .env --exclude .venv /tmp/kait20-new/backend/ /opt/kait20/backend/
+  sudo chown -R kait20:kait20 /opt/kait20/backend
+  cd /opt/kait20/backend && sudo -u kait20 .venv/bin/pip install --require-hashes -r requirements.txt
+  sudo systemctl start kait20
+
+  # 4. проверка
+  curl -s http://127.0.0.1:8000/health                 # -> {"status":"ok"}
+  grep '^version' /opt/kait20/backend/pyproject.toml   # -> version = "3.5.1"
+  journalctl -u kait20 -n 50 --no-pager                # без ошибок
+
+  pip сообщит, что всё уже установлено (Requirement already satisfied) — так и должно быть.
+
+
+ОБНОВЛЕНИЕ — WINDOWS (инструкция администратору, раздел 10.4)
+
+  # 1. резервная копия БД (задача kait20-backup) и копия текущей версии
+  Start-ScheduledTask kait20-backup
+  robocopy C:\kait20\backend C:\kait20\backend.prev /MIR /XD .venv
+
+  # 2. распаковать новую версию
+  Expand-Archive .\kait20-3.5.1.zip -DestinationPath C:\Temp\kait20-new -Force
+
+  # 3. остановить, заменить код (сохранив .env и .venv), проверить зависимости, запустить
+  Stop-ScheduledTask kait20
+  robocopy C:\Temp\kait20-new\backend C:\kait20\backend /E /XD .venv /XF .env
+  C:\kait20\backend\.venv\Scripts\pip install --require-hashes -r C:\kait20\backend\requirements.txt
+  Start-ScheduledTask kait20
+
+  # 4. проверка
+  Invoke-WebRequest http://127.0.0.1:8000/health -UseBasicParsing     # -> {"status":"ok"}
+  Select-String '^version' C:\kait20\backend\pyproject.toml           # -> version = "3.5.1"
+  Get-Content C:\kait20\logs\kait20.log -Tail 50                      # без ошибок
+
+
+ПРОВЕРКА В БРАУЗЕРЕ (после обновления)
+
+  1. Открыть сайт, войти администратором — рабочий экран открывается
+     (если пароль администратора слабый, платформа попросит задать новый — задать).
+  2. Профиль → «Сменить пароль», ввести, например, Password2026! — платформа отказывает и объясняет причину;
+     под полем — список требований с отметками.
+  3. Админка → Пользователи → любой тестовый пользователь → «Выдать пароль» — выдан пароль из 14 символов.
+  4. Посещаемость открывается и сохраняется как раньше.
+
+
+ОТКАТ (если что-то пошло не так)
+
+  Миграций в 3.5.1 нет, поэтому откат — просто вернуть прежнюю папку и перезапустить:
+    Linux:    sudo systemctl stop kait20
+              sudo rsync -a --delete --exclude .env --exclude .venv /opt/kait20/backend.prev/ /opt/kait20/backend/
+              sudo systemctl start kait20
+    Windows:  Stop-ScheduledTask kait20
+              robocopy C:\kait20\backend.prev C:\kait20\backend /MIR /XD .venv /XF .env
+              Start-ScheduledTask kait20
+  Восстанавливать БД из копии при откате с 3.5.1 на 3.5.0 не требуется.
