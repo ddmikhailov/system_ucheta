@@ -18,4 +18,11 @@ export const MODULE = {
 export type ModuleName = (typeof MODULE)[keyof typeof MODULE];
 
 /** Релизный набор: что включено, пока ENABLED_MODULES не задана (backend: RELEASE_MODULES). */
-export const RELEASE_MODULES: readonly ModuleName[] = [MODULE.ATTENDANCE, MODULE.TASKS, MODULE.MY_ID, MODULE.MEALS];
+export const RELEASE_MODULES: readonly ModuleName[] = [
+  MODULE.ATTENDANCE,
+  MODULE.TASKS,
+  MODULE.MY_ID,
+  MODULE.MEALS,
+  MODULE.DOSSIER,
+  MODULE.INDIVIDUAL_WORK,
+];
