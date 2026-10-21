@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api/client";
 import { RELEASE_MODULES } from "../constants/modules";
 import { renderPage } from "../test/utils";
+import { dialogs } from "../utils/feedback";
+import { journalDraftKey, readJournalDraft, saveJournalDraft } from "../utils/journalDraft";
 import Layout from "./Layout";
 
 vi.mock("../api/client", async (importOriginal) => {
@@ -63,6 +65,56 @@ describe("Layout — меню по ролям", () => {
     expect(screen.getByRole("menuitem", { name: "Сменить пароль" })).toHaveAttribute("href", "/change-password");
     expect(screen.getByRole("menuitem", { name: "Выйти" })).toBeInTheDocument();
     expect(screen.getByText("содержимое")).toBeInTheDocument();
+  });
+
+  it("«Выйти» с несданными отметками журнала переспрашивает и стирает черновики вкладки", async () => {
+    const user = userEvent.setup();
+    const logout = vi.fn();
+    const key = journalDraftKey(1, 7, "2026-10-21");
+    saveJournalDraft(key, { pending: {}, firstPeriod: "", baseline: "{}", submitted: false });
+    renderPage(<Layout><div /></Layout>, { role: "curator", user: { full_name: "Иванова Анна" }, auth: { logout } });
+    const confirm = vi.spyOn(dialogs, "confirm").mockResolvedValue(false);
+
+    await user.click(screen.getByRole("button", { name: /Иванова Анна/ }));
+    await user.click(screen.getByRole("menuitem", { name: "Выйти" }));
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+    expect(logout).not.toHaveBeenCalled();
+    expect(readJournalDraft(key)).not.toBeNull();
+
+    confirm.mockResolvedValue(true);
+    await user.click(screen.getByRole("button", { name: /Иванова Анна/ }));
+    await user.click(screen.getByRole("menuitem", { name: "Выйти" }));
+    await waitFor(() => expect(logout).toHaveBeenCalledTimes(1));
+    expect(readJournalDraft(key)).toBeNull();
+  });
+
+  it("«Выйти» без черновиков выходит сразу", async () => {
+    const user = userEvent.setup();
+    const logout = vi.fn();
+    renderPage(<Layout><div /></Layout>, { role: "curator", user: { full_name: "Иванова Анна" }, auth: { logout } });
+    const confirm = vi.spyOn(dialogs, "confirm");
+    await user.click(screen.getByRole("button", { name: /Иванова Анна/ }));
+    await user.click(screen.getByRole("menuitem", { name: "Выйти" }));
+    await waitFor(() => expect(logout).toHaveBeenCalledTimes(1));
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it("«Выйти на всех устройствах» — после подтверждения; отказ сервера показывается", async () => {
+    const user = userEvent.setup();
+    const logoutAll = vi.fn().mockRejectedValueOnce(new TypeError("Failed to fetch")).mockResolvedValue(undefined);
+    const confirm = vi.spyOn(dialogs, "confirm").mockResolvedValue(false);
+    renderPage(<Layout><div /></Layout>, { role: "curator", user: { full_name: "Иванова Анна" }, auth: { logoutAll } });
+
+    await user.click(screen.getByRole("button", { name: /Иванова Анна/ }));
+    await user.click(screen.getByRole("menuitem", { name: "Выйти на всех устройствах" }));
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+    expect(confirm.mock.calls[0][0]).toMatch(/Пароль не меняется/);
+    expect(logoutAll).not.toHaveBeenCalled();
+
+    confirm.mockResolvedValue(true);
+    await user.click(screen.getByRole("button", { name: /Иванова Анна/ }));
+    await user.click(screen.getByRole("menuitem", { name: "Выйти на всех устройствах" }));
+    await waitFor(() => expect(logoutAll).toHaveBeenCalledTimes(1));
   });
 
   it("основное меню подписано для скринридеров и не содержит пунктов пользователя", () => {

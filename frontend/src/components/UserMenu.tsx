@@ -11,8 +11,17 @@ const THEMES: [ThemePref, string][] = [
 ];
 
 /** Имя пользователя с выпадающим меню («Сменить пароль», «Выйти»). Раньше имя, ссылка и кнопка
- * стояли в шапке отдельными элементами, и на телефоне занимали ещё две строки. */
-export default function UserMenu({ name, onLogout }: { name: string; onLogout: () => void }) {
+ * стояли в шапке отдельными элементами, и на телефоне занимали ещё две строки. «Выйти» — только из этого
+ * браузера, «Выйти на всех устройствах» — отзывает все сессии (забытый вход на чужом компьютере, потерянный телефон). */
+export default function UserMenu({
+  name,
+  onLogout,
+  onLogoutAll,
+}: {
+  name: string;
+  onLogout: () => void;
+  onLogoutAll?: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState<ThemePref>(getThemePref);
   const ref = useRef<HTMLDivElement>(null);
@@ -65,9 +74,11 @@ export default function UserMenu({ name, onLogout }: { name: string; onLogout: (
           <Link to="/change-password" role="menuitem" onClick={() => setOpen(false)}>
             Сменить пароль
           </Link>
+          {/* Класс — чтобы не подхватить общий стиль кнопок без класса (по центру, как «Сохранить»). */}
           <button
             type="button"
             role="menuitem"
+            className="user-menu__item"
             onClick={() => {
               setOpen(false);
               onLogout();
@@ -75,6 +86,19 @@ export default function UserMenu({ name, onLogout }: { name: string; onLogout: (
           >
             Выйти
           </button>
+          {onLogoutAll && (
+            <button
+              type="button"
+              role="menuitem"
+              className="user-menu__item"
+              onClick={() => {
+                setOpen(false);
+                onLogoutAll();
+              }}
+            >
+              Выйти на всех устройствах
+            </button>
+          )}
         </div>
       )}
     </div>

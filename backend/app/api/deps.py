@@ -19,7 +19,7 @@ bearer_scheme = HTTPBearer(auto_error=False)
 # доступен — проверка была только на фронтенде (см. TODO.md 2). Эти два
 # пути остаются доступны, чтобы пользователь вообще мог узнать, кто он, и
 # задать свой пароль.
-_ALLOWED_WITH_PENDING_PASSWORD_CHANGE = {"/auth/me", "/auth/change-password", "/auth/logout"}
+_ALLOWED_WITH_PENDING_PASSWORD_CHANGE = {"/auth/me", "/auth/change-password", "/auth/logout", "/auth/logout-all"}
 
 # Защита от CSRF для входа по cookie: браузер подставляет cookie в любой запрос к
 # нашему домену, в том числе с чужой страницы. Чужая страница не может добавить

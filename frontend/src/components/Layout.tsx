@@ -3,8 +3,8 @@ import BrandMark from "./BrandMark";
 import CommandPalette from "./CommandPalette";
 import { PLATFORM_NAME } from "../constants/brand";
 import type { ReactNode } from "react";
-import { NavLink, useLocation } from "react-router-dom";
-import { api } from "../api/client";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { ApiError, api } from "../api/client";
 import { useAuth } from "../auth/useAuth";
 import { MODULE } from "../constants/modules";
 import type { ModuleName } from "../constants/modules";
@@ -17,6 +17,8 @@ import type { NavIconName } from "./NavIcon";
 import NotificationBell from "./NotificationBell";
 import UserMenu from "./UserMenu";
 import { pageTitle } from "../utils/pageTitle";
+import { dialogs, toast } from "../utils/feedback";
+import { clearJournalDrafts, hasJournalDrafts } from "../utils/journalDraft";
 
 type CounterKey = "my_day" | "my_tasks" | "review" | "journal_changes";
 type Counters = Partial<Record<CounterKey, number>>;
@@ -77,8 +79,9 @@ const COUNTER_LABELS: Record<CounterKey, string> = {
   journal_changes: "исправлений журнала ждут решения",
 };
 
-export default function Layout({ children }: { children: ReactNode }) {
-  const { user, logout } = useAuth();
+/** Общая рамка страниц: родительский маршрут рисует раздел через <Outlet/>; children — для тестов и вложения вручную. */
+export default function Layout({ children }: { children?: ReactNode }) {
+  const { user, logout, logoutAll } = useAuth();
   const { pathname } = useLocation();
   const [counters, setCounters] = useState<Counters>({});
   const [moreOpen, setMoreOpen] = useState(false);
@@ -105,6 +108,32 @@ export default function Layout({ children }: { children: ReactNode }) {
     setClosedOn(pathname);
     if (moreOpen) setMoreOpen(false);
   }
+  // Несданные отметки журнала после выхода пропадут: переспрашиваем, а на выходе стираем черновики вкладки.
+  async function confirmDrafts(): Promise<boolean> {
+    if (!hasJournalDrafts()) return true;
+    return dialogs.confirm("Отметки журнала не сданы и пропадут после выхода. Всё равно выйти?", { confirmLabel: "Выйти", danger: true });
+  }
+
+  async function handleLogout() {
+    if (!(await confirmDrafts())) return;
+    clearJournalDrafts();
+    logout();
+  }
+
+  async function handleLogoutAll() {
+    const ok = await dialogs.confirm(
+      "Выйти на всех устройствах? Вход завершится везде: на этом компьютере, телефоне и в других браузерах. Пароль не меняется.",
+      { confirmLabel: "Выйти везде" }
+    );
+    if (!ok || !(await confirmDrafts())) return;
+    try {
+      await logoutAll();
+      clearJournalDrafts();
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : "Не удалось выйти на всех устройствах — проверьте связь", "error");
+    }
+  }
+
   // Быстрый переход: Ctrl+K / ⌘K откуда угодно, «/» — если курсор не в поле ввода.
   const [paletteOpen, setPaletteOpen] = useState(false);
   useEffect(() => {
@@ -192,7 +221,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             {user && (
               <>
                 <NotificationBell />
-                <UserMenu name={user.full_name} onLogout={logout} />
+                <UserMenu name={user.full_name} onLogout={handleLogout} onLogoutAll={handleLogoutAll} />
               </>
             )}
           </div>
@@ -200,7 +229,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         <main className="app-main">
           <h1 className="visually-hidden">{title}</h1>
           {/* Раздел, который грузится по требованию: меню остаётся на месте, пока он подгружается. */}
-          <Suspense fallback={<p className="hint">Загрузка…</p>}>{children}</Suspense>
+          <Suspense fallback={<p className="hint">Загрузка…</p>}>{children ?? <Outlet />}</Suspense>
         </main>
       </div>
 

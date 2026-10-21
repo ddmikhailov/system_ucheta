@@ -69,7 +69,7 @@ function open(role: string, c: StudentCard = card(), tab?: string, modules?: str
     throw new Error(`неожиданный запрос ${path}`);
   });
   render(
-    <AuthContext.Provider value={{ user: makeUser(role, modules ? { modules } : {}), loading: false, login: vi.fn(), logout: vi.fn(), refresh: vi.fn() }}>
+    <AuthContext.Provider value={{ user: makeUser(role, modules ? { modules } : {}), loading: false, login: vi.fn(), logout: vi.fn(), logoutAll: vi.fn(), refresh: vi.fn() }}>
       <MemoryRouter initialEntries={[tab ? `/students/10?tab=${tab}` : "/students/10"]}>
         <Routes>
           <Route path="/students/:studentId" element={<StudentCardPage />} />
@@ -174,7 +174,7 @@ describe("StudentCardPage — просмотр", () => {
   it("ошибка загрузки (чужая группа) показывается вместо карточки", async () => {
     get.mockRejectedValue(new ApiError(403, "Это не ваша группа"));
     render(
-      <AuthContext.Provider value={{ user: makeUser("curator"), loading: false, login: vi.fn(), logout: vi.fn(), refresh: vi.fn() }}>
+      <AuthContext.Provider value={{ user: makeUser("curator"), loading: false, login: vi.fn(), logout: vi.fn(), logoutAll: vi.fn(), refresh: vi.fn() }}>
         <MemoryRouter initialEntries={["/students/10"]}>
           <Routes><Route path="/students/:studentId" element={<StudentCardPage />} /></Routes>
         </MemoryRouter>

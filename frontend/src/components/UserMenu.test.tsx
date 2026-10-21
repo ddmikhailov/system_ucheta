@@ -4,10 +4,10 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import UserMenu from "./UserMenu";
 
-function renderMenu(onLogout = vi.fn()) {
+function renderMenu(onLogout = vi.fn(), onLogoutAll = vi.fn()) {
   render(
     <MemoryRouter>
-      <UserMenu name="Иванова Анна Ивановна" onLogout={onLogout} />
+      <UserMenu name="Иванова Анна Ивановна" onLogout={onLogout} onLogoutAll={onLogoutAll} />
       <button>снаружи</button>
     </MemoryRouter>
   );
@@ -33,6 +33,18 @@ describe("UserMenu", () => {
     await user.click(toggle());
     await user.click(screen.getByRole("menuitem", { name: "Выйти" }));
     expect(onLogout).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("«Выйти на всех устройствах» — отдельный пункт, не путается с «Выйти»", async () => {
+    const user = userEvent.setup();
+    const onLogout = vi.fn();
+    const onLogoutAll = vi.fn();
+    renderMenu(onLogout, onLogoutAll);
+    await user.click(toggle());
+    await user.click(screen.getByRole("menuitem", { name: "Выйти на всех устройствах" }));
+    expect(onLogoutAll).toHaveBeenCalledTimes(1);
+    expect(onLogout).not.toHaveBeenCalled();
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 

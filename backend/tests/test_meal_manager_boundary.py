@@ -65,7 +65,7 @@ def test_meal_manager_cannot_write_anything_outside_meals(client, meal_manager_h
     spec = app.openapi()["paths"]
     for path, ops in spec.items():
         if path.startswith(ALLOWED_PREFIXES) or path in (
-            "/auth/logout", "/auth/login", "/auth/change-password", "/notifications/read-all",  # свои уведомления
+            "/auth/logout", "/auth/logout-all", "/auth/login", "/auth/change-password", "/notifications/read-all",  # свои уведомления
         ):
             continue
         for method in ("post", "put", "patch", "delete"):

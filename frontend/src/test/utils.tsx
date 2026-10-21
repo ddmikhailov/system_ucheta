@@ -1,6 +1,6 @@
 import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { RouterProvider, createMemoryRouter } from "react-router-dom";
 import { AuthContext } from "../auth/authContextObject";
 import type { AuthContextValue } from "../auth/authContextObject";
 import type { MeResponse } from "../api/types";
@@ -27,24 +27,26 @@ interface Options {
   /** Роль вошедшего пользователя; null — не вошёл. */
   role?: string | null;
   user?: Partial<MeResponse>;
+  /** Подмена функций контекста авторизации (например, logout — чтобы проверить вызов). */
+  auth?: Partial<AuthContextValue>;
 }
 
 /** Рисует компонент внутри роутера и контекста авторизации с заданной ролью. */
-export function renderPage(ui: ReactElement, { route = "/", path = "*", role = "admin", user }: Options = {}) {
+export function renderPage(ui: ReactElement, { route = "/", path = "*", role = "admin", user, auth }: Options = {}) {
   const value: AuthContextValue = {
     user: role === null ? null : makeUser(role, user),
     loading: false,
     login: async () => undefined,
     logout: () => undefined,
+    logoutAll: async () => undefined,
     refresh: async () => undefined,
+    ...auth,
   };
+  // Роутер с данными, как в приложении (createBrowserRouter): иначе useBlocker в журнале недоступен.
+  const router = createMemoryRouter([{ path, element: ui }], { initialEntries: [route] });
   return render(
     <AuthContext.Provider value={value}>
-      <MemoryRouter initialEntries={[route]}>
-        <Routes>
-          <Route path={path} element={ui} />
-        </Routes>
-      </MemoryRouter>
+      <RouterProvider router={router} />
     </AuthContext.Provider>
   );
 }
