@@ -73,4 +73,26 @@ describe("UserMenu", () => {
     expect(document.documentElement.dataset.theme).toBeUndefined();
     expect(localStorage.getItem("kait20_theme")).toBeNull();
   });
+
+  it("пункт про перенос отметок прошлого дня: показывает состояние и переключает его", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <MemoryRouter>
+        <UserMenu name="Иванова Анна Ивановна" onLogout={vi.fn()} carryOver onCarryOverChange={onChange} />
+      </MemoryRouter>
+    );
+    await user.click(toggle());
+    const item = screen.getByRole("menuitemcheckbox", { name: /Подставлять отметки прошлого дня/ });
+    expect(item).toHaveAttribute("aria-checked", "true");
+    await user.click(item);
+    expect(onChange).toHaveBeenCalledWith(false);
+  });
+
+  it("без настройки (не куратор) пункта нет", async () => {
+    const user = userEvent.setup();
+    renderMenu();
+    await user.click(toggle());
+    expect(screen.queryByRole("menuitemcheckbox")).not.toBeInTheDocument();
+  });
 });

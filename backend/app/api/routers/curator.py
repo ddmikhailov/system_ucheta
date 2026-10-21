@@ -54,7 +54,7 @@ def my_groups(user: User = Depends(get_current_user), db: Session = Depends(get_
     group_ids = get_curator_group_ids(db, user, today)
     result = []
     for group_id in group_ids:
-        roster = attendance_service.get_roster(db, group_id, today)
+        roster = attendance_service.get_roster(db, group_id, today, carry_over=False)
         assignment = next(a for a in user.curator_assignments if a.study_group_id == group_id and a.is_active_on(today))
         group = assignment.study_group
         result.append(
@@ -80,7 +80,7 @@ def get_day(
 
 def _roster_for(db: Session, user: User, study_group_id: int, date: datetime.date) -> dict:
     """Список дня плюс то, что нужно экрану: пойдёт ли правка на проверку и что с запросами."""
-    roster = attendance_service.get_roster(db, study_group_id, date)
+    roster = attendance_service.get_roster(db, study_group_id, date, carry_over=user.carry_over_marks)
     roster["edit_requires_review"] = attendance_service.edit_requires_review(db, user, study_group_id, date)
     roster["pending_change"], roster["last_change"] = attendance_change_service.for_day(db, study_group_id, date)
     return roster

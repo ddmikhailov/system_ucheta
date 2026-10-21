@@ -172,6 +172,8 @@ export interface MeResponse {
   groups: MeGroupInfo[];
   dept_head_name: string | null;
   must_change_password: boolean;
+  /** Подставлять ли в журнал дня отметки прошлого учебного дня («черновик»); личная настройка. */
+  carry_over_marks?: boolean;
   /** Включённые модули платформы (backend: ENABLED_MODULES); нет поля — считаем, что включено всё. */
   modules?: string[];
   // Заполнено только в ответе POST /auth/change-password.
@@ -331,6 +333,8 @@ export interface StudyGroupAdmin {
   curator_assignment_id: number | null;
   deputy_name: string | null;
   deputy_assignment_id: number | null;
+  /** Сколько студентов учится в группе сейчас (без академического отпуска и отчисленных). */
+  students_count?: number;
 }
 
 export interface DeleteResult {
@@ -398,6 +402,8 @@ export interface NotificationItem {
   entity_id: string | null;
   created_at: string;
   read_at: string | null;
+  /** Вкладка колокольчика: work — по основной деятельности, manage — по должности. */
+  category?: "work" | "manage";
 }
 
 export interface GroupDeletionPreview {

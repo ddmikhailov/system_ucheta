@@ -5,13 +5,26 @@ import { useAuth } from "../auth/useAuth";
 import { MANAGEMENT_ROLES, inRoles } from "../constants/roles";
 import type { NotificationItem } from "../api/types";
 import { formatServerDateTime } from "../utils/date";
+import { TabBar } from "./Tabs";
+
+type BellTab = "work" | "manage";
+interface UnreadCounts {
+  unread: number;
+  unread_work?: number;
+  unread_manage?: number;
+}
 
 const POLL_MS = 60_000;
 
 export default function NotificationBell() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [unread, setUnread] = useState(0);
+  const [counts, setCounts] = useState<UnreadCounts>({ unread: 0 });
+  const unread = counts.unread;
+  // Вкладки «Моя работа» / «Управление» нужны тем, у кого есть управленческая роль (или уже пришло управленческое).
+  const [tab, setTab] = useState<BellTab>("work");
+  const hasTabs = inRoles(user?.role, MANAGEMENT_ROLES) || (counts.unread_manage ?? 0) > 0;
+  const activeTab: BellTab = hasTabs ? tab : "work";
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>([]);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -26,7 +39,7 @@ export default function NotificationBell() {
   }, [open]);
 
   function refreshCount() {
-    api.get<{ unread: number }>("/notifications/unread-count").then((r) => setUnread(r.unread)).catch(() => {});
+    api.get<UnreadCounts>("/notifications/unread-count").then(setCounts).catch(() => {});
   }
 
   useEffect(() => {
@@ -35,18 +48,27 @@ export default function NotificationBell() {
     return () => clearInterval(id);
   }, []);
 
+  function loadItems(forTab: BellTab) {
+    const query = hasTabs ? `?category=${forTab}` : "";
+    api.get<NotificationItem[]>(`/notifications${query}`).then(setItems).catch(() => {});
+  }
+
   function toggleOpen() {
     const next = !open;
     setOpen(next);
-    if (next) {
-      api.get<NotificationItem[]>("/notifications").then(setItems).catch(() => {});
-    }
+    if (next) loadItems(activeTab);
+  }
+
+  function switchTab(next: string) {
+    setTab(next as BellTab);
+    setItems([]);
+    loadItems(next as BellTab);
   }
 
   async function markAllRead() {
-    await api.post("/notifications/read-all");
+    await api.post(hasTabs ? `/notifications/read-all?category=${activeTab}` : "/notifications/read-all");
     setItems((prev) => prev.map((n) => ({ ...n, read_at: n.read_at ?? new Date().toISOString() })));
-    setUnread(0);
+    refreshCount();
   }
 
   async function markRead(id: number) {
@@ -62,6 +84,12 @@ export default function NotificationBell() {
     if (!n.read_at) markRead(n.id);
     if (n.entity_type === "student" && n.entity_id) {
       navigate(`/students/${n.entity_id}`);
+      setOpen(false);
+      return;
+    }
+    if (n.entity_type === "password_reset" && n.entity_id) {
+      // Запрос «Восстановить пароль»: сразу на вкладку управления этим человеком, где выдаётся временный пароль.
+      navigate(`/admin/users/${n.entity_id}?tab=manage`);
       setOpen(false);
       return;
     }
@@ -91,12 +119,25 @@ export default function NotificationBell() {
         <div className="notification-bell__panel" role="dialog" aria-label="Уведомления">
           <div className="notification-bell__header">
             <b>Уведомления</b>
-            {unread > 0 && (
+            {(hasTabs ? (activeTab === "manage" ? counts.unread_manage : counts.unread_work) ?? 0 : unread) > 0 && (
               <button className="link-btn" onClick={markAllRead}>
                 Прочитать все
               </button>
             )}
           </div>
+          {hasTabs && (
+            <TabBar
+              variant="sub"
+              idPrefix="bell"
+              label="Раздел уведомлений"
+              active={activeTab}
+              onChange={switchTab}
+              tabs={[
+                { key: "work", label: "Моя работа", badge: counts.unread_work || undefined },
+                { key: "manage", label: "Управление", badge: counts.unread_manage || undefined },
+              ]}
+            />
+          )}
           {items.length === 0 && <p className="notification-bell__empty">Уведомлений нет.</p>}
           <ul className="notification-bell__list">
             {items.map((n) => (

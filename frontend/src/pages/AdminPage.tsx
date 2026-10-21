@@ -18,7 +18,8 @@ const VALID_TABS: Tab[] = ["departments", "groups", "students", "mark-codes", "u
 export default function AdminPage() {
   const { user } = useAuth();
   // Зав. отделением и тьютор работают в границах своего отделения.
-  const isDeptHead = inRoles(user?.role, DEPARTMENT_SCOPED_ROLES);
+  // Воспитательный отдел тоже привязан к отделению, но вкладки у него свои (справочники общие) — их задаёт isReferenceEditor.
+  const isDeptHead = inRoles(user?.role, DEPARTMENT_SCOPED_ROLES) && !inRoles(user?.role, REFERENCE_EDITOR_ROLES);
   const [searchParams, setSearchParams] = useSearchParams();
   // Вкладка теперь живёт в URL (?tab=...) — раньше сбрасывалась при
   // обновлении страницы, и на неё нельзя было дать прямую ссылку (см.

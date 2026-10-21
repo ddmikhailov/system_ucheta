@@ -1,5 +1,6 @@
 import datetime
 
+import sqlalchemy as sa
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -51,6 +52,10 @@ class User(Base):
     # немедленно, а не только через 12 часов по истечении срока (см.
     # TODO.md 2: раньше отозвать выданный токен было нечем).
     token_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # Личная настройка куратора: подставлять ли в журнал дня отметки предыдущего учебного дня
+    # как «черновик» (их можно поправить и сдать). Выключено — журнал дня открывается пустым.
+    carry_over_marks: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa.true(), nullable=False)
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, default=utcnow, nullable=False

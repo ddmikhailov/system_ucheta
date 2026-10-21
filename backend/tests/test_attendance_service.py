@@ -232,3 +232,18 @@ def test_consecutive_unexcused_count_resets_on_period_overwrite(imported, db, cu
 
     streak_after = attendance_service.consecutive_unexcused_count(db, student.id, DAY3 + datetime.timedelta(days=1))
     assert streak_after == 0
+
+
+def test_roster_without_carry_over_opens_empty(imported, db, curator_group, curator_user):
+    """Личная настройка куратора «не подставлять отметки прошлого дня»: журнал открывается без черновика."""
+    s1 = attendance_service.get_active_students(db, curator_group.id, DAY1)[0]
+    attendance_service.submit_day(
+        db, curator_group.id, DAY1,
+        [{"student_id": s1.id, "mark_code": "б", "comment": None, "basis_reference": None}],
+        curator_user, today=DAY1,
+    )
+    roster = attendance_service.get_roster(db, curator_group.id, DAY2, carry_over=False)
+    by_id = {e["student_id"]: e for e in roster["entries"]}
+    assert by_id[s1.id]["mark_code"] is None
+    assert by_id[s1.id]["is_draft_suggestion"] is False
+    assert not any(e["is_draft_suggestion"] for e in roster["entries"])

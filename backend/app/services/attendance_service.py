@@ -298,7 +298,8 @@ def count_manual_exceptions(db: Session, study_group_id: int, date: datetime.dat
     ).scalar_one()
 
 
-def get_roster(db: Session, study_group_id: int, date: datetime.date) -> dict:
+def get_roster(db: Session, study_group_id: int, date: datetime.date, carry_over: bool = True) -> dict:
+    """`carry_over=False` — личная настройка куратора «не подставлять отметки прошлого дня»: журнал открывается пустым."""
     active_students = get_active_students(db, study_group_id, date)
     student_ids = [s.id for s in active_students]
 
@@ -320,7 +321,7 @@ def get_roster(db: Session, study_group_id: int, date: datetime.date) -> dict:
     draft_marks: dict[int, AttendanceMark] = {}
     # «Черновик со вчера» подставляется только для сегодняшнего и прошлых дней: на будущий день
     # вчерашние отметки ничего не говорят, там могут стоять лишь заранее внесённые.
-    is_draft = submission is None and date <= today_local()
+    is_draft = carry_over and submission is None and date <= today_local()
     if is_draft and student_ids:
         prev_day = calendar_service.previous_study_day(db, date, study_group_id=study_group_id)
         if prev_day is not None:

@@ -124,6 +124,34 @@ describe("Уведомления (колокольчик)", () => {
     expect(await screen.findByText("3")).toBeInTheDocument();
   });
 
+  it("управленец: две вкладки со своими счётчиками; «Управление» запрашивает только свою категорию", async () => {
+    const user = userEvent.setup();
+    get.mockImplementation(async (path: string) => {
+      if (path === "/notifications/unread-count") return { unread: 3, unread_work: 2, unread_manage: 1 };
+      if (path === "/notifications?category=manage") {
+        return [{ id: 9, kind: "password_reset", message: "Иванов просит восстановить пароль", entity_type: "password_reset", entity_id: "5", created_at: "2026-10-01T09:00:00", read_at: null, category: "manage" }];
+      }
+      if (path === "/notifications?category=work") {
+        return [{ id: 8, kind: "task_assigned", message: "Новая задача", entity_type: "task_assignment", entity_id: "1", created_at: "2026-10-01T09:00:00", read_at: null, category: "work" }];
+      }
+      return [];
+    });
+    renderPage(<Layout><div /></Layout>, { role: "dept_head" });
+    await user.click(await screen.findByRole("button", { name: "Уведомления" }));
+    expect(await screen.findByText("Новая задача")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /Управление/ }));
+    expect(await screen.findByText("Иванов просит восстановить пароль")).toBeInTheDocument();
+    expect(screen.queryByText("Новая задача")).not.toBeInTheDocument();
+  });
+
+  it("куратору вкладок нет: один список", async () => {
+    const user = userEvent.setup();
+    get.mockImplementation(async (path: string) => (path === "/notifications/unread-count" ? { unread: 1, unread_work: 1, unread_manage: 0 } : []));
+    renderPage(<Layout><div /></Layout>, { role: "curator" });
+    await user.click(await screen.findByRole("button", { name: "Уведомления" }));
+    expect(screen.queryByRole("tab", { name: /Управление/ })).not.toBeInTheDocument();
+  });
+
   it("клик по уведомлению о задаче открывает назначение и помечает прочитанным", async () => {
     const user = userEvent.setup();
     const post = vi.mocked(api.post);
@@ -145,9 +173,13 @@ describe("Уведомления (колокольчик)", () => {
     const user = userEvent.setup();
     const post = vi.mocked(api.post);
     post.mockReset();
-    post.mockResolvedValue({ ok: true });
+    let readAll = false;
+    post.mockImplementation(async () => {
+      readAll = true;
+      return { ok: true };
+    });
     get.mockImplementation(async (path: string) => {
-      if (path === "/notifications/unread-count") return { unread: 2 };
+      if (path === "/notifications/unread-count") return { unread: readAll ? 0 : 2, unread_work: readAll ? 0 : 2, unread_manage: 0 };
       return [
         { id: 1, kind: "task_due_soon", message: "Скоро срок", entity_type: "task_assignment", entity_id: "1", created_at: "2026-10-01T09:00:00", read_at: null },
         { id: 2, kind: "task_overdue", message: "Просрочена", entity_type: "task_assignment", entity_id: "2", created_at: "2026-10-01T10:00:00", read_at: null },

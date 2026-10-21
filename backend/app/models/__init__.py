@@ -13,6 +13,7 @@ from app.models.enums import (
 )
 from app.models.marks import AbsencePeriod, AttendanceChangeRequest, AttendanceMark, DaySubmission, MarkCode
 from app.models.notifications import InAppNotification
+from app.models.password_reset import PasswordResetRequest
 from app.models.tasks import Task, TaskAssignment, TaskComment, TaskRow, TaskTemplate
 from app.models.meals import MealDayOverride, MealSubmission, StudentMeal
 from app.models.my_id import StudentMyId
@@ -37,6 +38,7 @@ __all__ = [
     "GroupEvent",
     "GroupEventAttendee",
     "InAppNotification",
+    "PasswordResetRequest",
     "MarkCode",
     "MarkSource",
     "ParentMeeting",

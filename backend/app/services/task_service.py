@@ -330,22 +330,22 @@ def can_review(user: User, assignment: TaskAssignment) -> bool:
     rule = task.reviewer_rule
     if rule == "two_step":
         if assignment.review_step == 1:
-            return role in DEPARTMENT_SCOPED_ROLES and user.department_id == assignment.study_group.department_id
-        return role == RoleCode.EDU_DEPARTMENT
+            return role in (RoleCode.DEPT_HEAD, RoleCode.TUTOR) and user.department_id == assignment.study_group.department_id
+        return role == RoleCode.EDU_DEPARTMENT and user.department_id == assignment.study_group.department_id
     if rule == "dept_head":
-        return role in DEPARTMENT_SCOPED_ROLES and user.department_id == assignment.study_group.department_id
+        return role in (RoleCode.DEPT_HEAD, RoleCode.TUTOR) and user.department_id == assignment.study_group.department_id
     if rule == "edu_department":
-        return role == RoleCode.EDU_DEPARTMENT
+        return role == RoleCode.EDU_DEPARTMENT and user.department_id == assignment.study_group.department_id
     if rule == "author":
         return user.id == task.created_by
     return False
 
 
 def manager_sees(user: User, assignment: TaskAssignment) -> bool:
-    """Управленческий просмотр: администратор и воспитательный отдел — всё, зав. отделением
-    и тьютор — группы своего отделения, автор — свою задачу."""
+    """Управленческий просмотр: администратор — всё, зав. отделением,
+    тьютор и воспитательный отдел — группы своего отделения, автор — свою задачу."""
     role = RoleCode(user.role.code)
-    if role in (RoleCode.ADMIN, RoleCode.EDU_DEPARTMENT):
+    if role == RoleCode.ADMIN:
         return True
     if role in DEPARTMENT_SCOPED_ROLES and user.department_id == assignment.study_group.department_id:
         return True
@@ -468,7 +468,8 @@ def reviewers_to_notify(db: Session, assignment: TaskAssignment) -> list[User]:
         ).all()
     if task.reviewer_rule == "edu_department" or (task.reviewer_rule == "two_step" and assignment.review_step == 2):
         return db.query(User).join(User.role).filter(
-            User.is_active.is_(True), User.role.has(code=RoleCode.EDU_DEPARTMENT.value)
+            User.is_active.is_(True), User.role.has(code=RoleCode.EDU_DEPARTMENT.value),
+            User.department_id == assignment.study_group.department_id,
         ).all()
     if task.reviewer_rule == "author" and task.author is not None and task.author.is_active:
         return [task.author]

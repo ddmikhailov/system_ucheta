@@ -3,7 +3,7 @@ import datetime
 import jwt
 from fastapi import Cookie, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.roles import DEPARTMENT_SCOPED_ROLES, DOSSIER_STAFF_ROLES, MEAL_VIEW_ROLES, is_department_scoped
 from app.core.config import get_settings
@@ -57,7 +57,8 @@ def get_current_user(
     except jwt.PyJWTError:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Токен недействителен")
 
-    user = db.get(User, int(payload["sub"]))
+    # Роль нужна почти каждому эндпоинту — грузим вместе с пользователем, а не вторым запросом.
+    user = db.get(User, int(payload["sub"]), options=[joinedload(User.role)])
     if user is None or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Пользователь не найден или заблокирован")
     # Токены, выпущенные до этого поля, не несут "tv" — считаем их версией 0,

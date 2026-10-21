@@ -8,7 +8,7 @@ import type { DepartmentAdmin, UserActivityEntry, UserActivityPage, UserProfile 
 import { Kpi, ProfileHero } from "../components/ProfileHero";
 import { TabBar, TabPanel, type TabItem } from "../components/Tabs";
 import { AUDIT_AREAS, auditActionLabel } from "../constants/auditActions";
-import { ROLE_LABELS, STRUCTURE_EDITOR_ROLES, inRoles, type RoleCode } from "../constants/roles";
+import { MANAGEMENT_ROLES, ROLE_LABELS, STRUCTURE_EDITOR_ROLES, inRoles, type RoleCode } from "../constants/roles";
 import { useTabParam } from "../hooks/useTabParam";
 import { formatDateRu, formatServerDateTimeFull, parseServerDateTime } from "../utils/date";
 import { plural } from "../utils/plural";
@@ -26,7 +26,9 @@ export default function UserProfilePage() {
   const { userId } = useParams();
   const navigate = useNavigate();
   const { user: me } = useAuth();
-  const canManage = inRoles(me?.role, STRUCTURE_EDITOR_ROLES);
+  // Воспитательный отдел видит вкладку «Управление» только ради выдачи пароля (passwordOnly).
+  const canManage = inRoles(me?.role, MANAGEMENT_ROLES);
+  const passwordOnly = !inRoles(me?.role, STRUCTURE_EDITOR_ROLES);
   const [tab, setTab] = useTabParam(USER_TABS, "overview");
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -45,9 +47,9 @@ export default function UserProfilePage() {
 
   useEffect(load, [load]);
   useEffect(() => {
-    if (!canManage) return;
+    if (!canManage || passwordOnly) return;
     api.get<DepartmentAdmin[]>("/admin/departments").then(setDepartments).catch(() => {});
-  }, [canManage]);
+  }, [canManage, passwordOnly]);
 
   const back = (
     <p>
@@ -231,6 +233,7 @@ export default function UserProfilePage() {
             me={me}
             departments={departments}
             onChanged={load}
+            passwordOnly={passwordOnly}
             onDeleted={(detail) => navigate("/admin?tab=users", { state: { notice: detail } })}
           />
         </TabPanel>
