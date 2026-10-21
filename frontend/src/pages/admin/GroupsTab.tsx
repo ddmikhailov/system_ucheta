@@ -4,7 +4,7 @@ import { api, ApiError } from "../../api/client";
 import { useAuth } from "../../auth/useAuth";
 import AssignCuratorModal from "../../components/AssignCuratorModal";
 import DeleteGroupForeverModal from "../../components/DeleteGroupForeverModal";
-import { CURATOR_CAPABLE_ROLES, DEPARTMENT_SCOPED_ROLES, FORCE_DELETE_GROUP_ROLES, inRoles } from "../../constants/roles";
+import { CURATOR_CAPABLE_ROLES, DEPARTMENT_SCOPED_ROLES, FORCE_DELETE_ROLES, inRoles } from "../../constants/roles";
 import { useEscapeKey } from "../../hooks/useEscapeKey";
 import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { DeleteResult, DepartmentAdmin, StudyGroupAdmin, UserAdmin } from "../../api/types";
@@ -232,7 +232,7 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
         <GroupDetailModal
           group={detailGroup}
           curators={curators}
-          canDeleteForever={inRoles(myRole, FORCE_DELETE_GROUP_ROLES)}
+          canDeleteForever={inRoles(myRole, FORCE_DELETE_ROLES)}
           onClose={() => setDetailId(null)}
           onChanged={load}
           setNotice={setNotice}

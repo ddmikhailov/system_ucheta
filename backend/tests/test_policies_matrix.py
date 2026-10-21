@@ -40,8 +40,12 @@ MANAGE_USER_CASES = [
     (DEPT_HEAD, DEPT_A, CURATOR, DEPT_A, True),
     (DEPT_HEAD, DEPT_A, DEPUTY_CURATOR, DEPT_A, True),
     (DEPT_HEAD, DEPT_A, CURATOR, DEPT_B, False),  # чужое отделение
-    (DEPT_HEAD, DEPT_A, DEPT_HEAD, DEPT_A, False),  # не может управлять другим зав. отделением
+    (DEPT_HEAD, DEPT_A, DEPT_HEAD, DEPT_A, True),  # как админ в своём отделении: и другим зав. отделением
+    (DEPT_HEAD, DEPT_A, TUTOR, DEPT_A, True),
+    (DEPT_HEAD, DEPT_A, DEPT_HEAD, DEPT_B, False),
     (DEPT_HEAD, DEPT_A, ADMIN, None, False),
+    (DEPT_HEAD, DEPT_A, EDU_DEPARTMENT, DEPT_A, True),  # воспитательный отдел теперь закреплён за отделением
+    (DEPT_HEAD, DEPT_A, EDU_DEPARTMENT, DEPT_B, False),
     (DEPT_HEAD, None, CURATOR, DEPT_A, False),  # у самого нет отделения
     (EDU_DEPARTMENT, None, CURATOR, DEPT_A, False),  # у самого нет отделения
     (EDU_DEPARTMENT, DEPT_A, CURATOR, DEPT_A, True),  # воспитательный отдел выдаёт пароли в своём отделении
@@ -82,8 +86,8 @@ ASSIGN_ROLE_CASES = [
     (DEPT_HEAD, DEPUTY_CURATOR, True),
     (DEPT_HEAD, DEPT_HEAD, True),
     (DEPT_HEAD, ADMIN, False),
-    (DEPT_HEAD, TUTOR, False),
-    (DEPT_HEAD, EDU_DEPARTMENT, False),
+    (DEPT_HEAD, TUTOR, True),
+    (DEPT_HEAD, EDU_DEPARTMENT, True),
     (TUTOR, CURATOR, True),
     (TUTOR, DEPT_HEAD, False),
     (TUTOR, ADMIN, False),

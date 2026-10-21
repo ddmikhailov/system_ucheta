@@ -284,28 +284,17 @@ describe("GroupsTab — удаление группы", () => {
     }
   });
 
-  it("зав. отделением навсегда не удаляет: у архивной группы — обычное «Удалить насовсем», у активной кнопки нет", async () => {
+  it("зав. отделением может удалить группу навсегда — кнопка есть и у активной, и у архивной", async () => {
     const u = userEvent.setup();
     renderPage(<GroupsTab canEdit canCreate />, { role: "dept_head", user: { department_name: "Диджитал" } });
     await u.click(await screen.findByRole("button", { name: "СА172" }));
-    let dialog = await screen.findByRole("dialog", { name: "СА172" });
-    expect(within(dialog).queryByRole("button", { name: /Удалить/ })).not.toBeInTheDocument();
-    await u.click(within(dialog).getByRole("button", { name: "Закрыть" }));
-
-    await u.click(screen.getByRole("button", { name: "Отключённые (1)" }));
-    await u.click(screen.getByRole("button", { name: "АРХ-1" }));
-    dialog = await screen.findByRole("dialog", { name: "АРХ-1" });
-    del.mockResolvedValue({ deleted: true, anonymized: false, detail: "Группа удалена" });
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-    await u.click(within(dialog).getByRole("button", { name: "Удалить насовсем" }));
-    expect(del).toHaveBeenCalledWith("/admin/groups/3");
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(screen.getByText("Группа удалена")).toBeInTheDocument();
+    const dialog = await screen.findByRole("dialog", { name: "СА172" });
+    expect(within(dialog).getByRole("button", { name: "Удалить группу навсегда…" })).toBeInTheDocument();
   });
 
   it("обычное удаление: отказ в подтверждении ничего не отправляет, ошибка сервера показывается", async () => {
     const u = userEvent.setup();
-    renderPage(<GroupsTab canEdit canCreate />, { role: "dept_head", user: { department_name: "Диджитал" } });
+    renderPage(<GroupsTab canEdit canCreate />, { role: "edu_department" });
     await u.click(await screen.findByRole("button", { name: "Отключённые (1)" }));
     await u.click(screen.getByRole("button", { name: "АРХ-1" }));
     const dialog = await screen.findByRole("dialog", { name: "АРХ-1" });

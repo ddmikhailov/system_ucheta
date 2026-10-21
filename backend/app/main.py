@@ -8,7 +8,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routers import admin, attendance_changes, auth, curator, dashboards, dossier, dossier_import, export, individual_work, my_day, notifications, passport, students, tasks, events, meetings, reports, my_id, meals, contingent_import
+from app.api.routers import admin, attendance_changes, student_deletions, auth, curator, dashboards, dossier, dossier_import, export, individual_work, my_day, notifications, passport, students, tasks, events, meetings, reports, my_id, meals, contingent_import
 from app.core.config import get_settings
 from app.core.modules import enabled_modules
 from app.core.observability import init_sentry
@@ -98,6 +98,7 @@ MODULE_ROUTERS = (
     (auth.router, None),
     (curator.router, None),
     (attendance_changes.router, None),
+    (student_deletions.router, None),
     (dashboards.router, None),
     (admin.router, None),
     (export.router, None),

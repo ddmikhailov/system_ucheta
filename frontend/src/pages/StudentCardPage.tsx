@@ -3,7 +3,7 @@ import type { FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/useAuth";
-import { DOSSIER_AUDIT_ROLES, DOSSIER_STAFF_ROLES, STRUCTURE_EDITOR_ROLES, TEACHER_ROLES, inRoles } from "../constants/roles";
+import { DOSSIER_AUDIT_ROLES, DOSSIER_STAFF_ROLES, FORCE_DELETE_ROLES, STRUCTURE_EDITOR_ROLES, TEACHER_ROLES, inRoles } from "../constants/roles";
 import { STUDENT_STATUS_LABELS } from "../constants/studentStatus";
 import AbsenceMessageButton from "../components/AbsenceMessageButton";
 import AbsenceSheetButton from "../components/AbsenceSheetButton";
@@ -17,6 +17,7 @@ import { useTabParam } from "../hooks/useTabParam";
 import type { DeleteResult, StudentCard, StudyGroupAdmin } from "../api/types";
 import { formatDateRu, todayIso } from "../utils/date";
 import SearchSelect from "../components/SearchSelect";
+import StudentDeletionRequestBox from "../components/StudentDeletionRequestBox";
 import { dialogs } from "../utils/feedback";
 import { MODULE } from "../constants/modules";
 import { isModuleOn } from "../utils/modules";
@@ -231,6 +232,9 @@ export default function StudentCardPage() {
             </tbody>
           </table>
         )}
+        {!inRoles(user?.role, FORCE_DELETE_ROLES) && !canManage && card.status !== "studying" && inRoles(user?.role, TEACHER_ROLES) && (
+          <StudentDeletionRequestBox studentId={card.id} />
+        )}
       </TabPanel>
 
       <TabPanel idPrefix="student" tabKey="history" active={activeTab}>
@@ -299,6 +303,7 @@ function ManageSection({
   setNotice: (n: string | null) => void;
   setError: (e: string | null) => void;
 }) {
+  const { user } = useAuth();
   const [lastName, setLastName] = useState(card.last_name);
   const [firstName, setFirstName] = useState(card.first_name);
   const [middleName, setMiddleName] = useState(card.middle_name ?? "");
@@ -359,11 +364,16 @@ function ManageSection({
   }
 
   async function removeStudent() {
-    if (!(await dialogs.confirm(`Удалить студента «${card.full_name}» насовсем?`, { confirmLabel: "Удалить", danger: true }))) return;
+    // Админ/тьютор стирают студента целиком; остальные — прежнее удаление (с историей посещаемости — обезличивание).
+    const erase = inRoles(user?.role, FORCE_DELETE_ROLES);
+    const question = erase
+      ? `Удалить студента «${card.full_name}» навсегда? Вместе с ним сотрутся отметки посещаемости, досье, история и записи в журнале. Это необратимо.`
+      : `Удалить студента «${card.full_name}» насовсем?`;
+    if (!(await dialogs.confirm(question, { confirmLabel: "Удалить", danger: true }))) return;
     setBusy(true);
     setError(null);
     try {
-      const res = await api.delete<DeleteResult>(`/admin/students/${card.id}`);
+      const res = await api.delete<DeleteResult>(`/admin/students/${card.id}${erase ? "?force=true" : ""}`);
       onDeleted(res.detail);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Не удалось удалить");

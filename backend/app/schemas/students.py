@@ -1,6 +1,6 @@
 import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class StudentCardGroup(BaseModel):
@@ -94,3 +94,20 @@ class StudentMonthAttendance(BaseModel):
     first_month: str  # YYYY-MM — самый ранний месяц, который имеет смысл листать
     summary: StudentMonthSummary
     days: list[StudentDayAttendance]
+
+
+class StudentDeletionCreate(BaseModel):
+    student_id: int
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class StudentDeletionRead(BaseModel):
+    id: int
+    student_id: int
+    student_name: str
+    group_code: str
+    reason: str
+    status: str
+    requested_by_name: str
+    created_at: datetime.datetime
+    review_comment: str | None = None

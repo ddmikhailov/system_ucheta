@@ -85,7 +85,8 @@ def create_user(payload: UserCreate, admin: User = Depends(require_dept_editor),
     role = db.query(Role).filter(Role.code == payload.role).one_or_none()
     if role is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Неизвестная роль")
-    if payload.role in policies.ELEVATED_ROLES and RoleCode(admin.role.code) != RoleCode.ADMIN:
+    dept_head_makes_tutor = RoleCode(admin.role.code) == RoleCode.DEPT_HEAD and payload.role == RoleCode.TUTOR.value
+    if payload.role in policies.ELEVATED_ROLES and RoleCode(admin.role.code) != RoleCode.ADMIN and not dept_head_makes_tutor:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, "Только администратор может создавать учётки администратора/тьютора"
         )

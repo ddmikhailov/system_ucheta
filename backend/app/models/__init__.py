@@ -18,6 +18,7 @@ from app.models.tasks import Task, TaskAssignment, TaskComment, TaskRow, TaskTem
 from app.models.meals import MealDayOverride, MealSubmission, StudentMeal
 from app.models.my_id import StudentMyId
 from app.models.org import Department, StudyGroup
+from app.models.student_deletion import StudentDeletionRequest
 from app.models.people import CuratorAssignment, Student, StudentGroupMembership
 
 __all__ = [
@@ -53,6 +54,7 @@ __all__ = [
     "StudentMyId",
     "StudentNote",
     "StudentProfile",
+    "StudentDeletionRequest",
     "StudentGroupMembership",
     "StudentStatus",
     "StudyGroup",
