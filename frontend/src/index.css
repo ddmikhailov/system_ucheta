@@ -1168,10 +1168,21 @@ select:hover {
     align-items: center;
   }
 
+  /* Колокольчик на телефоне стоит не у правого края (правее — имя), и панель, прижатая к нему справа, уходила
+     за левый край экрана. Теперь она отсчитывается от всей шапки и растянута по её ширине с отступами. */
+  .app-topbar {
+    position: relative;
+  }
+
+  .notification-bell {
+    position: static;
+  }
+
   .notification-bell__panel {
-    width: calc(100vw - 32px);
-    max-width: 360px;
-    right: -8px;
+    left: 14px;
+    right: 14px;
+    width: auto;
+    max-height: min(400px, calc(100vh - 140px));
   }
 
   .modal {

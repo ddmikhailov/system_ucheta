@@ -65,6 +65,19 @@ test('главные экраны куратора на 375 px без гориз
     ['Карточка студента', `/students/${studentId}`, '.app-main h2'],
     ['Мои задачи', '/my-tasks', '.app-main a[href^="/tasks/assignment/"]'],
   ]
+  await test.step('Панель уведомлений', async () => {
+    await open(page, '/my-day', '.app-main h2, .app-main h3')
+    await page.getByRole('button', { name: 'Уведомления' }).click()
+    const box = await page.getByRole('dialog', { name: 'Уведомления' }).boundingBox()
+    expect(box, 'панель колокольчика открылась').not.toBeNull()
+    // Панель целиком на экране: раньше на телефоне она уходила за левый край.
+    expect(box!.x).toBeGreaterThanOrEqual(0)
+    expect(box!.x + box!.width).toBeLessThanOrEqual(375)
+    if (process.env.E2E_SCREENSHOTS) await page.screenshot({ path: `${process.env.E2E_SCREENSHOTS}/Уведомления.png` })
+    await page.keyboard.press('Escape')
+    await page.getByRole('button', { name: 'Уведомления' }).click()
+  })
+
   for (const [name, path, ready] of screens) {
     await test.step(name, async () => {
       await open(page, path, ready)
