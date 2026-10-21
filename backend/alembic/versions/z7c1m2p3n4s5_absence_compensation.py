@@ -32,6 +32,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index('ix_absence_compensations_student_id', table_name='absence_compensations')
+    # Индекс уходит вместе с таблицей; отдельный drop_index на MySQL падает: он нужен внешнему ключу student_id.
     op.drop_table('absence_compensations')
     op.drop_column('mark_codes', 'no_compensation')

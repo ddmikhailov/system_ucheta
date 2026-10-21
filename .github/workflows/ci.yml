@@ -74,7 +74,7 @@ jobs:
         working-directory: backend
         run: pip install -r requirements-dev.txt
 
-      - name: Миграции на пустой MySQL (одна голова, upgrade head)
+      - name: Миграции на пустой MySQL (одна голова, upgrade, откат к прошлому релизу)
         working-directory: backend
         env:
           JWT_SECRET: Ci4vXn8Lw2KzR7pYb5HdJ9cMfA3sUe6Gt
@@ -86,6 +86,10 @@ jobs:
           heads=$(alembic heads | wc -l)
           if [ "$heads" -ne 1 ]; then alembic heads; echo "Голов миграций: $heads, должна быть одна"; exit 1; fi
           mysql -h 127.0.0.1 -u root -e "CREATE DATABASE kait20_migrate CHARACTER SET utf8mb4"
+          alembic upgrade head
+          # Откат к голове прошлого релиза и обратно — это шаги отката из памятки к выкладке.
+          # При выпуске следующей версии сюда ставится голова только что выпущенной (3.5.1 — w4f5g6h7i8j9).
+          alembic downgrade w4f5g6h7i8j9
           alembic upgrade head
 
       - name: pytest (MySQL)

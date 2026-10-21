@@ -32,5 +32,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index('ix_password_reset_requests_user_status', table_name='password_reset_requests')
+    # Индекс уходит вместе с таблицей; отдельный drop_index на MySQL падает: он нужен внешнему ключу user_id.
     op.drop_table('password_reset_requests')
