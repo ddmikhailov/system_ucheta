@@ -18,7 +18,7 @@ function open(forced: boolean) {
   const refresh = vi.fn().mockResolvedValue(undefined);
   render(
     <AuthContext.Provider
-      value={{ user: makeUser("curator", { must_change_password: forced, full_name: "Иванова Анна" }), loading: false, login: vi.fn(), logout: vi.fn(), refresh }}
+      value={{ user: makeUser("curator", { must_change_password: forced, full_name: "Иванова Анна" }), loading: false, login: vi.fn(), logout: vi.fn(), logoutAll: vi.fn(), refresh }}
     >
       <MemoryRouter initialEntries={["/prev", "/change-password"]} initialIndex={1}>
         <Routes>

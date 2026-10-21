@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import StatusMark from "../components/StatusMark";
 import { markKind } from "../utils/statusMark";
@@ -8,6 +8,7 @@ import AnswerInput from "../components/task/AnswerInput";
 import AssignmentThread from "../components/task/AssignmentThread";
 import ProgressRing from "../components/task/ProgressRing";
 import { COLLECT_MODE_LABELS, REVIEWER_LABELS, TASK_STATUS_LABELS } from "../constants/tasks";
+import { useGoBack } from "../hooks/useGoBack";
 import { useUnsavedWarning } from "../hooks/useUnsavedWarning";
 import { formatDateRu, formatDueShort, formatServerDateTimeFull, formatTimeRu } from "../utils/date";
 import { relativeDue } from "../utils/deadline";
@@ -114,7 +115,7 @@ function FillColumn({
 // Заполнение назначения куратором (автосохранение черновика → отправка) и проверка: принять / вернуть.
 export default function TaskAssignmentPage() {
   const { assignmentId } = useParams();
-  const navigate = useNavigate();
+  const { goBack: back } = useGoBack("/");
   const [detail, setDetail] = useState<AssignmentDetail | null>(null);
   const [groupValues, setGroupValues] = useState<Values>({});
   const [rows, setRows] = useState<Record<number, RowState>>({});
@@ -384,8 +385,8 @@ export default function TaskAssignmentPage() {
       version.current = savedVersion.current;
       writeDraft(assignmentId, null);
     }
-    if (window.history.length > 1) navigate(-1);
-    else navigate("/");
+    // Пришли из платформы — туда же (список задач, «Мой день»); открыли по ссылке — на главную.
+    back();
   }
 
   if (detail.kind === "meal") {

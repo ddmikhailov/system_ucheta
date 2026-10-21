@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useEntryState } from "../hooks/useEntryState";
 import { api, ApiError, downloadFile } from "../api/client";
 import type { MealOverview, MealOverviewRow } from "../api/types";
 import ResultsBar from "../components/dashboards/ResultsBar";
@@ -28,17 +29,17 @@ function nextMonday(): string {
 
 /** Вкладка «Питание»: своды питающихся по группам и отделениям на неделю — подано куратором или прогноз. */
 export default function MealsPage() {
-  const [week, setWeek] = useState(nextMonday);
+  const [week, setWeek] = useEntryState("week", nextMonday);
   const [data, setData] = useState<MealOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const [query, setQuery] = useState("");
-  const [department, setDepartment] = useState<number | "all">("all");
-  const [course, setCourse] = useState<number | "all">("all");
-  const [status, setStatus] = useState<Status | "all">("all");
-  const [sort, setSort] = useState<SortState<string> | null>(null);
+  const [query, setQuery] = useEntryState("query", "");
+  const [department, setDepartment] = useEntryState<number | "all">("department", "all");
+  const [course, setCourse] = useEntryState<number | "all">("course", "all");
+  const [status, setStatus] = useEntryState<Status | "all">("status", "all");
+  const [sort, setSort] = useEntryState<SortState<string> | null>("sort", null);
   const [openGroup, setOpenGroup] = useState<MealOverviewRow | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
 

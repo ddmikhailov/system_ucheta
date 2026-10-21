@@ -11,7 +11,7 @@ import LoginPage from "./LoginPage";
 function renderLogin(over: Partial<AuthContextValue> = {}) {
   const value: AuthContextValue = {
     user: null, loading: false, login: vi.fn().mockResolvedValue(undefined),
-    logout: vi.fn(), refresh: vi.fn(), ...over,
+    logout: vi.fn(), logoutAll: vi.fn(), refresh: vi.fn(), ...over,
   };
   render(
     <AuthContext.Provider value={value}>

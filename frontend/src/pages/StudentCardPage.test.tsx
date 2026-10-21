@@ -72,7 +72,7 @@ function open(role: string, c: StudentCard = card(), tab?: string, modules?: str
     throw new Error(`неожиданный запрос ${path}`);
   });
   render(
-    <AuthContext.Provider value={{ user: makeUser(role, modules ? { modules } : {}), loading: false, login: vi.fn(), logout: vi.fn(), refresh: vi.fn() }}>
+    <AuthContext.Provider value={{ user: makeUser(role, modules ? { modules } : {}), loading: false, login: vi.fn(), logout: vi.fn(), logoutAll: vi.fn(), refresh: vi.fn() }}>
       <MemoryRouter initialEntries={[tab ? `/students/10?tab=${tab}` : "/students/10"]}>
         <Routes>
           <Route path="/students/:studentId" element={<StudentCardPage />} />
@@ -177,7 +177,7 @@ describe("StudentCardPage — просмотр", () => {
   it("ошибка загрузки (чужая группа) показывается вместо карточки", async () => {
     get.mockRejectedValue(new ApiError(403, "Это не ваша группа"));
     render(
-      <AuthContext.Provider value={{ user: makeUser("curator"), loading: false, login: vi.fn(), logout: vi.fn(), refresh: vi.fn() }}>
+      <AuthContext.Provider value={{ user: makeUser("curator"), loading: false, login: vi.fn(), logout: vi.fn(), logoutAll: vi.fn(), refresh: vi.fn() }}>
         <MemoryRouter initialEntries={["/students/10"]}>
           <Routes><Route path="/students/:studentId" element={<StudentCardPage />} /></Routes>
         </MemoryRouter>
@@ -193,10 +193,11 @@ describe("StudentCardPage — ссылка «назад» по роли", () => 
     // Куратор возвращается к списку своей группы.
     ["curator", "← К группе СА172", "/cabinet/groups/7?tab=students"],
     ["deputy_curator", "← К группе СА172", "/cabinet/groups/7?tab=students"],
-    ["psychologist", "← К поиску студентов", "/students"],
-    ["social_pedagogue", "← К поиску студентов", "/students"],
-    ["admin", "← К списку студентов", "/admin?tab=students"],
-    ["dept_head", "← К списку студентов", "/admin?tab=students"],
+    // Открыли карточку напрямую — сотрудник попадает в поиск/список, сразу отфильтрованный по группе студента.
+    ["psychologist", "← К поиску студентов", "/students?group=7"],
+    ["social_pedagogue", "← К поиску студентов", "/students?group=7"],
+    ["admin", "← К списку студентов", "/admin?tab=students&group=7"],
+    ["dept_head", "← К списку студентов", "/admin?tab=students&group=7"],
   ])("%s", async (role, label, href) => {
     open(role);
     expect(await screen.findByRole("link", { name: label })).toHaveAttribute("href", href);

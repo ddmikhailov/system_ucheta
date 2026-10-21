@@ -10,6 +10,7 @@ import { TabBar, TabPanel, type TabItem } from "../components/Tabs";
 import { AUDIT_AREAS, auditActionLabel } from "../constants/auditActions";
 import { MANAGEMENT_ROLES, ROLE_LABELS, STRUCTURE_EDITOR_ROLES, inRoles, type RoleCode } from "../constants/roles";
 import { useTabParam } from "../hooks/useTabParam";
+import BackLink from "../components/BackLink";
 import { formatDateRu, formatServerDateTimeFull, parseServerDateTime } from "../utils/date";
 import { plural } from "../utils/plural";
 import { userStatusLabel } from "../utils/userStatus";
@@ -53,9 +54,9 @@ export default function UserProfilePage() {
 
   const back = (
     <p>
-      <Link to="/admin?tab=users" className="link-btn">
+      <BackLink to="/admin?tab=users">
         ← К пользователям
-      </Link>
+      </BackLink>
     </p>
   );
 

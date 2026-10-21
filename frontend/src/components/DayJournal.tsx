@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useBlocker, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/useAuth";
 import { MODULE } from "../constants/modules";
@@ -9,10 +9,13 @@ import DayActionsBar from "./DayActionsBar";
 import MarkCodeButtons from "./MarkCodeButtons";
 import MarkCommentModal from "./MarkCommentModal";
 import { scrollToTop } from "../utils/scroll";
+import { usePatchSearch } from "../hooks/useUrlState";
 import type { MarkCodeOption, MonthDayStatus, MyDayRhythmDay, RosterAbsencePeriod, RosterResponse } from "../api/types";
 import { formatServerDateTime, todayIso } from "../utils/date";
 import SearchSelect from "./SearchSelect";
 import { dialogs, toast } from "../utils/feedback";
+import { useUnsavedWarning } from "../hooks/useUnsavedWarning";
+import { clearJournalDraft, journalDraftKey, readJournalDraft, saveJournalDraft } from "../utils/journalDraft";
 import GroupListModal from "./GroupListModal";
 import StudentCardModal from "./StudentCardModal";
 import GroupRhythm from "./GroupRhythm";
@@ -83,6 +86,7 @@ export default function DayJournal({
   onSubmitted,
 }: DayJournalProps) {
   const { user } = useAuth();
+  const userId = user?.id;
   const [searchParams] = useSearchParams();
   const deepLinkGroupId = searchParams.get("group");
   const deepLinkDate = searchParams.get("date");
@@ -110,6 +114,27 @@ export default function DayJournal({
   const [firstPeriod, setFirstPeriod] = useState("");
   // Выбранное отделение; пока не выбирали — отделение текущей группы.
   const [departmentChoice, setDepartmentChoice] = useState<number | null>(null);
+  // Черновик в sessionStorage — для того дня, что сейчас загружен в форму (а не выбран: новый ещё грузится).
+  const draftKey = useRef<string | null>(null);
+  const restoredKey = useRef<string | null>(null);
+
+  // Группа и день — в адресе (день — только прошедший, сегодняшний не пишем): из карточки студента
+  // и после обновления страницы журнал открывается там же. Браузерная «Назад» и ссылка из списка
+  // исправлений меняют адрес — журнал переходит к этой группе и дню.
+  const patchSearch = usePatchSearch();
+  useEffect(() => {
+    patchSearch({
+      ...(fixedGroupId ? {} : { group: groupId === null ? null : String(groupId) }),
+      date: date === today ? null : date,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupId, date]);
+  useEffect(() => {
+    if (!fixedGroupId && deepLinkGroupId && Number(deepLinkGroupId) !== groupId) setGroupId(Number(deepLinkGroupId));
+    const urlDate = deepLinkDate && deepLinkDate <= today ? deepLinkDate : today;
+    if (urlDate !== date) setDate(urlDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinkGroupId, deepLinkDate]);
 
   function loadGroups() {
     fetchGroups()
@@ -142,17 +167,38 @@ export default function DayJournal({
     setEditing(false);
   }, []);
 
+  // Несданные отметки этого дня из черновика вкладки: сессия истекла, страницу перезагрузили или ушли с неё.
+  // Только если день на сервере не менялся с начала правки — иначе черновик устарел и стирается.
+  const restoreDraft = useCallback((r: RosterResponse, key: string) => {
+    const draft = readJournalDraft(key);
+    if (!draft) return;
+    if (draft.baseline !== JSON.stringify(pendingFrom(r)) || draft.submitted !== r.is_submitted) {
+      clearJournalDraft(key);
+      return;
+    }
+    const editable = new Set(r.entries.filter((e) => !e.is_locked).map((e) => e.student_id));
+    setPending(Object.fromEntries(Object.entries(draft.pending).filter(([id]) => editable.has(Number(id)))));
+    setFirstPeriod(draft.firstPeriod);
+    if (r.is_submitted) setEditing(true);
+    // День перечитывается и после действий на странице (период отсутствия, решение по исправлению) — сообщаем один раз.
+    if (restoredKey.current !== key) toast("Восстановлены несданные отметки этого дня", "info");
+    restoredKey.current = key;
+  }, []);
+
   const loadRoster = useCallback(async () => {
     if (!groupId) return;
     setError(null);
     try {
-      applyRoster(await api.get<RosterResponse>(`/curator/groups/${groupId}/day?date=${date}`));
+      const r = await api.get<RosterResponse>(`/curator/groups/${groupId}/day?date=${date}`);
+      applyRoster(r);
+      draftKey.current = userId != null ? journalDraftKey(userId, groupId, date) : null;
+      if (draftKey.current) restoreDraft(r, draftKey.current);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Не удалось загрузить день");
     }
     // carryOver: смена настройки «подставлять отметки прошлого дня» в меню пользователя перечитывает журнал.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupId, date, applyRoster, user?.carry_over_marks]);
+  }, [groupId, date, userId, applyRoster, restoreDraft, user?.carry_over_marks]);
 
   useEffect(() => {
     loadRoster();
@@ -197,6 +243,31 @@ export default function DayJournal({
   // Есть несохранённые правки: форма открыта и отличается от загруженного дня.
   const dirty = !!roster && (editing || !roster.is_submitted) && JSON.stringify(pending) !== JSON.stringify(pendingFrom(roster));
 
+  // Каждая правка сразу ложится в черновик вкладки; сдали день или отменили правку — черновик стирается.
+  useEffect(() => {
+    const key = draftKey.current;
+    if (!key || !roster) return;
+    if (dirty) {
+      saveJournalDraft(key, { pending, firstPeriod, baseline: JSON.stringify(pendingFrom(roster)), submitted: roster.is_submitted });
+    } else {
+      clearJournalDraft(key);
+    }
+  }, [dirty, pending, firstPeriod, roster]);
+
+  // Закрытие вкладки, F5, внешняя ссылка — браузер переспросит.
+  useUnsavedWarning(dirty);
+  // Переход по меню и «Назад» — спросим сами (смена группы, дня и отделения спрашивает через confirmLeave).
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => dirty && currentLocation.pathname !== nextLocation.pathname);
+  useEffect(() => {
+    if (blocker.state !== "blocked") return;
+    dialogs
+      .confirm("Отметки этого дня ещё не сданы. Уйти со страницы? Черновик останется в этой вкладке до сдачи дня.", {
+        confirmLabel: "Уйти",
+        cancelLabel: "Остаться",
+      })
+      .then((ok) => (ok ? blocker.proceed() : blocker.reset()));
+  }, [blocker]);
+
   // Групп много (весь колледж) — список режется по отделению: сначала отделение, потом группа.
   const departments = useMemo(() => {
     const byId = new Map<number, { id: number; name: string; count: number }>();
@@ -214,9 +285,13 @@ export default function DayJournal({
     showDepartments && activeDepartment != null ? groups.filter((g) => g.departmentId === activeDepartment) : groups;
   const groupCode = (groups.find((g) => g.id === groupId)?.label ?? "").split(" ")[0];
 
-  async function confirmLeave(what: string): Promise<boolean> {
+  // Уход на другой день или группу черновик не теряет; «Отменить правку» — стирает.
+  async function confirmLeave(what: string, discards = false): Promise<boolean> {
     if (!dirty) return true;
-    return dialogs.confirm(`Несохранённые изменения будут потеряны. ${what}?`, { confirmLabel: what });
+    const message = discards
+      ? `Несохранённые изменения будут потеряны. ${what}?`
+      : `Отметки этого дня ещё не сданы — черновик останется в этой вкладке. ${what}?`;
+    return dialogs.confirm(message, { confirmLabel: what });
   }
 
   async function changeDate(next: string) {
@@ -462,7 +537,7 @@ export default function DayJournal({
                     type="button"
                     className="link-btn day-status__action"
                     onClick={async () => {
-                      if (!(await confirmLeave("Отменить правку"))) return;
+                      if (!(await confirmLeave("Отменить правку", true))) return;
                       setPending(pendingFrom(roster));
                       setFirstPeriod(roster.first_period != null ? String(roster.first_period) : "");
                       setEditing(false);

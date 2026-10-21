@@ -7,15 +7,16 @@ import DeleteGroupForeverModal from "../../components/DeleteGroupForeverModal";
 import { CURATOR_CAPABLE_ROLES, DEPARTMENT_SCOPED_ROLES, FORCE_DELETE_ROLES, inRoles } from "../../constants/roles";
 import { useEscapeKey } from "../../hooks/useEscapeKey";
 import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
+import { useUrlFlag, useUrlNumber, useUrlParam, useUrlSort } from "../../hooks/useUrlState";
 import type { DeleteResult, DepartmentAdmin, StudyGroupAdmin, UserAdmin } from "../../api/types";
 import ResultsBar from "../../components/dashboards/ResultsBar";
 import SortHeader from "../../components/dashboards/SortHeader";
 import { dialogs } from "../../utils/feedback";
 import { filterByQuery } from "../../utils/searchMatch";
 import { nextSort, sortRows } from "../../utils/tableView";
-import type { SortState } from "../../utils/tableView";
 
-type GroupSortKey = "code" | "course" | "form" | "students" | "curator" | "active";
+const GROUP_SORT_KEYS = ["code", "course", "form", "students", "curator", "active"] as const;
+type GroupSortKey = (typeof GROUP_SORT_KEYS)[number];
 
 export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; canCreate: boolean }) {
   const { user: me } = useAuth();
@@ -41,7 +42,7 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
 
   // Отключённые группы (не учитываются в своде и общих списках) не мешаются в
   // основном списке — их можно показать отдельно и включить обратно.
-  const [showArchived, setShowArchived] = useState(false);
+  const [showArchived, setShowArchived] = useUrlFlag("archived");
   const [togglingId, setTogglingId] = useState<number | null>(null);
 
   function load() {
@@ -96,10 +97,13 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
   }
 
   // Групп десятки: поиск по коду/куратору, курс, «без куратора» и сортировка по столбцам.
-  const [query, setQuery] = useState("");
-  const [courseFilter, setCourseFilter] = useState<number | "all">("all");
-  const [onlyVacant, setOnlyVacant] = useState(false);
-  const [sort, setSort] = useState<SortState<GroupSortKey> | null>(null);
+  // Поиск, фильтры и сортировка — в адресе: вернувшись из карточки куратора, админ видит тот же срез.
+  const [query, setQuery] = useUrlParam("q");
+  const [urlCourse, setUrlCourse] = useUrlNumber("course");
+  const courseFilter: number | "all" = urlCourse ?? "all";
+  const setCourseFilter = (v: number | "all") => setUrlCourse(v === "all" ? null : v);
+  const [onlyVacant, setOnlyVacant] = useUrlFlag("vacant");
+  const [sort, setSort] = useUrlSort<GroupSortKey>(GROUP_SORT_KEYS);
   const courses = useMemo(() => Array.from(new Set(rows.map((g) => g.course))).sort((a, b) => a - b), [rows]);
   const baseRows = showArchived ? rows : rows.filter((g) => g.is_active);
   const filtered = query.trim() !== "" || courseFilter !== "all" || onlyVacant;

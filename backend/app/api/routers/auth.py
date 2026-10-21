@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session, joinedload
@@ -6,7 +8,13 @@ from app.api.deps import bearer_scheme, extract_token, get_current_user
 from app.core.config import get_settings
 from app.core.password_policy import password_problems, validate_password_strength
 from app.core.rate_limit import check_rate_limit, client_ip, is_blocked, register_failure, reset_failures
-from app.core.security import create_access_token, decode_access_token, hash_password, verify_password
+from app.core.security import (
+    create_access_token,
+    decode_access_token,
+    hash_password,
+    token_auth_time,
+    verify_password,
+)
 from app.core.modules import enabled_modules
 from app.core.time import today_local
 from app.db.session import get_db
@@ -30,12 +38,30 @@ settings = get_settings()
 
 def _set_session_cookie(response: Response, token: str) -> None:
     """Сессия браузера — HttpOnly-cookie: скрипт на странице (в т.ч. при XSS) токен прочитать не может.
-    Strict — cookie не уходит с запросов, инициированных чужими сайтами."""
+    Strict — cookie не уходит с запросов, инициированных чужими сайтами. Cookie живёт столько же, сколько токен."""
+    remaining = decode_access_token(token)["exp"] - int(datetime.now(timezone.utc).timestamp())
     response.set_cookie(
         settings.session_cookie_name, token,
-        max_age=settings.access_token_expire_minutes * 60,
+        max_age=max(remaining, 0),
         httponly=True, secure=settings.cookie_secure, samesite="strict", path="/",
     )
+
+
+def _renew_session_cookie(response: Response, user: User, token: str) -> None:
+    """Скользящее продление: раньше сессия жила ровно 12 часов от входа, и кто вошёл утром, к вечеру получал
+    401 посреди отметок. Теперь, если до конца осталось меньше session_renew_before_minutes, выдаётся новый
+    cookie с тем же временем ввода пароля — общий срок ограничен session_max_days. Продлевается только сессия
+    браузера (cookie): скриптам с Bearer-токеном новый токен не нужен."""
+    payload = decode_access_token(token)
+    now = datetime.now(timezone.utc)
+    expires = datetime.fromtimestamp(payload["exp"], timezone.utc)
+    if expires - now > timedelta(minutes=settings.session_renew_before_minutes):
+        return
+    auth_time = token_auth_time(payload)
+    # Предел уже достигнут — новый токен ничего не добавит, человек войдёт заново, когда этот истечёт.
+    if auth_time + timedelta(days=settings.session_max_days) <= expires:
+        return
+    _set_session_cookie(response, create_access_token(user.id, user.role.code, user.token_version, auth_time))
 PRIVILEGED_ROLES = {RoleCode.ADMIN, RoleCode.EDU_DEPARTMENT, RoleCode.DEPT_HEAD, RoleCode.TUTOR}
 _DUMMY_HASH = hash_password("dummy-password-for-timing")
 
@@ -139,10 +165,9 @@ def logout(
     session_cookie: str | None = Cookie(default=None, alias=settings.session_cookie_name),
     db: Session = Depends(get_db),
 ):
-    """Выход отзывает сессию на сервере: версия токенов пользователя растёт, и украденная
-    копия токена перестаёт работать (раньше выход лишь стирал токен в браузере). Так как
-    версия общая, выход завершает и сессии на других устройствах. Cookie стирается всегда,
-    даже если токен уже недействителен."""
+    """Выход только из этого браузера: cookie стирается, сессии на других устройствах продолжают работать.
+    Раньше выход увеличивал версию токенов и выкидывал человека везде — куратор выходил с компьютера
+    в аудитории, и его тут же разлогинивало на телефоне. Выйти везде — /auth/logout-all."""
     token = extract_token(request, credentials, session_cookie)
     response.delete_cookie(settings.session_cookie_name, path="/")
     if token is None:
@@ -153,13 +178,36 @@ def logout(
         return
     user = db.get(User, int(payload["sub"]))
     if user is not None and payload.get("tv", 0) == user.token_version:
-        user.token_version += 1
         log_action(db, user, "auth.logout", "user", str(user.id))
         db.commit()
 
 
+@router.post("/logout-all", status_code=status.HTTP_204_NO_CONTENT)
+def logout_all(response: Response, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """«Выйти на всех устройствах»: версия токенов растёт, и все выданные сессии (в том числе забытая на чужом
+    компьютере или украденная копия) перестают работать."""
+    user.token_version += 1
+    log_action(db, user, "auth.logout_all", "user", str(user.id))
+    db.commit()
+    response.delete_cookie(settings.session_cookie_name, path="/")
+
+
 @router.get("/me", response_model=MeResponse)
-def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def me_endpoint(
+    response: Response,
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    session_cookie: str | None = Cookie(default=None, alias=settings.session_cookie_name),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Кто я. Заодно продлевает сессию браузера: интерфейс спрашивает /auth/me при открытии и периодически,
+    пока вкладка открыта."""
+    if credentials is None and session_cookie:
+        _renew_session_cookie(response, user, session_cookie)
+    return me(user, db)
+
+
+def me(user: User, db: Session) -> MeResponse:
     today = today_local()
     assignments = (
         db.query(CuratorAssignment).options(joinedload(CuratorAssignment.study_group))

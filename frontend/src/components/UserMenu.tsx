@@ -11,15 +11,18 @@ const THEMES: [ThemePref, string][] = [
 ];
 
 /** Имя пользователя с выпадающим меню («Сменить пароль», «Выйти»). Раньше имя, ссылка и кнопка
- * стояли в шапке отдельными элементами, и на телефоне занимали ещё две строки. */
+ * стояли в шапке отдельными элементами, и на телефоне занимали ещё две строки. «Выйти» — только из этого
+ * браузера, «Выйти на всех устройствах» — отзывает все сессии (забытый вход на чужом компьютере, потерянный телефон). */
 export default function UserMenu({
   name,
   onLogout,
+  onLogoutAll,
   carryOver,
   onCarryOverChange,
 }: {
   name: string;
   onLogout: () => void;
+  onLogoutAll?: () => void;
   /** Настройка куратора «подставлять отметки прошлого дня»; undefined — пункт не показывается. */
   carryOver?: boolean;
   onCarryOverChange?: (value: boolean) => void;
@@ -87,9 +90,11 @@ export default function UserMenu({
           <Link to="/change-password" role="menuitem" onClick={() => setOpen(false)}>
             Сменить пароль
           </Link>
+          {/* Класс — чтобы не подхватить общий стиль кнопок без класса (по центру, как «Сохранить»). */}
           <button
             type="button"
             role="menuitem"
+            className="user-menu__item"
             onClick={() => {
               setOpen(false);
               onLogout();
@@ -97,6 +102,19 @@ export default function UserMenu({
           >
             Выйти
           </button>
+          {onLogoutAll && (
+            <button
+              type="button"
+              role="menuitem"
+              className="user-menu__item"
+              onClick={() => {
+                setOpen(false);
+                onLogoutAll();
+              }}
+            >
+              Выйти на всех устройствах
+            </button>
+          )}
         </div>
       )}
     </div>

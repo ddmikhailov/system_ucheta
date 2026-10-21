@@ -1,4 +1,6 @@
 """Внешний аудит 07.10.2026: HSTS, сессия в HttpOnly-cookie вместо localStorage, серверный выход, усиленный CSP."""
+import datetime
+
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -46,17 +48,47 @@ def test_cookie_auth_requires_csrf_header_on_changes(client, admin_headers):
     assert r.status_code == 400
 
 
-def test_logout_revokes_the_token_on_the_server(client, admin_headers):
-    token = _login(client).json()["access_token"]
+def test_logout_ends_only_this_browser(client, admin_headers):
+    """«Выйти» стирает cookie этого браузера, но не выкидывает с других устройств (раньше выход
+    увеличивал версию токенов, и человека разлогинивало и на телефоне)."""
+    phone = _login(client).json()["access_token"]
+    laptop = _login(client).json()["access_token"]
     client.cookies.clear()
-    assert client.get("/auth/me", headers={"Authorization": f"Bearer {token}"}).status_code == 200
 
-    r = client.post("/auth/logout", cookies={COOKIE: token}, headers=CSRF)
+    r = client.post("/auth/logout", cookies={COOKIE: laptop}, headers=CSRF)
     assert r.status_code == 204
     assert COOKIE in r.headers["set-cookie"]  # cookie стирается
+    assert client.get("/auth/me", cookies={COOKIE: phone}).status_code == 200
 
-    # Украденная копия токена после выхода больше не работает.
-    assert client.get("/auth/me", headers={"Authorization": f"Bearer {token}"}).status_code == 401
+
+def test_logout_all_revokes_every_session(client, admin_headers):
+    phone = _login(client).json()["access_token"]
+    laptop = _login(client).json()["access_token"]
+    client.cookies.clear()
+
+    r = client.post("/auth/logout-all", cookies={COOKIE: laptop}, headers=CSRF)
+    assert r.status_code == 204
+    assert COOKIE in r.headers["set-cookie"]
+    # Сессия на другом устройстве и украденная копия токена больше не работают.
+    assert client.get("/auth/me", cookies={COOKIE: phone}).status_code == 401
+    assert client.get("/auth/me", headers={"Authorization": f"Bearer {laptop}"}).status_code == 401
+
+
+def test_logout_all_requires_session_and_csrf_header(client, admin_headers):
+    assert client.post("/auth/logout-all").status_code == 401
+    token = _login(client).json()["access_token"]
+    client.cookies.clear()
+    assert client.post("/auth/logout-all", cookies={COOKIE: token}).status_code == 403
+    assert client.get("/auth/me", cookies={COOKIE: token}).status_code == 200  # сессия не тронута
+
+
+def test_logout_all_allowed_with_pending_password_change(client, db, admin_headers):
+    from app.models import User
+
+    admin = db.query(User).filter(User.username == "admin").one()
+    admin.must_change_password = True
+    db.commit()
+    assert client.post("/auth/logout-all", headers=admin_headers).status_code == 204
 
 
 def test_logout_without_session_is_harmless(client, seeded):
@@ -90,3 +122,90 @@ def test_cookie_secure_follows_environment_unless_overridden():
     assert Settings(environment="development", jwt_secret="x" * 40).cookie_secure is False
     # явное отключение — для временной работы по http без сертификата
     assert Settings(environment="production", jwt_secret="x" * 40, session_cookie_secure=False).cookie_secure is False
+
+
+_ADMIN_ID = 1  # admin — единственный пользователь в сидах
+
+
+def _token(auth_time: datetime.datetime, minutes: int) -> str:
+    """Токен администратора из сидов, выданный с заданным временем ввода пароля и сроком."""
+    from app.core.security import create_access_token
+
+    original = settings.access_token_expire_minutes
+    settings.access_token_expire_minutes = minutes
+    try:
+        return create_access_token(_ADMIN_ID, "admin", 0, auth_time)
+    finally:
+        settings.access_token_expire_minutes = original
+
+
+def _cookie_token(response) -> str | None:
+    cookie = response.headers.get("set-cookie", "")
+    if not cookie.startswith(f"{COOKIE}="):
+        return None
+    return cookie.split(";", 1)[0].split("=", 1)[1]
+
+
+def test_fresh_session_is_not_renewed(client, seeded):
+    token = _token(datetime.datetime.now(datetime.UTC), 12 * 60)
+    r = client.get("/auth/me", cookies={COOKIE: token})
+    assert r.status_code == 200 and _cookie_token(r) is None
+
+
+def test_session_near_expiry_is_renewed_with_same_auth_time(client, seeded):
+    """Кто работает, не вылетает через 12 часов: /auth/me выдаёт новый cookie ещё на полный срок."""
+    from app.core.security import decode_access_token
+
+    entered = datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=11)
+    token = _token(entered, 60)  # до конца час — меньше порога продления
+    r = client.get("/auth/me", cookies={COOKIE: token})
+    assert r.status_code == 200
+    renewed = _cookie_token(r)
+    assert renewed and renewed != token
+    payload = decode_access_token(renewed)
+    assert payload["auth_time"] == int(entered.timestamp())
+    lifetime = payload["exp"] - datetime.datetime.now(datetime.UTC).timestamp()
+    assert lifetime > settings.access_token_expire_minutes * 60 - 60
+    assert "Max-Age" in r.headers["set-cookie"]
+    assert client.get("/auth/me", cookies={COOKIE: renewed}).status_code == 200
+
+
+def test_renewal_never_passes_the_overall_limit(client, seeded):
+    from app.core.security import decode_access_token
+
+    limit = datetime.datetime.now(datetime.UTC) + datetime.timedelta(hours=3)
+    entered = limit - datetime.timedelta(days=settings.session_max_days)
+    token = _token(entered, 60)  # до общего предела 3 часа: новый токен — только до него, а не на 12 часов
+    renewed = _cookie_token(client.get("/auth/me", cookies={COOKIE: token}))
+    assert renewed and decode_access_token(renewed)["exp"] == int(limit.timestamp())
+
+
+def test_session_at_overall_limit_is_not_renewed(client, seeded):
+    limit = datetime.datetime.now(datetime.UTC) + datetime.timedelta(minutes=30)
+    entered = limit - datetime.timedelta(days=settings.session_max_days)
+    token = _token(entered, 60)  # срок уже упёрся в предел: exp = auth_time + session_max_days
+    r = client.get("/auth/me", cookies={COOKIE: token})
+    assert r.status_code == 200 and _cookie_token(r) is None
+
+
+def test_bearer_token_is_not_renewed(client, seeded):
+    entered = datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=11)
+    token = _token(entered, 60)
+    r = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200 and _cookie_token(r) is None
+
+
+def test_old_token_without_auth_time_is_renewed_from_issue_time(client, seeded):
+    """Токены, выданные до продления сессий, не несут auth_time — отсчёт общего предела от их выдачи."""
+    import jwt
+
+    from app.core.security import decode_access_token
+
+    now = datetime.datetime.now(datetime.UTC)
+    issued = now - datetime.timedelta(hours=11)
+    token = jwt.encode(
+        {"sub": str(_ADMIN_ID), "role": "admin", "tv": 0, "iat": issued, "exp": now + datetime.timedelta(minutes=30)},
+        settings.jwt_secret, algorithm=settings.jwt_algorithm,
+    )
+    renewed = _cookie_token(client.get("/auth/me", cookies={COOKIE: token}))
+    assert renewed and decode_access_token(renewed)["auth_time"] == int(issued.timestamp())

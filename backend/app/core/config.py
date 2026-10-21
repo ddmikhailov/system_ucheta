@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     jwt_secret: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 12
+    # Скользящее продление: если до конца сессии меньше этого, /auth/me выдаёт новый cookie ещё на
+    # access_token_expire_minutes. Кто работает (вкладка открыта), не вылетает посреди дня.
+    session_renew_before_minutes: int = 120
+    # Общий предел: продление не выводит сессию дальше этого срока от ввода пароля — потом вход заново.
+    session_max_days: int = 7
     # Сессия браузера живёт в HttpOnly-cookie с этим именем (JS-коду токен недоступен)
     session_cookie_name: str = "kait20_session"
     # Secure-cookie: браузер отправляет сессию только по HTTPS. По умолчанию включено вне разработки; выключать
