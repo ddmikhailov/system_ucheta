@@ -143,7 +143,7 @@ def hidden_api_patterns(modules: frozenset[str]) -> tuple[re.Pattern, ...]:
 
 @app.get("/health")
 def health(db: Session = Depends(get_db)):
-    """Проверка для Docker и хостинга: «ok» только если отвечает и база. Раньше ответ был «ok» и при упавшей базе,
+    """Проверка работы для мониторинга: «ok» только если отвечает и база. Раньше ответ был «ok» и при упавшей базе,
     и платформа считалась живой, хотя ни одна страница не открывалась."""
     try:
         db.execute(text("SELECT 1"))

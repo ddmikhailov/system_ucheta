@@ -27,7 +27,7 @@ const tabs = () => screen.getAllByRole("button").map((b) => b.textContent);
 describe("AdminPage — вкладки по ролям", () => {
   it("admin видит полный набор вкладок, включая «Импорт», начинает с «Группы»", () => {
     renderPage(<AdminPage />, { role: "admin" });
-    expect(tabs()).toEqual(["Отделения", "Группы", "Студенты", "Коды отметок", "Пользователи", "Календарь", "Журнал группы", "Импорт"]);
+    expect(tabs()).toEqual(["Отделения", "Группы", "Студенты", "Коды отметок", "Пользователи", "Календарь", "Журнал группы", "Импорт", "Отладка"]);
     expect(screen.getByText(/вкладка групп/)).toBeInTheDocument();
   });
 

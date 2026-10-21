@@ -101,3 +101,33 @@
   margin: 0;
   line-height: 1.5;
 }
+
+/* Админка → «Отладка»: полный журнал действий. */
+.debug-log {
+  display: grid;
+  gap: 12px;
+}
+
+.debug-log__filters {
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.debug-log__buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.debug-log__value {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.debug-log__code {
+  font-size: 12px;
+}
+
+.debug-log__table td {
+  vertical-align: top;
+}

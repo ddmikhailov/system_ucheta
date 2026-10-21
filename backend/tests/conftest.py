@@ -130,15 +130,17 @@ def _reset_rate_limit():
     тест ожидает 401/200."""
     from app.core.rate_limit import _attempts, _failures
 
-    from app.services import task_service
+    from app.services import audit_service, task_service
 
     _attempts.clear()
     _failures.clear()
     task_service.reset_reminder_throttle()
+    audit_service.reset_purge_throttle()
     yield
     _attempts.clear()
     _failures.clear()
     task_service.reset_reminder_throttle()
+    audit_service.reset_purge_throttle()
 
 
 @pytest.fixture()

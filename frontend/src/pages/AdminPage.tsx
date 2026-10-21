@@ -9,11 +9,12 @@ import UsersTab from "./admin/UsersTab";
 import CalendarTab from "./admin/CalendarTab";
 import GroupJournalTab from "./admin/GroupJournalTab";
 import ImportTab from "./admin/ImportTab";
+import DebugTab from "./admin/DebugTab";
 import { DEPARTMENT_SCOPED_ROLES, REFERENCE_EDITOR_ROLES, ROLE, inRoles } from "../constants/roles";
 
-type Tab = "departments" | "groups" | "students" | "mark-codes" | "users" | "calendar" | "journal" | "import";
+type Tab = "departments" | "groups" | "students" | "mark-codes" | "users" | "calendar" | "journal" | "import" | "debug";
 
-const VALID_TABS: Tab[] = ["departments", "groups", "students", "mark-codes", "users", "calendar", "journal", "import"];
+const VALID_TABS: Tab[] = ["departments", "groups", "students", "mark-codes", "users", "calendar", "journal", "import", "debug"];
 
 export default function AdminPage() {
   const { user } = useAuth();
@@ -66,6 +67,8 @@ export default function AdminPage() {
         { key: "journal", label: "Журнал группы" },
         // Массовая загрузка контингента — только администратор (бэкенд проверяет роль).
         ...(isAdmin ? [{ key: "import" as Tab, label: "Импорт" }] : []),
+        // Полный журнал действий для разбора сбоев — только администратор (бэкенд проверяет роль).
+        ...(isAdmin ? [{ key: "debug" as Tab, label: "Отладка" }] : []),
       ];
 
   return (
@@ -86,6 +89,7 @@ export default function AdminPage() {
       {tab === "calendar" && <CalendarTab canEdit={isReferenceEditor} canEditGroups={isReferenceEditor || isDeptHead} />}
       {tab === "journal" && <GroupJournalTab />}
       {tab === "import" && isAdmin && <ImportTab />}
+      {tab === "debug" && isAdmin && <DebugTab />}
     </div>
   );
 }

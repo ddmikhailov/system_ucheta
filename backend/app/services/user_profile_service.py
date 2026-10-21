@@ -11,7 +11,7 @@ from collections import Counter
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.time import today_local, utc_to_local, utcnow
+from app.core.time import local_to_utc, today_local, utc_to_local, utcnow
 from app.models import (
     AttendanceMark,
     AuditLog,
@@ -29,9 +29,11 @@ from app.models.enums import StudentStatus
 from app.schemas.admin import (
     UserActivityDay,
     UserActivityEntry,
+    UserActivityMonth,
     UserActivityPage,
     UserDiscipline,
     UserGroupLink,
+    UserJournalOverview,
     UserTaskStats,
 )
 from app.services import calendar_service
@@ -181,24 +183,10 @@ def build_profile(db: Session, user: User) -> dict:
         .filter(DossierAccessLog.user_id == user.id, DossierAccessLog.created_at >= since)
         .scalar()
     )
-    last_activity_at = db.query(func.max(AuditLog.created_at)).filter(AuditLog.user_id == user.id).scalar()
-
-    # Ритм активности: сколько действий в журнале за каждый из 30 дней (по местному времени).
-    per_day = Counter(
-        utc_to_local(created_at).date()
-        for (created_at,) in db.query(AuditLog.created_at)
-        .filter(AuditLog.user_id == user.id, AuditLog.created_at >= since - datetime.timedelta(days=1))
-        .all()
-    )
-    activity = [
-        UserActivityDay(date=day, count=per_day.get(day, 0))
-        for day in (today - datetime.timedelta(days=offset) for offset in range(PERIOD_DAYS - 1, -1, -1))
-    ]
 
     return {
         "department_name": user.department.name if user.department else None,
         "created_at": user.created_at,
-        "last_activity_at": last_activity_at,
         "groups": links,
         "discipline": _discipline(db, current, today),
         "tasks": _tasks(db, current, today),
@@ -207,17 +195,50 @@ def build_profile(db: Session, user: User) -> dict:
         "notes_written_30d": notes_written or 0,
         "follow_ups_open": follow_ups_open or 0,
         "dossier_views_30d": dossier_views or 0,
-        "activity_30d": activity,
     }
 
 
+def month_bounds_utc(month: str) -> tuple[datetime.datetime, datetime.datetime]:
+    """«2026-10» → начало месяца и начало следующего по местному времени колледжа, в UTC (как в БД)."""
+    year, number = (int(part) for part in month.split("-"))
+    start = datetime.datetime(year, number, 1)
+    end = datetime.datetime(year + number // 12, number % 12 + 1, 1)
+    return local_to_utc(start), local_to_utc(end)
+
+
+def journal_overview(db: Session, user: User) -> UserJournalOverview:
+    """Шапка вкладки «Журнал» одним проходом по журналу человека (не старше срока хранения — остальное удаляет
+    audit_service.purge_expired): последнее действие, ритм за 30 дней и месяцы архива (по местному времени)."""
+    today = today_local()
+    stamps = [
+        utc_to_local(created_at)
+        for (created_at,) in db.query(AuditLog.created_at).filter(AuditLog.user_id == user.id).all()
+    ]
+    per_day = Counter(stamp.date() for stamp in stamps)
+    per_month = Counter(stamp.strftime("%Y-%m") for stamp in stamps)
+    last = db.query(func.max(AuditLog.created_at)).filter(AuditLog.user_id == user.id).scalar()
+    return UserJournalOverview(
+        last_activity_at=last,
+        activity_30d=[
+            UserActivityDay(date=day, count=per_day.get(day, 0))
+            for day in (today - datetime.timedelta(days=offset) for offset in range(PERIOD_DAYS - 1, -1, -1))
+        ],
+        months=[UserActivityMonth(month=month, count=count) for month, count in sorted(per_month.items(), reverse=True)],
+    )
+
+
 def activity_page(
-    db: Session, user: User, before_id: int | None = None, limit: int = 50, prefix: str | None = None
+    db: Session, user: User, before_id: int | None = None, limit: int = 50, prefix: str | None = None,
+    month: str | None = None,
 ) -> UserActivityPage:
     """Журнал действий человека, новые сверху. Листается «ещё» по id (стабильно, пока
-    добавляются новые записи). `prefix` — область: «mark», «day», «task», «dossier»…"""
+    добавляются новые записи). `prefix` — область: «mark», «day», «task», «dossier»…;
+    `month` — «2026-10»: только этот месяц (помесячный архив), без него — весь журнал."""
     limit = min(max(limit, 1), ACTIVITY_PAGE_MAX)
     query = db.query(AuditLog).filter(AuditLog.user_id == user.id)
+    if month:
+        start, end = month_bounds_utc(month)
+        query = query.filter(AuditLog.created_at >= start, AuditLog.created_at < end)
     if before_id is not None:
         query = query.filter(AuditLog.id < before_id)
     if prefix:

@@ -914,7 +914,6 @@ export interface UserProfile {
   user: UserAdmin;
   department_name: string | null;
   created_at: string;
-  last_activity_at: string | null;
   groups: UserGroupLink[];
   discipline: UserDiscipline;
   tasks: UserTaskStats;
@@ -923,7 +922,6 @@ export interface UserProfile {
   notes_written_30d: number;
   follow_ups_open: number;
   dossier_views_30d: number;
-  activity_30d: { date: string; count: number }[];
 }
 
 export interface UserActivityEntry {
@@ -937,6 +935,19 @@ export interface UserActivityEntry {
 export interface UserActivityPage {
   items: UserActivityEntry[];
   next_before_id: number | null;
+}
+
+/** Месяц помесячного архива журнала действий: «2026-09» и число записей. */
+export interface UserActivityMonth {
+  month: string;
+  count: number;
+}
+
+/** Шапка вкладки «Журнал» профиля: загружается только при её открытии. */
+export interface UserJournalOverview {
+  last_activity_at: string | null;
+  activity_30d: { date: string; count: number }[];
+  months: UserActivityMonth[];
 }
 
 export interface MyIdRow {
@@ -1038,4 +1049,24 @@ export interface MealOverview {
   dates: string[];
   rows: MealOverviewRow[];
   totals: Record<string, number>;
+}
+
+/** Строка полного журнала действий (админка → «Отладка»): с «было/стало», только администратору. */
+export interface AuditEntry {
+  id: number;
+  created_at: string;
+  user_id: number | null;
+  user_name: string | null;
+  user_role: string | null;
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  old_value: string | null;
+  new_value: string | null;
+  ip_address: string | null;
+}
+
+export interface AuditPage {
+  items: AuditEntry[];
+  next_before_id: number | null;
 }

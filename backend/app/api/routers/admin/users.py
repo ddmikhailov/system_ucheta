@@ -18,6 +18,7 @@ from app.schemas.admin import (
     SetPasswordResponse,
     UserActivityPage,
     UserCreate,
+    UserJournalOverview,
     UserProfile,
     UserRead,
     UserUpdate,
@@ -72,12 +73,22 @@ def user_activity(
     before_id: int | None = None,
     limit: int = 50,
     area: str | None = Query(default=None, pattern=r"^[a-z_]{1,32}$"),
+    month: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
     viewer: User = Depends(require_management),
     db: Session = Depends(get_db),
 ):
-    """Журнал действий пользователя (что и когда), новые сверху; `area` — «mark», «day», «task»…"""
+    """Журнал действий пользователя (что и когда), новые сверху; `area` — «mark», «day», «task»…;
+    `month` — «2026-10»: один месяц помесячного архива."""
     target = _viewable_user_or_404(db, viewer, user_id)
-    return user_profile_service.activity_page(db, target, before_id=before_id, limit=limit, prefix=area)
+    return user_profile_service.activity_page(db, target, before_id=before_id, limit=limit, prefix=area, month=month)
+
+
+@router.get("/users/{user_id}/activity/overview", response_model=UserJournalOverview)
+def user_activity_overview(user_id: int, viewer: User = Depends(require_management), db: Session = Depends(get_db)):
+    """Вкладка «Журнал»: последнее действие, ритм за 30 дней и месяцы архива (не старше срока хранения).
+    Интерфейс запрашивает её только при открытии вкладки — профиль журнал не читает."""
+    target = _viewable_user_or_404(db, viewer, user_id)
+    return user_profile_service.journal_overview(db, target)
 
 
 @router.post("/users", response_model=UserRead, status_code=status.HTTP_201_CREATED)

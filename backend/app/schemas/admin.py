@@ -241,7 +241,6 @@ class UserProfile(BaseModel):
     user: UserRead
     department_name: str | None
     created_at: datetime.datetime
-    last_activity_at: datetime.datetime | None
     groups: list[UserGroupLink]
     discipline: UserDiscipline
     tasks: UserTaskStats
@@ -250,7 +249,6 @@ class UserProfile(BaseModel):
     notes_written_30d: int
     follow_ups_open: int
     dossier_views_30d: int
-    activity_30d: list[UserActivityDay]
 
 
 class UserActivityEntry(BaseModel):
@@ -267,3 +265,19 @@ class UserActivityEntry(BaseModel):
 class UserActivityPage(BaseModel):
     items: list[UserActivityEntry]
     next_before_id: int | None
+
+
+class UserActivityMonth(BaseModel):
+    """Месяц помесячного архива журнала действий: «2026-09» и сколько в нём записей."""
+
+    month: str
+    count: int
+
+
+class UserJournalOverview(BaseModel):
+    """Шапка вкладки «Журнал»: последнее действие, ритм за 30 дней и месяцы архива. Журнал читается только
+    при открытии этой вкладки — профиль пользователя его не трогает."""
+
+    last_activity_at: datetime.datetime | None
+    activity_30d: list[UserActivityDay]
+    months: list[UserActivityMonth]

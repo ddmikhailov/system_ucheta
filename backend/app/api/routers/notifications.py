@@ -5,7 +5,7 @@ from app.api.deps import get_current_user
 from app.core.time import utcnow
 from app.db.session import get_db
 from app.models import InAppNotification, User
-from app.services import in_app_notification_service, meal_service, task_schedule, task_service
+from app.services import audit_service, in_app_notification_service, meal_service, task_schedule, task_service
 from app.schemas.notifications import NotificationRead, UnreadCountResponse
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
@@ -19,6 +19,8 @@ def _task_reminders(db: Session, user: User) -> None:
     # Сначала периодические задачи: их «новая задача» тоже попадёт в этот же опрос.
     task_schedule.run_due_templates(db)
     meal_service.ensure_weekly_task(db)
+    # Срок хранения журнала действий (не больше года) — раз в сутки.
+    audit_service.purge_expired_daily(db)
     if task_service.generate_reminders(db, user):
         db.commit()
 
