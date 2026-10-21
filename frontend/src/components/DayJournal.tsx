@@ -105,7 +105,7 @@ export default function DayJournal({
   const [showCommentFor, setShowCommentFor] = useState<number | null>(null);
   const [groupsLoaded, setGroupsLoaded] = useState(false);
   const [groupsError, setGroupsError] = useState<string | null>(null);
-  const [riskPercent, setRiskPercent] = useState(85);
+  const [thresholds, setThresholds] = useState({ risk_unexcused_percent: 40, risk_attendance_percent: 85 });
   const [firstPeriod, setFirstPeriod] = useState("");
   // Выбранное отделение; пока не выбирали — отделение текущей группы.
   const [departmentChoice, setDepartmentChoice] = useState<number | null>(null);
@@ -128,8 +128,8 @@ export default function DayJournal({
     loadGroups();
     api.get<MarkCodeOption[]>("/curator/mark-codes").then(setMarkCodes);
     api
-      .get<{ risk_attendance_percent: number }>("/curator/settings")
-      .then((s) => setRiskPercent(s.risk_attendance_percent))
+      .get<{ risk_unexcused_percent: number; risk_attendance_percent: number }>("/curator/settings")
+      .then((s) => setThresholds({ risk_unexcused_percent: s.risk_unexcused_percent, risk_attendance_percent: s.risk_attendance_percent }))
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -527,8 +527,19 @@ export default function DayJournal({
                           )}
                           {entry.is_draft_suggestion && !entry.is_locked && <span className="draft-badge">черновик со вчера</span>}
                           {risky && (
-                            <span className="risk-badge" title={`Группа риска: посещаемость с начала семестра ниже ${riskPercent} %`}>
-                              риск: посещаемость {formatPercent(entry.attendance_percent)}
+                            <span
+                              className="risk-badge"
+                              title={`Группа риска: пропусков без уважительной причины с начала семестра больше ${thresholds.risk_unexcused_percent} %`}
+                            >
+                              риск: без уважительной причины {formatPercent(entry.unexcused_percent)}
+                            </span>
+                          )}
+                          {entry.needs_compensation && (
+                            <span
+                              className="compensate-badge"
+                              title={`Посещаемость с начала семестра ${formatPercent(entry.attendance_percent)}: без практики и ИУП ниже ${thresholds.risk_attendance_percent} %. Закрыть — на вкладке «Студенты».`}
+                            >
+                              восполнить пропуски
                             </span>
                           )}
                         </td>

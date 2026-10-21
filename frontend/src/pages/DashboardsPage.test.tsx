@@ -51,7 +51,10 @@ function mockApi() {
       ];
     }
     if (path.startsWith("/dashboards/risk-students")) {
-      return [{ student_id: 7, full_name: "Алексеев Пётр", group_code: "СА172", streak: 4, attendance_percent: 72.5, days: 40, absent: 11 }];
+      return [
+        { student_id: 7, full_name: "Алексеев Пётр", group_code: "СА172", category: "risk", streak: 4, attendance_percent: 52.5, days: 40, absent: 19, absent_unexcused: 19, unexcused_percent: 47.5 },
+        { student_id: 8, full_name: "Борисова Мария", group_code: "СА172", category: "compensation", streak: 0, attendance_percent: 72.5, days: 40, absent: 11, absent_unexcused: 0, unexcused_percent: 0 },
+      ];
     }
     if (path.startsWith("/dashboards/curator-discipline")) {
       return [
@@ -203,13 +206,21 @@ describe("DashboardsPage — динамика и группа риска", () =>
     const link = await screen.findByRole("link", { name: "Алексеев Пётр" });
     expect(link).toHaveAttribute("href", "/students/7");
     const riskRow = link.closest("tr") as HTMLElement;
-    expect(within(riskRow).getByText("72,5 %")).toBeInTheDocument();
-    expect(within(riskRow).getByText("11 из 40")).toBeInTheDocument();
+    expect(within(riskRow).getByText("52,5 %")).toBeInTheDocument();
+    expect(within(riskRow).getByText("47,5 %")).toBeInTheDocument();
+    expect(within(riskRow).getByText("19 из 40")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Борисова Мария" })).not.toBeInTheDocument(); // по умолчанию — только группа риска
+
+    await user.selectOptions(screen.getByLabelText("Список"), "compensation");
+    const compRow = (await screen.findByRole("link", { name: "Борисова Мария" })).closest("tr") as HTMLElement;
+    expect(within(compRow).getByText("восполнить пропуски")).toBeInTheDocument();
+    expect(within(compRow).getByText("11 из 40")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Алексеев Пётр" })).not.toBeInTheDocument();
 
     get.mockImplementation(async (path: string) => (path.startsWith("/dashboards/risk-students") ? [] : GROUPS));
     await user.click(screen.getByRole("button", { name: "День по колледжу" }));
     await user.click(screen.getByRole("button", { name: "Группа риска" }));
-    expect(await screen.findByText(/Нет студентов группы риска/)).toBeInTheDocument();
+    expect(await screen.findByText(/Нет таких студентов/)).toBeInTheDocument();
   });
 });
 

@@ -75,7 +75,7 @@ def test_risk_students_query_count_does_not_scale_with_student_count(imported, d
 
     event.listen(db.get_bind(), "before_cursor_execute", _count)
     try:
-        stats_service.risk_students(db, DAY1, threshold=85.0)
+        stats_service.risk_students(db, DAY1)
     finally:
         event.remove(db.get_bind(), "before_cursor_execute", _count)
 

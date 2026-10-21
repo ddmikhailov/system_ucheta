@@ -951,6 +951,78 @@ select:hover {
   margin-top: 2px;
 }
 
+/* «Восполнить пропуски» — спокойнее группы риска: пропуск уважительный, нужно догнать программу. */
+.compensate-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary-dark);
+  background: var(--primary-light);
+  padding: 1px 6px;
+  border-radius: 999px;
+  margin-top: 2px;
+}
+
+.compensation-panel {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+
+.compensation-panel.is-active {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+
+.compensation-panel__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+
+.compensation-panel.is-active .compensate-badge {
+  background: var(--primary-fill);
+  color: #fff;
+}
+
+.compensation-list {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.compensation-item {
+  background: var(--card-bg);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.compensation-item__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.compensation-item__meta {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+
+.compensation-item__form {
+  margin-top: 8px;
+  display: grid;
+  gap: 8px;
+}
+
 .actions {
   display: flex;
   gap: 10px;

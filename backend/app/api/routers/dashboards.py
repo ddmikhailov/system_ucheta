@@ -105,13 +105,13 @@ def summary(
 @router.get("/risk-students", response_model=list[RiskStudentRow])
 def risk_students(
     as_of_date: datetime.date,
-    threshold: float | None = Query(None, ge=0, le=100, description="порог посещаемости, %; по умолчанию 85"),
     department_id: int | None = None,
     user: User = Depends(require_viewer),
     db: Session = Depends(get_db),
 ):
+    """Группа риска и «Восполнить пропуски» (поле `category`) — пороги в настройках, см. AttendanceRate."""
     scope = scope_department_id(user, department_id)
-    rows = stats_service.risk_students(db, as_of_date, threshold, scope)
+    rows = stats_service.risk_students(db, as_of_date, scope)
     return [RiskStudentRow(**r) for r in rows]
 
 

@@ -29,6 +29,8 @@ class MarkCode(Base):
     counts_as_present: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_excused: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     requires_document: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Отсутствие, которое не нужно восполнять (практика, ИУП): в процент посещаемости идёт, а в «Восполнить пропуски» — нет.
+    no_compensation: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
@@ -113,6 +115,19 @@ class AbsencePeriod(Base):
     generated_marks: Mapped[list["AttendanceMark"]] = relationship(
         back_populates="absence_period"
     )
+
+
+class AbsenceCompensation(Base):
+    """Куратор закрыл «Восполнить пропуски»: пропуски студента до `closed_on` восполнены, комментарий — как именно."""
+
+    __tablename__ = "absence_compensations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id", ondelete="CASCADE"), nullable=False, index=True)
+    closed_on: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    comment: Mapped[str] = mapped_column(String(1000), nullable=False)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
 
 
 class AttendanceChangeRequest(Base):

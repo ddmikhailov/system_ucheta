@@ -4,12 +4,13 @@ import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { MarkCodeAdmin } from "../../api/types";
 import { dialogs } from "../../utils/feedback";
 
-type FlagField = "counts_as_present" | "is_excused" | "requires_document" | "is_active";
+type FlagField = "counts_as_present" | "is_excused" | "requires_document" | "no_compensation" | "is_active";
 
 const FIELD_LABELS: Record<FlagField, string> = {
   counts_as_present: "считается присутствием",
   is_excused: "уважительная",
   requires_document: "требует документа",
+  no_compensation: "не требует восполнения",
   is_active: "активен",
 };
 
@@ -49,6 +50,7 @@ export default function MarkCodesTab({ canEdit }: { canEdit: boolean }) {
     counts_as_present: "считается присутствием",
     is_excused: "уважительная причина",
     requires_document: "нужен документ",
+    no_compensation: "не требует восполнения",
     is_active: "активен",
   };
 
@@ -67,6 +69,9 @@ export default function MarkCodesTab({ canEdit }: { canEdit: boolean }) {
             <th>Считается присутствием</th>
             <th>Уважительная</th>
             <th>Требует документа</th>
+            <th title="Отсутствие, которое не нужно восполнять (практика, ИУП): в процент посещаемости идёт, в «Восполнить пропуски» — нет">
+              Не требует восполнения
+            </th>
             <th>Активен</th>
           </tr>
         </thead>
@@ -75,7 +80,7 @@ export default function MarkCodesTab({ canEdit }: { canEdit: boolean }) {
             <tr key={r.id}>
               <td>{r.code}</td>
               <td>{r.name}</td>
-              {(["counts_as_present", "is_excused", "requires_document", "is_active"] as FlagField[]).map((field) => (
+              {(["counts_as_present", "is_excused", "requires_document", "no_compensation", "is_active"] as FlagField[]).map((field) => (
                 <td key={field}>
                   <input type="checkbox" aria-label={`${r.code}: ${FLAG_LABELS[field]}`} checked={r[field]} disabled={!canEdit} onChange={() => toggle(r, field)} />
                 </td>

@@ -14,7 +14,9 @@ class RosterEntry(BaseModel):
     is_locked: bool
     risk_streak: int  # сколько дней подряд «н» — справочно
     attendance_percent: float | None = None  # посещаемость с начала семестра, %
-    is_risk: bool = False  # группа риска: посещаемость ниже порога
+    is_risk: bool = False  # группа риска: пропусков без уважительной причины больше 40 %
+    unexcused_percent: float | None = None  # доля пропусков без уважительной причины, %
+    needs_compensation: bool = False  # «Восполнить пропуски»
     # Кто и когда последний раз вносил/менял отметку — для журнала группы
     # у администрации (см. обновление 1.1). У куратора в его собственном
     # кабинете эти поля есть, но не показываются.
@@ -61,6 +63,7 @@ class GroupSummary(BaseModel):
     # Для карточек «Мои группы»: сколько студентов сейчас и сколько в группе риска; кем ведёт.
     students_count: int = 0
     risk_count: int = 0
+    compensation_count: int = 0
     role_type: str | None = None
 
 
@@ -128,3 +131,35 @@ class ReviewDecision(BaseModel):
 
 
 RosterResponse.model_rebuild()
+
+
+class CompensationMarkCount(BaseModel):
+    name: str
+    count: int
+
+
+class CompensationStudent(BaseModel):
+    student_id: int
+    full_name: str
+    attendance_percent: float | None
+    days: int
+    absent_to_compensate: int
+    by_mark: list[CompensationMarkCount]
+    last_closed_on: datetime.date | None = None
+
+
+class CompensationClosed(BaseModel):
+    student_id: int
+    full_name: str
+    closed_on: datetime.date
+    comment: str
+    author_name: str | None = None
+
+
+class CompensationOverview(BaseModel):
+    students: list[CompensationStudent]
+    closed: list[CompensationClosed]
+
+
+class CompensationClose(BaseModel):
+    comment: str = Field(min_length=1, max_length=1000)
