@@ -14,12 +14,14 @@ from app.schemas.curator import (
     AbsencePeriodCreate,
     AbsencePeriodUpdate,
     ChangeRequestInput,
+    CompensationClose,
+    CompensationOverview,
     GroupSummary,
     MonthDayStatus,
     RosterResponse,
     SubmitDayRequest,
 )
-from app.services import attendance_change_service, attendance_service, calendar_service, group_list_service, my_day_service, student_card_service
+from app.services import attendance_change_service, attendance_service, calendar_service, compensation_service, group_list_service, my_day_service, student_card_service
 from app.services.audit_service import log_action
 from app.schemas.my_day import RhythmDay
 from app.services.access_service import get_curator_group_ids
@@ -30,8 +32,11 @@ settings = get_settings()
 
 @router.get("/settings")
 def curator_settings(user: User = Depends(get_current_user)):
-    # Порог «группы риска» берётся из того же значения, что реально использует бэкенд.
-    return {"risk_attendance_percent": settings.risk_attendance_percent, "risk_min_days": settings.risk_min_days}
+    # Пороги «группы риска» и «Восполнить пропуски» берутся из тех же значений, что реально использует бэкенд.
+    return {
+        "risk_unexcused_percent": settings.risk_unexcused_percent, "risk_attendance_percent": settings.risk_attendance_percent,
+        "risk_min_days": settings.risk_min_days, "compensation_reopen_days": settings.compensation_reopen_days,
+    }
 
 
 @router.get("/mark-codes")
@@ -43,7 +48,8 @@ def mark_codes(user: User = Depends(get_current_user), db: Session = Depends(get
     return [
         {
             "id": r.id, "code": r.code, "name": r.name, "counts_as_present": r.counts_as_present,
-            "is_excused": r.is_excused, "requires_document": r.requires_document, "is_active": r.is_active,
+            "is_excused": r.is_excused, "requires_document": r.requires_document, "no_compensation": r.no_compensation,
+            "is_active": r.is_active,
         }
         for r in rows
     ]
@@ -62,6 +68,7 @@ def my_groups(user: User = Depends(get_current_user), db: Session = Depends(get_
             GroupSummary(
                 id=group_id, code=group.code, course=group.course, is_submitted_today=roster["is_submitted"],
                 students_count=len(roster["entries"]), risk_count=sum(1 for e in roster["entries"] if e.get("is_risk")),
+                compensation_count=sum(1 for e in roster["entries"] if e.get("needs_compensation")),
                 role_type=assignment.role_type.value,
             )
         )
@@ -191,6 +198,43 @@ def mark_all_present(
     except attendance_service.BackdateNotAllowed as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc))
     return _roster_for(db, user, study_group_id, date)
+
+
+@router.get("/groups/{study_group_id}/compensation", response_model=CompensationOverview)
+def group_compensation(study_group_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """«Восполнить пропуски»: кому в группе нужно догнать программу и что уже закрыто в этом семестре."""
+    today = today_local()
+    assert_can_view_group(db, user, study_group_id, today)
+    rows, closed = compensation_service.group_overview(db, study_group_id, today)
+    return {
+        "students": [
+            {**vars(r), "by_mark": [{"name": name, "count": count} for name, count in r.by_mark]} for r in rows
+        ],
+        "closed": [vars(c) for c in closed],
+    }
+
+
+@router.post("/groups/{study_group_id}/compensation/{student_id}", status_code=status.HTTP_204_NO_CONTENT)
+def close_compensation(
+    study_group_id: int,
+    student_id: int,
+    payload: CompensationClose,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Куратор закрывает «Восполнить пропуски» комментарием. Те же права, что на отметки в журнале группы."""
+    today = today_local()
+    assert_can_access_group(db, user, study_group_id, today)
+    student = db.get(Student, student_id)
+    if student is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Студент не найден")
+    try:
+        compensation_service.close(db, user, student, study_group_id, payload.comment, today)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+    except compensation_service.NothingToClose as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/groups/{study_group_id}/rhythm", response_model=list[RhythmDay])

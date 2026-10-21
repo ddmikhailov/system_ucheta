@@ -200,7 +200,12 @@ export interface RosterEntry {
   absence_period?: RosterAbsencePeriod | null;
   risk_streak: number;
   attendance_percent: number | null;
+  /** Группа риска: пропусков без уважительной причины больше 40 %. */
   is_risk: boolean;
+  /** Доля пропусков без уважительной причины, %. */
+  unexcused_percent?: number | null;
+  /** «Восполнить пропуски»: пропущен учебный процесс (без практики и ИУП посещаемость ниже 85 %). */
+  needs_compensation?: boolean;
   last_edited_by: string | null;
   last_edited_at: string | null;
 }
@@ -255,6 +260,7 @@ export interface GroupSummary {
   is_submitted_today: boolean;
   students_count: number;
   risk_count: number;
+  compensation_count?: number;
   role_type: "curator" | "deputy" | null;
 }
 
@@ -274,6 +280,7 @@ export interface MarkCodeOption {
   counts_as_present: boolean;
   is_excused: boolean;
   requires_document: boolean;
+  no_compensation?: boolean;
   is_active: boolean;
 }
 
@@ -304,10 +311,14 @@ export interface RiskStudentRow {
   full_name: string;
   study_group_id: number;
   group_code: string;
+  /** risk — группа риска, compensation — «Восполнить пропуски». */
+  category: "risk" | "compensation";
   streak: number;
   attendance_percent: number;
   days: number;
   absent: number;
+  absent_unexcused: number;
+  unexcused_percent: number;
 }
 
 export interface CuratorDisciplineRow {
@@ -371,6 +382,7 @@ export interface MarkCodeAdmin {
   counts_as_present: boolean;
   is_excused: boolean;
   requires_document: boolean;
+  no_compensation: boolean;
   is_active: boolean;
 }
 
@@ -1063,4 +1075,28 @@ export interface StudentDeletionRequest {
   requested_by_name: string;
   created_at: string;
   review_comment: string | null;
+}
+
+/** «Восполнить пропуски» в группе: кому нужно и что уже закрыто куратором в этом семестре. */
+export interface CompensationStudent {
+  student_id: number;
+  full_name: string;
+  attendance_percent: number | null;
+  days: number;
+  absent_to_compensate: number;
+  by_mark: { name: string; count: number }[];
+  last_closed_on: string | null;
+}
+
+export interface CompensationClosed {
+  student_id: number;
+  full_name: string;
+  closed_on: string;
+  comment: string;
+  author_name: string | null;
+}
+
+export interface CompensationOverview {
+  students: CompensationStudent[];
+  closed: CompensationClosed[];
 }

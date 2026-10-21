@@ -6,6 +6,7 @@ import type { ModuleName } from "../constants/modules";
 import { isModuleOn } from "../utils/modules";
 import { useAuth } from "../auth/useAuth";
 import type { GroupSummary, RosterResponse } from "../api/types";
+import CompensationPanel from "../components/CompensationPanel";
 import DayJournal from "../components/DayJournal";
 import GroupListModal from "../components/GroupListModal";
 import MyIdPanel from "../components/MyIdPanel";
@@ -111,7 +112,18 @@ export default function CuratorGroupPage() {
         meta={[`${summary.course} курс`, summary.role_type === "deputy" ? "вы — заместитель куратора" : "вы — куратор"]}
       >
         <Kpi label="Студентов" value={String(summary.students_count)} />
-        <Kpi label="В группе риска" value={String(summary.risk_count)} tone={summary.risk_count > 0 ? "hot" : undefined} hint="посещаемость ниже нормы" />
+        <Kpi
+          label="В группе риска"
+          value={String(summary.risk_count)}
+          tone={summary.risk_count > 0 ? "hot" : undefined}
+          hint="пропуски без уважительной причины"
+        />
+        <Kpi
+          label="Восполнить пропуски"
+          value={String(summary.compensation_count ?? 0)}
+          tone={summary.compensation_count ? "warn" : undefined}
+          hint="закрыть — во вкладке «Студенты»"
+        />
       </ProfileHero>
 
       <TabBar
@@ -144,7 +156,12 @@ export default function CuratorGroupPage() {
         />
       </TabPanel>
       <TabPanel idPrefix="group" tabKey="students" active={tab}>
-        <GroupStudents groupId={groupId} groupCode={summary.code} documents={isModuleOn(user, MODULE.DOSSIER)} />
+        <GroupStudents
+          groupId={groupId}
+          groupCode={summary.code}
+          documents={isModuleOn(user, MODULE.DOSSIER)}
+          onChanged={loadSummary}
+        />
       </TabPanel>
       <TabPanel idPrefix="group" tabKey="meals" active={tab}>
         <GroupMealsPanel groupId={groupId} />
@@ -168,26 +185,46 @@ export default function CuratorGroupPage() {
   );
 }
 
-/** Весь список группы: поиск, посещаемость с начала семестра, группа риска; ФИО — переход в карточку
- * студента. Здесь же — «Список для печати» и «Личные карточки» в Word. */
-function GroupStudents({ groupId, groupCode, documents }: { groupId: number; groupCode: string; documents: boolean }) {
+/** Весь список группы: поиск, посещаемость с начала семестра, группа риска и «Восполнить пропуски» (сверху — поле,
+ * где куратор закрывает их комментарием); ФИО — переход в карточку студента. Здесь же — «Список для печати» и
+ * «Личные карточки» в Word. */
+function GroupStudents({
+  groupId,
+  groupCode,
+  documents,
+  onChanged,
+}: {
+  groupId: number;
+  groupCode: string;
+  documents: boolean;
+  onChanged?: () => void;
+}) {
   const [roster, setRoster] = useState<RosterResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [listOpen, setListOpen] = useState(false);
   const [cardsOpen, setCardsOpen] = useState(false);
 
-  useEffect(() => {
+  const loadRoster = useCallback(() => {
     api
       .get<RosterResponse>(`/curator/groups/${groupId}/day?date=${todayIso()}`)
       .then(setRoster)
       .catch((err) => setError(err instanceof ApiError ? err.message : "Не удалось загрузить список группы"));
   }, [groupId]);
 
+  useEffect(loadRoster, [loadRoster]);
+
   const rows = useMemo(() => (roster ? filterByQuery(roster.entries, query, (e) => e.full_name) : []), [roster, query]);
 
   return (
     <div className="group-students">
+      <CompensationPanel
+        groupId={groupId}
+        onChanged={() => {
+          loadRoster();
+          onChanged?.();
+        }}
+      />
       <div className="toolbar">
         <label className="form-field group-students__search">
           Поиск по ФИО
@@ -229,7 +266,17 @@ function GroupStudents({ groupId, groupCode, documents }: { groupId: number; gro
                   </Link>
                 </td>
                 <td data-label="Посещаемость">{e.attendance_percent === null ? "—" : formatPercent(e.attendance_percent)}</td>
-                <td data-label="Статус">{e.is_risk ? <span className="risk-badge">группа риска</span> : "—"}</td>
+                <td data-label="Статус">
+                  {e.is_risk ? (
+                    <span className="risk-badge" title={`Без уважительной причины пропущено ${formatPercent(e.unexcused_percent)} дней`}>
+                      группа риска
+                    </span>
+                  ) : e.needs_compensation ? (
+                    <span className="compensate-badge">восполнить пропуски</span>
+                  ) : (
+                    "—"
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

@@ -14,8 +14,8 @@ const get = vi.mocked(api.get);
 const patch = vi.mocked(api.patch);
 
 const CODES = [
-  { id: 1, code: "н", name: "Неуважительная причина", counts_as_present: false, is_excused: false, requires_document: false, is_active: true },
-  { id: 2, code: "б", name: "Больничный лист", counts_as_present: false, is_excused: true, requires_document: true, is_active: true },
+  { id: 1, code: "н", name: "Неуважительная причина", counts_as_present: false, is_excused: false, requires_document: false, no_compensation: false, is_active: true },
+  { id: 2, code: "б", name: "Больничный лист", counts_as_present: false, is_excused: true, requires_document: true, no_compensation: false, is_active: true },
 ];
 
 beforeEach(() => {

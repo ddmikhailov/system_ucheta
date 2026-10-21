@@ -131,7 +131,7 @@ def test_college_wide_screens_do_not_query_per_group(busy, db, today):
     assert q["n"] <= 12, q["n"]
 
     with count_queries(db) as q:
-        stats_service.risk_students(db, today, 1)
+        stats_service.risk_students(db, today)
     assert q["n"] <= 12, q["n"]
 
 

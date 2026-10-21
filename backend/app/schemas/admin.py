@@ -117,6 +117,7 @@ class MarkCodeRead(BaseModel):
     counts_as_present: bool
     is_excused: bool
     requires_document: bool
+    no_compensation: bool = False
     is_active: bool
 
 
@@ -124,6 +125,7 @@ class MarkCodeUpdate(BaseModel):
     counts_as_present: bool | None = None
     is_excused: bool | None = None
     requires_document: bool | None = None
+    no_compensation: bool | None = None
     is_active: bool | None = None
 
 

@@ -8,6 +8,7 @@ from app.core import policies
 from app.core.config import get_settings
 from app.core.time import today_local, utcnow
 from app.models import (
+    AbsenceCompensation,
     AbsencePeriod,
     AttendanceMark,
     BasisStatus,
@@ -221,16 +222,39 @@ def consecutive_unexcused_counts_bulk(
 
 @dataclass(frozen=True)
 class AttendanceRate:
-    """Посещаемость студента с начала семестра: сданные группой дни, пропущенные из них, процент."""
+    """Посещаемость студента с начала семестра: сданные группой дни, пропущенные из них, процент — и два статуса по ней
+    (решение 21.10.2026): «Группа риска» (много пропусков без уважительной причины) и «Восполнить пропуски»."""
     days: int
     absent: int
     percent: float | None  # None — сданных дней ещё нет
+    absent_unexcused: int = 0  # из пропусков — без уважительной причины («н», «у»)
+    absent_to_compensate: int = 0  # пропуски, которые нужно восполнить: все, кроме практики и ИУП (флаг no_compensation)
+    new_to_compensate: int = 0  # из них — после последнего закрытия «Восполнить пропуски» (не было закрытия — все)
+    compensation_closed_on: datetime.date | None = None  # последнее закрытие куратором в этом семестре
+
+    @property
+    def unexcused_percent(self) -> float | None:
+        """Доля пропусков без уважительной причины, % сданных дней."""
+        return round(self.absent_unexcused / self.days * 100, 1) if self.days else None
 
     @property
     def is_risk(self) -> bool:
-        """Группа риска: посещаемость ниже порога (и сданных дней уже достаточно, чтобы процент что-то значил)."""
+        """Группа риска: пропусков без уважительной причины больше `risk_unexcused_percent` % сданных дней (посещаемость
+        без учёта уважительных пропусков ниже 60 %) — и сданных дней уже достаточно, чтобы процент что-то значил."""
         settings = get_settings()
-        return self.percent is not None and self.days >= settings.risk_min_days and self.percent < settings.risk_attendance_percent
+        return self.days >= settings.risk_min_days and self.absent_unexcused * 100 > settings.risk_unexcused_percent * self.days
+
+    @property
+    def needs_compensation(self) -> bool:
+        """«Восполнить пропуски»: студент не в группе риска, но пропустил учебный процесс — без практики и ИУП
+        посещаемость ниже `risk_attendance_percent` %. После закрытия куратором — снова, только когда после закрытия
+        накопилось `compensation_reopen_days` новых таких пропусков."""
+        settings = get_settings()
+        if self.days < settings.risk_min_days or self.is_risk:
+            return False
+        if (self.days - self.absent_to_compensate) * 100 >= settings.risk_attendance_percent * self.days:
+            return False
+        return self.compensation_closed_on is None or self.new_to_compensate >= settings.compensation_reopen_days
 
 
 def semester_start(day: datetime.date) -> datetime.date:
@@ -245,11 +269,12 @@ def semester_start(day: datetime.date) -> datetime.date:
 def attendance_rates_bulk(db: Session, students: list[Student], as_of_date: datetime.date) -> dict[int, AttendanceRate]:
     """Посещаемость сразу для списка студентов — по сданным дням группы с начала семестра по `as_of_date` включительно.
     Пропуск — любая отметка, которая не считается присутствием (опоздание — присутствие); пропуски по уважительной
-    причине тоже считаются, как в «Витринах». Три запроса независимо от числа студентов и групп."""
+    причине тоже считаются, как в «Витринах». Четыре запроса независимо от числа студентов и групп."""
     if not students:
         return {}
     start = semester_start(as_of_date)
     group_ids = {s.study_group_id for s in students}
+    student_ids = [s.id for s in students]
     submitted: dict[int, set[datetime.date]] = {gid: set() for gid in group_ids}
     for row in db.execute(
         select(DaySubmission.study_group_id, DaySubmission.date)
@@ -257,24 +282,41 @@ def attendance_rates_bulk(db: Session, students: list[Student], as_of_date: date
     ).all():
         submitted[row.study_group_id].add(row.date)
 
-    absent: dict[int, set[datetime.date]] = {}
+    # дата пропуска → (уважительная ли причина, нужно ли восполнять)
+    absent: dict[int, dict[datetime.date, tuple[bool, bool]]] = {}
     for row in db.execute(
-        select(AttendanceMark.student_id, AttendanceMark.date)
+        select(AttendanceMark.student_id, AttendanceMark.date, MarkCode.is_excused, MarkCode.no_compensation)
         .join(MarkCode, MarkCode.id == AttendanceMark.mark_code_id)
         .where(
-            AttendanceMark.student_id.in_([s.id for s in students]),
+            AttendanceMark.student_id.in_(student_ids),
             AttendanceMark.date >= start, AttendanceMark.date <= as_of_date,
             MarkCode.counts_as_present.is_(False),
         )
     ).all():
-        absent.setdefault(row.student_id, set()).add(row.date)
+        absent.setdefault(row.student_id, {})[row.date] = (bool(row.is_excused), not row.no_compensation)
+
+    closed: dict[int, datetime.date] = dict(db.execute(
+        select(AbsenceCompensation.student_id, func.max(AbsenceCompensation.closed_on))
+        .where(
+            AbsenceCompensation.student_id.in_(student_ids),
+            AbsenceCompensation.closed_on >= start, AbsenceCompensation.closed_on <= as_of_date,
+        )
+        .group_by(AbsenceCompensation.student_id)
+    ).all())
 
     result: dict[int, AttendanceRate] = {}
     for student in students:
         days = {d for d in submitted[student.study_group_id] if d >= student.enrolled_at}
-        missed = len(absent.get(student.id, set()) & days)
+        missed = {d: flags for d, flags in absent.get(student.id, {}).items() if d in days}
+        to_compensate = [d for d, (_, compensate) in missed.items() if compensate]
+        closed_on = closed.get(student.id)
         result[student.id] = AttendanceRate(
-            days=len(days), absent=missed, percent=round((len(days) - missed) / len(days) * 100, 1) if days else None,
+            days=len(days), absent=len(missed),
+            percent=round((len(days) - len(missed)) / len(days) * 100, 1) if days else None,
+            absent_unexcused=sum(1 for excused, _ in missed.values() if not excused),
+            absent_to_compensate=len(to_compensate),
+            new_to_compensate=sum(1 for d in to_compensate if closed_on is None or d > closed_on),
+            compensation_closed_on=closed_on,
         )
     return result
 
@@ -394,6 +436,8 @@ def get_roster(db: Session, study_group_id: int, date: datetime.date, carry_over
                 "risk_streak": risk_streak,
                 "attendance_percent": rates[student.id].percent,
                 "is_risk": rates[student.id].is_risk,
+                "unexcused_percent": rates[student.id].unexcused_percent,
+                "needs_compensation": rates[student.id].needs_compensation,
                 "last_edited_by": last_edited_by,
                 "last_edited_at": last_edited_at,
             }

@@ -529,6 +529,11 @@
   font-weight: 600;
 }
 
+.group-card__compensate {
+  color: var(--primary-dark);
+  font-weight: 600;
+}
+
 .group-card__today {
   justify-self: start;
   margin-top: 6px;

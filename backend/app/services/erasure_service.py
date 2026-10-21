@@ -1,5 +1,5 @@
 """Стирание персональных данных студента: досье, представители, заметки, ответы по задачам, отметки «Мой ID»,
-присутствие на классных часах и родительских собраниях.
+присутствие на классных часах и родительских собраниях, комментарии «Восполнить пропуски».
 
 Вызывается везде, где студента удаляют или обезличивают: иначе FK из этих таблиц либо мешают
 удалению (и студент «обезличивается» с телефонами и особыми данными), либо остаются висеть."""
@@ -8,9 +8,9 @@ import json
 from sqlalchemy.orm import Session
 
 from app.models import (
-    AbsencePeriod, AttendanceChangeRequest, AttendanceMark, DossierAccessLog, GroupEventAttendee, ParentMeetingAttendee,
-    Student, StudentDeletionRequest, StudentGroupMembership, StudentGuardian, StudentMeal, StudentMyId, StudentNote,
-    StudentProfile, TaskComment, TaskRow, User,
+    AbsenceCompensation, AbsencePeriod, AttendanceChangeRequest, AttendanceMark, DossierAccessLog, GroupEventAttendee,
+    ParentMeetingAttendee, Student, StudentDeletionRequest, StudentGroupMembership, StudentGuardian, StudentMeal,
+    StudentMyId, StudentNote, StudentProfile, TaskComment, TaskRow, User,
 )
 from app.services.audit_service import log_action, redact_audit_history
 
@@ -29,6 +29,7 @@ def erase_student_personal_data(db: Session, student_ids: list[int], include_acc
         db.query(StudentDeletionRequest).filter(StudentDeletionRequest.student_id.in_(chunk)).delete(synchronize_session=False)
         db.query(StudentMeal).filter(StudentMeal.student_id.in_(chunk)).delete(synchronize_session=False)
         db.query(StudentMyId).filter(StudentMyId.student_id.in_(chunk)).delete(synchronize_session=False)
+        db.query(AbsenceCompensation).filter(AbsenceCompensation.student_id.in_(chunk)).delete(synchronize_session=False)
         db.query(GroupEventAttendee).filter(GroupEventAttendee.student_id.in_(chunk)).delete(synchronize_session=False)
         guardian_ids = [g for (g,) in db.query(StudentGuardian.id).filter(StudentGuardian.student_id.in_(chunk))]
         if guardian_ids:

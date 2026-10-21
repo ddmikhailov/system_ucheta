@@ -1,4 +1,5 @@
 import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -32,10 +33,13 @@ class RiskStudentRow(BaseModel):
     full_name: str
     study_group_id: int
     group_code: str
+    category: Literal["risk", "compensation"]  # группа риска или «Восполнить пропуски»
     streak: int  # дней подряд «н» — справочно
     attendance_percent: float  # посещаемость с начала семестра, %
     days: int  # сданных дней
     absent: int  # пропущено из них
+    absent_unexcused: int  # из них без уважительной причины
+    unexcused_percent: float  # доля пропусков без уважительной причины, %
 
 
 class CuratorDisciplineRow(BaseModel):
