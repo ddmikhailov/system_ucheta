@@ -5,11 +5,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "../api/client";
 import { AuthContext } from "../auth/authContextObject";
 import type { StudentCard } from "../api/types";
-import { RELEASE_MODULES } from "../constants/modules";
+import type { ModuleName } from "../constants/modules";
 import { makeUser } from "../test/utils";
 import { todayIso } from "../utils/date";
 import StudentCardPage from "./StudentCardPage";
 import { chooseOption } from "../test/searchSelect";
+
+// Урезанный набор без досье и индивидуальной работы (режим настраиваемый; релизный набор их включает).
+const RELEASE_MODULES: readonly ModuleName[] = ["attendance", "tasks", "my_id", "meals"];
 
 vi.mock("../api/client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api/client")>();

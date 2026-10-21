@@ -4,17 +4,22 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.core.config import get_settings
-from app.core.modules import ALL_MODULES, HIDDEN_IN_RELEASE, RELEASE_MODULES, parse_modules
+from app.core.modules import ALL_MODULES, RELEASE_MODULES, parse_modules
 from app.db.session import get_db
 from app.main import MODULE_ROUTERS, include_module_routers
 import app.db.base as db_base
 from tests.conftest import CURATOR_PASSWORD
 
 
+# Урезанный набор (без досье и индивидуальной работы): режим остаётся настраиваемым, его и проверяют эти тесты.
+# Сам релизный набор (переменная не задана) включает досье и индивидуальную работу.
+MINIMAL = "attendance,tasks,my_id,meals"
+
+
 @pytest.fixture()
 def release_mode(monkeypatch):
-    """Релизный набор: переменная ENABLED_MODULES не задана."""
-    monkeypatch.setattr(get_settings(), "enabled_modules", "")
+    """Урезанный набор: ENABLED_MODULES=attendance,tasks,my_id,meals."""
+    monkeypatch.setattr(get_settings(), "enabled_modules", MINIMAL)
 
 
 def _paths(router):
@@ -48,12 +53,11 @@ def _fresh_client(test_engine, modules):
 
 
 def test_hidden_routers_answer_404_for_every_route_in_release_set(test_engine):
-    client = _fresh_client(test_engine, parse_modules(""))
+    client = _fresh_client(test_engine, parse_modules(MINIMAL))
     checked = 0
     for router, module in MODULE_ROUTERS:
-        if module is None or module in RELEASE_MODULES:
+        if module is None or module in parse_modules(MINIMAL):
             continue
-        assert module in HIDDEN_IN_RELEASE
         for method, path in _paths(router):
             r = client.request(method, path)
             assert r.status_code == 404, f"{method} {path} должен быть недоступен (модуль {module})"
@@ -62,9 +66,9 @@ def test_hidden_routers_answer_404_for_every_route_in_release_set(test_engine):
 
 
 def test_release_routers_stay_connected(test_engine):
-    client = _fresh_client(test_engine, parse_modules(""))
+    client = _fresh_client(test_engine, parse_modules(MINIMAL))
     for router, module in MODULE_ROUTERS:
-        if module is not None and module not in RELEASE_MODULES:
+        if module is not None and module not in parse_modules(MINIMAL):
             continue
         for method, path in _paths(router):
             assert client.request(method, path).status_code != 404, f"{method} {path} пропал из релизного набора"
@@ -80,7 +84,7 @@ def test_all_modules_mode_connects_every_router(test_engine):
 def test_me_lists_enabled_modules(client, admin_headers, release_mode):
     r = client.get("/auth/me", headers=admin_headers)
     assert r.status_code == 200
-    assert r.json()["modules"] == sorted(RELEASE_MODULES)
+    assert r.json()["modules"] == sorted(parse_modules(MINIMAL))
 
 
 def test_me_lists_every_module_in_all_mode(client, admin_headers, monkeypatch):
@@ -92,7 +96,7 @@ def test_change_password_response_carries_modules(client, db, curator_user, cura
     r = client.post("/auth/change-password", headers=curator_headers,
                     json={"current_password": CURATOR_PASSWORD, "new_password": "Kestrel#58xQz"})
     assert r.status_code == 200, r.text
-    assert r.json()["modules"] == sorted(RELEASE_MODULES)
+    assert r.json()["modules"] == sorted(parse_modules(MINIMAL))
 
 
 def test_word_documents_from_dossier_are_hidden_in_release(client, admin_headers, curator_headers, curator_group, release_mode):
@@ -139,7 +143,7 @@ def test_old_linked_task_is_accepted_but_dossier_stays_untouched(
     task = _create(client, admin_headers, [PHONE]).json()
     aid = _assignment_id(client, curator_headers, task["id"])
     students = _students(db, curator_group)
-    monkeypatch.setattr(get_settings(), "enabled_modules", "")  # релиз
+    monkeypatch.setattr(get_settings(), "enabled_modules", MINIMAL)  # релиз
     form = client.get(f"/tasks/assignments/{aid}", headers=curator_headers)
     assert form.status_code == 200 and not any(r.get("from_dossier") for r in form.json()["rows"])
     key = task["fields"][0]["key"]
@@ -161,7 +165,7 @@ def test_my_day_has_no_individual_work_and_no_birthdays_in_release(
     monkeypatch.setattr(get_settings(), "enabled_modules", "all")
     full = my_day_service.build_my_day(db, curator_user, today)
     assert [b.student_id for b in full.birthdays] == [student.id]
-    monkeypatch.setattr(get_settings(), "enabled_modules", "")
+    monkeypatch.setattr(get_settings(), "enabled_modules", MINIMAL)
     db.expire_all()
     day = my_day_service.build_my_day(db, curator_user, today)
     assert day.attention == [] and day.attention_total == 0 and day.birthdays == []
@@ -175,7 +179,7 @@ def test_followup_reminders_are_not_created_in_release(db, curator_user, monkeyp
     called = []
     monkeypatch.setattr(task_service.individual_work_service, "generate_followup_reminders",
                         lambda *a, **k: called.append(1) or 0)
-    monkeypatch.setattr(get_settings(), "enabled_modules", "")
+    monkeypatch.setattr(get_settings(), "enabled_modules", MINIMAL)
     task_service.generate_reminders(db, curator_user, today_local(), force=True)
     assert called == []
 
@@ -199,3 +203,10 @@ def test_release_features_work_end_to_end(client, curator_headers, curator_user,
         r = client.get(path, headers=curator_headers)
         assert r.status_code == 200, f"{path}: {r.status_code} {r.text[:200]}"
     assert "dossier" not in client.get(f"/students/{student.id}", headers=curator_headers).text
+
+
+def test_default_release_set_includes_dossier_and_individual_work(client, admin_headers, monkeypatch):
+    monkeypatch.setattr(get_settings(), "enabled_modules", "")
+    modules = client.get("/auth/me", headers=admin_headers).json()["modules"]
+    assert modules == sorted(RELEASE_MODULES)
+    assert {"my_id", "dossier", "individual_work"} <= set(modules)
