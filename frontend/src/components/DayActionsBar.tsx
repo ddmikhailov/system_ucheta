@@ -5,6 +5,7 @@ const PERIOD_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8];
  * пары, к которой группа пришла в этот день (идёт в свод «всего / к 1 паре»). */
 export default function DayActionsBar({
   absentCount,
+  lateCount,
   busy,
   firstPeriod,
   onFirstPeriodChange,
@@ -14,6 +15,8 @@ export default function DayActionsBar({
   planMode = false,
 }: {
   absentCount: number;
+  /** Опоздавшие — присутствуют, поэтому считаются отдельно от отсутствующих. */
+  lateCount: number;
   busy: boolean;
   firstPeriod: string;
   onFirstPeriodChange: (value: string) => void;
@@ -25,7 +28,9 @@ export default function DayActionsBar({
 }) {
   return (
     <div className="day-actions">
-      <span className="absent-counter">Отсутствуют: {absentCount}</span>
+      <span className="absent-counter">
+        Отсутствуют: {absentCount}, опоздали: {lateCount}
+      </span>
       {!planMode && (
         <button onClick={onAllPresent} disabled={busy}>
           Все присутствуют

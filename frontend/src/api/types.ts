@@ -178,6 +178,14 @@ export interface MeResponse {
   access_token?: string | null;
 }
 
+export interface RosterAbsencePeriod {
+  id: number;
+  mark_code: string;
+  date_from: string;
+  date_to: string;
+  basis_reference: string | null;
+}
+
 export interface RosterEntry {
   student_id: number;
   full_name: string;
@@ -187,6 +195,7 @@ export interface RosterEntry {
   basis_reference: string | null;
   is_draft_suggestion: boolean;
   is_locked: boolean;
+  absence_period?: RosterAbsencePeriod | null;
   risk_streak: number;
   attendance_percent: number | null;
   is_risk: boolean;

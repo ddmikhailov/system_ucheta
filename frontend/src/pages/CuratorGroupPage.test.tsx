@@ -22,6 +22,7 @@ const post = vi.mocked(api.post);
 const MARK_CODES = [
   { id: 1, code: "н", name: "Неуважительная причина", counts_as_present: false, is_excused: false, requires_document: false, is_active: true },
   { id: 2, code: "б", name: "Больничный лист", counts_as_present: false, is_excused: true, requires_document: true, is_active: true },
+  { id: 3, code: "о", name: "Опоздание", counts_as_present: true, is_excused: false, requires_document: false, is_active: true },
 ];
 
 function entry(id: number, name: string, over: Partial<RosterEntry> = {}): RosterEntry {
@@ -78,7 +79,7 @@ describe("CuratorGroupPage — журнал дня", () => {
     open();
     expect(await screen.findByText("День ещё не сдан — можно заполнить")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Алексеев Пётр" })).toHaveAttribute("href", "/students/1");
-    expect(screen.getByText("Отсутствуют: 0")).toBeInTheDocument();
+    expect(screen.getByText("Отсутствуют: 0, опоздали: 0")).toBeInTheDocument();
   });
 
   it("«Список для печати» открывает окно выбора столбцов для текущей группы", async () => {
@@ -129,7 +130,7 @@ describe("CuratorGroupPage — журнал дня", () => {
     open();
     await screen.findByText("Алексеев Пётр");
     await user.click(within(studentRow("Алексеев")).getByRole("button", { name: "Н" }));
-    expect(screen.getByText("Отсутствуют: 1")).toBeInTheDocument();
+    expect(screen.getByText("Отсутствуют: 1, опоздали: 0")).toBeInTheDocument();
 
     post.mockResolvedValue(roster([entry(1, "Алексеев Пётр", { mark_code: "н" })], { is_submitted: true }));
     await user.click(screen.getByRole("button", { name: "Сдать день" }));
@@ -140,6 +141,33 @@ describe("CuratorGroupPage — журнал дня", () => {
     expect(await screen.findByRole("region", { name: "Итоги дня" })).toBeInTheDocument();
   });
 
+  it("у отметки из периода есть «Редактировать»: окно с данными периода и сохранение через PUT", async () => {
+    const user = userEvent.setup();
+    const period = { id: 5, mark_code: "б", date_from: "2026-10-01", date_to: "2026-10-10", basis_reference: "справка 1" };
+    mockApi(roster([entry(1, "Алексеев Пётр", { mark_code: "б", mark_name: "Больничный лист", is_locked: true, absence_period: period })]));
+    open();
+    await screen.findByText("Алексеев Пётр");
+    await user.click(within(studentRow("Алексеев")).getByRole("button", { name: "Редактировать" }));
+    const dialog = await screen.findByRole("dialog", { name: "Редактировать длительное отсутствие" });
+    expect(within(dialog).getByDisplayValue("справка 1")).toBeInTheDocument();
+    vi.mocked(api.put).mockResolvedValue({});
+    await user.click(within(dialog).getByRole("button", { name: "Сохранить" }));
+    expect(api.put).toHaveBeenCalledWith("/curator/absence-periods/5", {
+      mark_code: "б", date_from: "2026-10-01", date_to: "2026-10-10", basis_reference: "справка 1",
+    });
+  });
+
+  it("опоздавший считается отдельно от отсутствующих", async () => {
+    const user = userEvent.setup();
+    mockApi(roster([entry(1, "Алексеев Пётр"), entry(2, "Андреева Елена")]));
+    open();
+    await screen.findByText("Алексеев Пётр");
+    await user.click(within(studentRow("Алексеев")).getByRole("button", { name: "О" }));
+    expect(screen.getByText("Отсутствуют: 0, опоздали: 1")).toBeInTheDocument();
+    await user.click(within(studentRow("Андреева")).getByRole("button", { name: "Н" }));
+    expect(screen.getByText("Отсутствуют: 1, опоздали: 1")).toBeInTheDocument();
+  });
+
   it("снятая отметка («Я») убирает студента из отсутствующих", async () => {
     const user = userEvent.setup();
     mockApi(roster([entry(1, "Алексеев Пётр")]));
@@ -147,9 +175,9 @@ describe("CuratorGroupPage — журнал дня", () => {
     await screen.findByText("Алексеев Пётр");
     const row = studentRow("Алексеев");
     await user.click(within(row).getByRole("button", { name: "Б" }));
-    expect(screen.getByText("Отсутствуют: 1")).toBeInTheDocument();
+    expect(screen.getByText("Отсутствуют: 1, опоздали: 0")).toBeInTheDocument();
     await user.click(within(row).getByRole("button", { name: "Присутствует" }));
-    expect(screen.getByText("Отсутствуют: 0")).toBeInTheDocument();
+    expect(screen.getByText("Отсутствуют: 0, опоздали: 0")).toBeInTheDocument();
   });
 
   it("уже стоящие отметки подгружаются как отсутствующие, а заблокированные периодом — нет", async () => {
@@ -159,7 +187,7 @@ describe("CuratorGroupPage — журнал дня", () => {
     ]));
     open();
     await screen.findByText("Алексеев Пётр");
-    expect(screen.getByText("Отсутствуют: 1")).toBeInTheDocument();
+    expect(screen.getByText("Отсутствуют: 1, опоздали: 0")).toBeInTheDocument();
     expect(within(studentRow("Андреева")).getByText("Больничный лист")).toBeInTheDocument();
   });
 });
@@ -180,7 +208,7 @@ describe("CuratorGroupPage — «Все присутствуют» (защита
     await user.click(screen.getByRole("button", { name: "Все присутствуют" }));
     expect(confirm).toHaveBeenCalledWith(expect.stringContaining("(1)"));
     expect(post).not.toHaveBeenCalled();
-    expect(screen.getByText("Отсутствуют: 1")).toBeInTheDocument(); // отметка на месте
+    expect(screen.getByText("Отсутствуют: 1, опоздали: 0")).toBeInTheDocument(); // отметка на месте
   });
 
   it("после согласия отправляет «все присутствуют»", async () => {
@@ -266,7 +294,7 @@ describe("CuratorGroupPage — сданный день и правка прош�
     expect(screen.queryByRole("button", { name: "Сдать день" })).not.toBeInTheDocument();
 
     await user.click(within(summary).getByRole("button", { name: "Редактировать" }));
-    expect(screen.getByText("Отсутствуют: 1")).toBeInTheDocument();
+    expect(screen.getByText("Отсутствуют: 1, опоздали: 0")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Сохранить изменения" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Отменить" }));
     expect(screen.getByRole("region", { name: "Итоги дня" })).toBeInTheDocument();

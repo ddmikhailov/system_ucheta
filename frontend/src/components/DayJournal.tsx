@@ -9,7 +9,7 @@ import DayActionsBar from "./DayActionsBar";
 import MarkCodeButtons from "./MarkCodeButtons";
 import MarkCommentModal from "./MarkCommentModal";
 import { scrollToTop } from "../utils/scroll";
-import type { MarkCodeOption, MonthDayStatus, MyDayRhythmDay, RosterResponse } from "../api/types";
+import type { MarkCodeOption, MonthDayStatus, MyDayRhythmDay, RosterAbsencePeriod, RosterResponse } from "../api/types";
 import { formatServerDateTime, todayIso } from "../utils/date";
 import SearchSelect from "./SearchSelect";
 import { dialogs, toast } from "../utils/feedback";
@@ -102,6 +102,7 @@ export default function DayJournal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPeriodForm, setShowPeriodForm] = useState<number | null>(null);
+  const [editPeriod, setEditPeriod] = useState<RosterAbsencePeriod | null>(null);
   const [showCommentFor, setShowCommentFor] = useState<number | null>(null);
   const [groupsLoaded, setGroupsLoaded] = useState(false);
   const [groupsError, setGroupsError] = useState<string | null>(null);
@@ -187,7 +188,10 @@ export default function DayJournal({
   const markCodeByCode = useMemo(() => new Map(markCodes.map((m) => [m.code, m])), [markCodes]);
   const selectedDayType = monthStatus.find((d) => d.date === date)?.day_type;
   const isNonWorkingDay = selectedDayType != null && NON_WORKING.includes(selectedDayType);
-  const absentCount = Object.values(pending).length;
+  // Опоздание — присутствие: в счётчике оно отдельно от отсутствующих.
+  const markedCount = Object.values(pending).length;
+  const lateCount = Object.values(pending).filter((p) => markCodeByCode.get(p.mark_code)?.counts_as_present).length;
+  const absentCount = markedCount - lateCount;
   // Есть несохранённые правки: форма открыта и отличается от загруженного дня.
   const dirty = !!roster && (editing || !roster.is_submitted) && JSON.stringify(pending) !== JSON.stringify(pendingFrom(roster));
 
@@ -469,6 +473,7 @@ export default function DayJournal({
 
               <DayActionsBar
                 absentCount={absentCount}
+                lateCount={lateCount}
                 busy={busy}
                 firstPeriod={firstPeriod}
                 onFirstPeriodChange={setFirstPeriod}
@@ -476,8 +481,8 @@ export default function DayJournal({
                 submitLabel={isFuture ? "Сохранить план" : reviewMode ? "Отправить на проверку" : roster.is_submitted ? "Сохранить изменения" : submitLabel}
                 onAllPresent={async () => {
                   if (
-                    absentCount > 0 &&
-                    !(await dialogs.confirm(`Отметки отсутствующих (${absentCount}) будут сброшены. Отметить всех присутствующими?`, {
+                    markedCount > 0 &&
+                    !(await dialogs.confirm(`Отметки (${markedCount}) будут сброшены. Отметить всех присутствующими?`, {
                       confirmLabel: "Отметить всех",
                     }))
                   )
@@ -547,6 +552,17 @@ export default function DayJournal({
                               Период
                             </button>
                           )}
+                          {entry.is_locked && entry.absence_period && (
+                            <button
+                              className="link-btn"
+                              onClick={() => {
+                                setEditPeriod(entry.absence_period ?? null);
+                                setShowPeriodForm(entry.student_id);
+                              }}
+                            >
+                              Редактировать
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -571,12 +587,18 @@ export default function DayJournal({
 
       {showPeriodForm !== null && (
         <AbsencePeriodModal
+          period={editPeriod}
           studentId={showPeriodForm}
           studentName={roster?.entries.find((e) => e.student_id === showPeriodForm)?.full_name ?? ""}
           markCodes={markCodes}
-          onClose={() => setShowPeriodForm(null)}
+          onClose={() => {
+            setShowPeriodForm(null);
+            setEditPeriod(null);
+          }}
           onSaved={() => {
             setShowPeriodForm(null);
+            setEditPeriod(null);
+            loadMonthStatus();
             loadRoster();
             loadRhythm();
             scrollToTop();
