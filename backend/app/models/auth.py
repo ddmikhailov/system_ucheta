@@ -52,6 +52,9 @@ class User(Base):
     # TODO.md 2: раньше отозвать выданный токен было нечем).
     token_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
+    # Версия платформы, чью плашку «Что нового» пользователь уже закрыл: показываем её один раз на все устройства.
+    seen_release: Mapped[str | None] = mapped_column(String(16), nullable=True)
+
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, default=utcnow, nullable=False
     )

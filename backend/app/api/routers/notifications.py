@@ -10,6 +10,9 @@ from app.schemas.notifications import NotificationRead, UnreadCountResponse
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
+# Больше колокольчик не показывает; без верхней границы ?limit=100000 выгружал бы всё накопленное разом.
+MAX_LIMIT = 200
+
 
 def _task_reminders(db: Session, user: User) -> None:
     """Сроки задач проверяем при открытии платформы (колокольчик опрашивает эти ручки)."""
@@ -31,7 +34,7 @@ def list_notifications(
         db.query(InAppNotification)
         .filter(InAppNotification.user_id == user.id)
         .order_by(InAppNotification.created_at.desc())
-        .limit(limit)
+        .limit(max(1, min(limit, MAX_LIMIT)))
         .all()
     )
     return rows

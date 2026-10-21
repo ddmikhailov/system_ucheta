@@ -65,6 +65,12 @@ export default function NotificationBell() {
       setOpen(false);
       return;
     }
+    // «Сообщить о проблеме» несёт номер сообщившего: администратор открывает его учётную запись (роль, группы, контакты).
+    if (n.entity_type === "user" && n.entity_id && inRoles(user?.role, MANAGEMENT_ROLES)) {
+      navigate(`/admin/users/${n.entity_id}`);
+      setOpen(false);
+      return;
+    }
     if (n.entity_type === "task_assignment" && n.entity_id) {
       navigate(`/tasks/assignment/${n.entity_id}`);
       setOpen(false);

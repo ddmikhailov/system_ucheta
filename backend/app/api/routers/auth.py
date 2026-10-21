@@ -165,6 +165,7 @@ def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
         dept_head_name=dept_head_name,
         must_change_password=user.must_change_password,
         modules=sorted(enabled_modules()),
+        seen_release=user.seen_release,
     )
 
 

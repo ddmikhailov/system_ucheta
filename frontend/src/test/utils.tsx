@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { AuthContext } from "../auth/authContextObject";
 import type { AuthContextValue } from "../auth/authContextObject";
 import type { MeResponse } from "../api/types";
+import { APP_VERSION } from "../constants/release";
 
 export function makeUser(role: string, overrides: Partial<MeResponse> = {}): MeResponse {
   return {
@@ -15,6 +16,8 @@ export function makeUser(role: string, overrides: Partial<MeResponse> = {}): MeR
     groups: [],
     dept_head_name: null,
     must_change_password: false,
+    // «Что нового» текущей версии уже просмотрено — плашка не мешает тестам страниц.
+    seen_release: APP_VERSION,
     ...overrides,
   };
 }

@@ -16,11 +16,15 @@ import './styles/profile.css'
 import './styles/journal.css'
 import './styles/dossier.css'
 import './styles/controls.css'
+import './styles/support.css'
 import App from './App.tsx'
+import { installErrorReporting } from './utils/errorReporting'
 import { applyTheme, getThemePref } from './utils/theme'
 
 // Тема — до первой отрисовки, чтобы страница не мигнула светлой.
 applyTheme(getThemePref())
+// Необработанные ошибки страницы — на сервер (журнал и Sentry), чтобы о них узнавать не только со слов кураторов.
+installErrorReporting()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

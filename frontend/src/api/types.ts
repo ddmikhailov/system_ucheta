@@ -174,6 +174,8 @@ export interface MeResponse {
   must_change_password: boolean;
   /** Включённые модули платформы (backend: ENABLED_MODULES); нет поля — считаем, что включено всё. */
   modules?: string[];
+  /** Версия, чью плашку «Что нового» пользователь уже закрыл. */
+  seen_release?: string | null;
   // Заполнено только в ответе POST /auth/change-password.
   access_token?: string | null;
 }

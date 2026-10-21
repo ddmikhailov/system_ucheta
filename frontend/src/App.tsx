@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 import { Navigate, Route, BrowserRouter as Router, Routes, useLocation } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthContext";
 import { useAuth } from "./auth/useAuth";
+import ErrorBoundary from "./components/ErrorBoundary";
 import FeedbackHost from "./components/FeedbackHost";
 import Layout from "./components/Layout";
 import LoginPage from "./pages/LoginPage";
@@ -118,6 +119,8 @@ export default function App() {
   return (
     <AuthProvider>
       <Router>
+        {/* Внешняя страховка от белого экрана: разделы внутри Layout ловят свои сбои сами, сюда доходит остальное. */}
+        <ErrorBoundary>
         <Suspense fallback={<div className="loading-screen">Загрузка…</div>}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
@@ -333,6 +336,7 @@ export default function App() {
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </Suspense>
+        </ErrorBoundary>
       </Router>
       <FeedbackHost />
     </AuthProvider>

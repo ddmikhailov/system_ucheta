@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
+import { APP_VERSION } from "../constants/release";
 import UserMenu from "./UserMenu";
 
 function renderMenu(onLogout = vi.fn()) {
@@ -72,5 +73,17 @@ describe("UserMenu", () => {
     await user.click(screen.getByRole("menuitemradio", { name: "Как в системе" }));
     expect(document.documentElement.dataset.theme).toBeUndefined();
     expect(localStorage.getItem("kait20_theme")).toBeNull();
+  });
+
+  it("«Сообщить о проблеме» закрывает меню и открывает окно сообщения; внизу меню — номер версии", async () => {
+    const user = userEvent.setup();
+    renderMenu();
+    await user.click(toggle());
+    expect(screen.getByText(`Версия ${APP_VERSION}`)).toBeInTheDocument();
+    await user.click(screen.getByRole("menuitem", { name: "Сообщить о проблеме" }));
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Сообщить о проблеме" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Отмена" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });

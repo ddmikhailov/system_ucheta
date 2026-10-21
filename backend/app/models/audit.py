@@ -1,6 +1,6 @@
 import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.time import utcnow
@@ -11,6 +11,8 @@ class AuditLog(Base):
     """Кто, когда и что изменил. Записи неудаляемые."""
 
     __tablename__ = "audit_log"
+    # Обезличивание (redact_audit_history) и фильтры по объекту ищут записи по паре «тип + номер».
+    __table_args__ = (Index("ix_audit_log_entity", "entity_type", "entity_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
