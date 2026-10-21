@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useGoBack } from "../hooks/useGoBack";
+import { usePatchSearch, useUrlParam } from "../hooks/useUrlState";
+import { useTabParam } from "../hooks/useTabParam";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/useAuth";
 import TaskCreateForm from "../components/TaskCreateForm";
@@ -13,7 +16,8 @@ import { formatDateRu, formatDueShort, todayIso } from "../utils/date";
 import { daysUntil, relativeDue } from "../utils/deadline";
 import type { ReviewQueueRow, TaskListRow } from "../api/types";
 
-type Tab = "list" | "review" | "templates" | "create";
+const TABS = ["list", "review", "templates", "create"] as const;
+type Tab = (typeof TABS)[number];
 type Filter = "active" | "mine" | "overdue" | "closed";
 
 const FILTERS: [Filter, string][] = [
@@ -37,8 +41,21 @@ export default function TasksPage() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const taskId = searchParams.get("task");
-  const [tab, setTab] = useState<Tab>("list");
-  const [filter, setFilter] = useState<Filter>("active");
+  // Вкладка и фильтр — в адресе: из карточки задачи «← К списку задач» возвращает к тому же списку.
+  const [tab, setTab] = useTabParam<Tab>(TABS, "list");
+  const [rawFilter, setFilter] = useUrlParam("filter", "active");
+  const filter: Filter = FILTERS.some(([f]) => f === rawFilter) ? (rawFilter as Filter) : "active";
+  const patchSearch = usePatchSearch();
+  const listSearch = new URLSearchParams(searchParams);
+  listSearch.delete("task");
+  const { goBack } = useGoBack({ search: listSearch.toString() });
+  // Задача открывается новой записью истории — браузерная «Назад» тоже возвращает к списку.
+  const openTask = (id: number, dropTab = false) => {
+    const next = new URLSearchParams(searchParams);
+    if (dropTab) next.delete("tab");
+    next.set("task", String(id));
+    setSearchParams(next);
+  };
   const [list, setList] = useState<TaskListRow[] | null>(null);
   const [queue, setQueue] = useState<ReviewQueueRow[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -62,17 +79,16 @@ export default function TasksPage() {
       <TaskView
         id={taskId}
         onBack={() => {
-          setSearchParams({});
+          goBack();
           loadList();
         }}
         onDeleted={() => {
-          setSearchParams({});
+          goBack();
           loadList();
         }}
         onAddStep={(t) => {
           setAfterTask({ id: t.id, title: t.title, due_date: t.due_date });
-          setTab("create");
-          setSearchParams({});
+          patchSearch({ task: null, tab: "create" });
         }}
       />
     );
@@ -122,8 +138,7 @@ export default function TasksPage() {
           onCreated={(task) => {
             setAfterTask(null);
             loadList();
-            setTab("list");
-            setSearchParams({ task: String(task.id) });
+            openTask(task.id, true);
           }}
         />
       )}
@@ -161,7 +176,7 @@ export default function TasksPage() {
                 return (
                   <li key={t.id} className={`task-list__item${t.is_closed ? " is-closed" : ""}`}>
                     <div className="task-list__main">
-                      <button className="task-list__title" onClick={() => setSearchParams({ task: String(t.id) })}>
+                      <button className="task-list__title" onClick={() => openTask(t.id)}>
                         {t.title}
                       </button>
                       <div className="inbox-row__meta">

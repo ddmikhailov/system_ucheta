@@ -29,6 +29,7 @@ import { formatPercent } from "../utils/percent";
 import { filterByQuery } from "../utils/searchMatch";
 import { nextSort, sortRows } from "../utils/tableView";
 import type { SortState } from "../utils/tableView";
+import { useEntryState } from "../hooks/useEntryState";
 import ResultsBar from "../components/dashboards/ResultsBar";
 import SortHeader from "../components/dashboards/SortHeader";
 
@@ -68,39 +69,41 @@ export default function DashboardsPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const [date, setDate] = useState(todayIso());
+  const [date, setDate] = useEntryState("date", todayIso());
   // Счётчик перезагрузки: кнопка «Обновить» и возврат на вкладку браузера заново
   // запрашивают данные — статусы сдачи дня меняются, пока страница открыта.
   const [reloadKey, setReloadKey] = useState(0);
   const [dayRows, setDayRows] = useState<DayOverviewRow[]>([]);
 
-  const [dateFrom, setDateFrom] = useState(daysAgoIso(14));
-  const [dateTo, setDateTo] = useState(todayIso());
+  const [dateFrom, setDateFrom] = useEntryState("dateFrom", daysAgoIso(14));
+  const [dateTo, setDateTo] = useEntryState("dateTo", todayIso());
   const [dynamicsPoints, setDynamicsPoints] = useState<DynamicsPoint[]>([]);
 
   const [riskRows, setRiskRows] = useState<RiskStudentRow[]>([]);
   const [disciplineRows, setDisciplineRows] = useState<CuratorDisciplineRow[]>([]);
 
-  const [courseFilter, setCourseFilter] = useState<number | "all">("all");
+  // Выбранный день, период, фильтры и сортировки помнятся за записью истории: из карточки
+  // студента или группы «Назад» возвращает витрину в том же виде (см. useEntryState).
+  const [courseFilter, setCourseFilter] = useEntryState<number | "all">("courseFilter", "all");
   // Фильтры и сортировки таблиц: считаются на странице по уже загруженным строкам.
-  const [dayQuery, setDayQuery] = useState("");
-  const [dayStatus, setDayStatus] = useState<DayStatus>("all");
-  const [dayOnlyAbsent, setDayOnlyAbsent] = useState(false);
-  const [daySort, setDaySort] = useState<SortState<DayKey> | null>(null);
-  const [dynOnlyData, setDynOnlyData] = useState(false);
-  const [dynBelow, setDynBelow] = useState("");
-  const [dynSort, setDynSort] = useState<SortState<DynKey> | null>(null);
-  const [riskQuery, setRiskQuery] = useState("");
-  const [riskGroup, setRiskGroup] = useState<number | "all">("all");
-  const [riskBelow, setRiskBelow] = useState("");
-  const [riskSort, setRiskSort] = useState<SortState<RiskKey> | null>(null);
-  const [discQuery, setDiscQuery] = useState("");
-  const [discCourse, setDiscCourse] = useState<number | "all">("all");
-  const [discOnlyMissed, setDiscOnlyMissed] = useState(false);
-  const [discSort, setDiscSort] = useState<SortState<DiscKey> | null>(null);
-  const [vacantQuery, setVacantQuery] = useState("");
-  const [vacantCourse, setVacantCourse] = useState<number | "all">("all");
-  const [vacantSort, setVacantSort] = useState<SortState<VacantKey> | null>(null);
+  const [dayQuery, setDayQuery] = useEntryState("dayQuery", "");
+  const [dayStatus, setDayStatus] = useEntryState<DayStatus>("dayStatus", "all");
+  const [dayOnlyAbsent, setDayOnlyAbsent] = useEntryState("dayOnlyAbsent", false);
+  const [daySort, setDaySort] = useEntryState<SortState<DayKey> | null>("daySort", null);
+  const [dynOnlyData, setDynOnlyData] = useEntryState("dynOnlyData", false);
+  const [dynBelow, setDynBelow] = useEntryState("dynBelow", "");
+  const [dynSort, setDynSort] = useEntryState<SortState<DynKey> | null>("dynSort", null);
+  const [riskQuery, setRiskQuery] = useEntryState("riskQuery", "");
+  const [riskGroup, setRiskGroup] = useEntryState<number | "all">("riskGroup", "all");
+  const [riskBelow, setRiskBelow] = useEntryState("riskBelow", "");
+  const [riskSort, setRiskSort] = useEntryState<SortState<RiskKey> | null>("riskSort", null);
+  const [discQuery, setDiscQuery] = useEntryState("discQuery", "");
+  const [discCourse, setDiscCourse] = useEntryState<number | "all">("discCourse", "all");
+  const [discOnlyMissed, setDiscOnlyMissed] = useEntryState("discOnlyMissed", false);
+  const [discSort, setDiscSort] = useEntryState<SortState<DiscKey> | null>("discSort", null);
+  const [vacantQuery, setVacantQuery] = useEntryState("vacantQuery", "");
+  const [vacantCourse, setVacantCourse] = useEntryState<number | "all">("vacantCourse", "all");
+  const [vacantSort, setVacantSort] = useEntryState<SortState<VacantKey> | null>("vacantSort", null);
   const [openDisciplineGroupId, setOpenDisciplineGroupId] = useState<number | null>(null);
 
   const [groups, setGroups] = useState<StudyGroupAdmin[]>([]);
@@ -118,7 +121,7 @@ export default function DashboardsPage() {
 
   const [departments, setDepartments] = useState<DepartmentAdmin[]>([]);
   // Выбранное отделение (для админа/тьютора/учебного отдела) сужает все вкладки и экспорт.
-  const [exportDepartmentId, setExportDepartmentId] = useState<number | "all">("all");
+  const [exportDepartmentId, setExportDepartmentId] = useEntryState<number | "all">("exportDepartmentId", "all");
   const deptQuery = canFilterDepartment && exportDepartmentId !== "all" ? `&department_id=${exportDepartmentId}` : "";
   // Фильтры «Свода» живут здесь, чтобы выгрузка в Excel брала тот же отбор.
   const [rawSummaryFilters, setSummaryFilters] = useState<SummaryFilters>(() => initialSummaryFilters(searchParams));

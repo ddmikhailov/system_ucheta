@@ -5,6 +5,7 @@ import { AuthProvider } from "./auth/AuthContext";
 import { useAuth } from "./auth/useAuth";
 import FeedbackHost from "./components/FeedbackHost";
 import Layout from "./components/Layout";
+import NavMemory from "./components/NavMemory";
 import LoginPage from "./pages/LoginPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 import CuratorCabinetPage from "./pages/CuratorCabinetPage";
@@ -118,6 +119,7 @@ export default function App() {
   return (
     <AuthProvider>
       <Router>
+        <NavMemory />
         <Suspense fallback={<div className="loading-screen">Загрузка…</div>}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />

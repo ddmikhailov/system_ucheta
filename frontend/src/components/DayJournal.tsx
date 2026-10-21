@@ -9,6 +9,7 @@ import DayActionsBar from "./DayActionsBar";
 import MarkCodeButtons from "./MarkCodeButtons";
 import MarkCommentModal from "./MarkCommentModal";
 import { scrollToTop } from "../utils/scroll";
+import { usePatchSearch } from "../hooks/useUrlState";
 import type { MarkCodeOption, MonthDayStatus, MyDayRhythmDay, RosterResponse } from "../api/types";
 import { formatServerDateTime, todayIso } from "../utils/date";
 import SearchSelect from "./SearchSelect";
@@ -109,6 +110,24 @@ export default function DayJournal({
   const [firstPeriod, setFirstPeriod] = useState("");
   // Выбранное отделение; пока не выбирали — отделение текущей группы.
   const [departmentChoice, setDepartmentChoice] = useState<number | null>(null);
+
+  // Группа и день — в адресе (день — только прошедший, сегодняшний не пишем): из карточки студента
+  // и после обновления страницы журнал открывается там же. Браузерная «Назад» и ссылка из списка
+  // исправлений меняют адрес — журнал переходит к этой группе и дню.
+  const patchSearch = usePatchSearch();
+  useEffect(() => {
+    patchSearch({
+      ...(fixedGroupId ? {} : { group: groupId === null ? null : String(groupId) }),
+      date: date === today ? null : date,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupId, date]);
+  useEffect(() => {
+    if (!fixedGroupId && deepLinkGroupId && Number(deepLinkGroupId) !== groupId) setGroupId(Number(deepLinkGroupId));
+    const urlDate = deepLinkDate && deepLinkDate <= today ? deepLinkDate : today;
+    if (urlDate !== date) setDate(urlDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinkGroupId, deepLinkDate]);
 
   function loadGroups() {
     fetchGroups()

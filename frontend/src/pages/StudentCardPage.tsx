@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/useAuth";
 import { DOSSIER_AUDIT_ROLES, DOSSIER_STAFF_ROLES, STRUCTURE_EDITOR_ROLES, TEACHER_ROLES, inRoles } from "../constants/roles";
@@ -14,6 +14,7 @@ import { Kpi, ProfileHero } from "../components/ProfileHero";
 import { TabBar, TabPanel, type TabItem } from "../components/Tabs";
 import { useScrollToTopOnChange } from "../hooks/useScrollToTopOnChange";
 import { useTabParam } from "../hooks/useTabParam";
+import BackLink from "../components/BackLink";
 import type { DeleteResult, StudentCard, StudyGroupAdmin } from "../api/types";
 import { formatDateRu, todayIso } from "../utils/date";
 import SearchSelect from "../components/SearchSelect";
@@ -67,14 +68,19 @@ export default function StudentCardPage() {
   // Администрация возвращается в список студентов, куратор — в свой кабинет.
   const isTeacher = inRoles(user?.role, TEACHER_ROLES);
   const isStaff = inRoles(user?.role, DOSSIER_STAFF_ROLES);
+  // Пришли изнутри платформы — «Назад» вернёт туда же (группа, фильтры, прокрутка); открыли по ссылке — в группу студента.
+  const groupQuery = card ? `group=${card.group.id}` : "";
   const back = (
     <p>
-      <Link
-        to={isTeacher ? (card ? `/cabinet/groups/${card.group.id}?tab=students` : "/cabinet") : isStaff ? "/students" : "/admin?tab=students"}
-        className="link-btn"
+      <BackLink
+        to={
+          isTeacher
+            ? card ? `/cabinet/groups/${card.group.id}?tab=students` : "/cabinet"
+            : isStaff ? `/students${groupQuery ? `?${groupQuery}` : ""}` : `/admin?tab=students${groupQuery ? `&${groupQuery}` : ""}`
+        }
       >
         {isTeacher ? (card ? `← К группе ${card.group.code}` : "← К моим группам") : isStaff ? "← К поиску студентов" : "← К списку студентов"}
-      </Link>
+      </BackLink>
     </p>
   );
 
@@ -267,7 +273,7 @@ export default function StudentCardPage() {
             onChanged={load}
             setNotice={setNotice}
             setError={setError}
-            onDeleted={(detail) => navigate("/admin?tab=students", { state: { notice: detail } })}
+            onDeleted={(detail) => navigate(`/admin?tab=students&group=${card.group.id}`, { state: { notice: detail } })}
           />
         </TabPanel>
       )}

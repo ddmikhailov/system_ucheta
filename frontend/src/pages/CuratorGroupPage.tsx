@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
+import BackLink from "../components/BackLink";
+import { useEntryState } from "../hooks/useEntryState";
 import { api, ApiError } from "../api/client";
 import { MODULE } from "../constants/modules";
 import type { ModuleName } from "../constants/modules";
@@ -81,9 +83,7 @@ export default function CuratorGroupPage() {
   const severalGroups = (user?.groups.length ?? 0) > 1;
   const back = severalGroups && (
     <p>
-      <Link to="/cabinet" className="link-btn">
-        ← Мои группы
-      </Link>
+      <BackLink to="/cabinet">← Мои группы</BackLink>
     </p>
   );
 
@@ -173,7 +173,7 @@ export default function CuratorGroupPage() {
 function GroupStudents({ groupId, groupCode, documents }: { groupId: number; groupCode: string; documents: boolean }) {
   const [roster, setRoster] = useState<RosterResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useEntryState("query", "");
   const [listOpen, setListOpen] = useState(false);
   const [cardsOpen, setCardsOpen] = useState(false);
 

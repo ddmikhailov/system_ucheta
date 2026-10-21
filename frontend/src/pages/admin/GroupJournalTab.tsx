@@ -46,8 +46,7 @@ export default function GroupJournalTab() {
         />
       )}
       <DayJournal
-        // Переход к дню из списка исправлений меняет адрес — журнал открывается заново на этом дне.
-        key={`${searchParams.get("group") ?? ""}:${searchParams.get("date") ?? ""}`}
+        // Переход к дню из списка исправлений меняет адрес — журнал сам переходит на этот день.
         fetchGroups={fetchGroups}
         emptyText="Нет ни одной группы в зоне видимости."
         notSubmittedText="День не активирован куратором — можно заполнить самостоятельно"

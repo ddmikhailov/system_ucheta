@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import DepartmentsTab from "./admin/DepartmentsTab";
@@ -9,6 +8,7 @@ import UsersTab from "./admin/UsersTab";
 import CalendarTab from "./admin/CalendarTab";
 import GroupJournalTab from "./admin/GroupJournalTab";
 import ImportTab from "./admin/ImportTab";
+import { saveTabSearch, savedTabSearch } from "../utils/navMemory";
 import { DEPARTMENT_SCOPED_ROLES, REFERENCE_EDITOR_ROLES, ROLE, inRoles } from "../constants/roles";
 
 type Tab = "departments" | "groups" | "students" | "mark-codes" | "users" | "calendar" | "journal" | "import";
@@ -24,18 +24,15 @@ export default function AdminPage() {
   // обновлении страницы, и на неё нельзя было дать прямую ссылку (см.
   // TODO.md 4; заодно на это опирается переход по клику на уведомление).
   const tabFromUrl = searchParams.get("tab") as Tab | null;
-  const [tab, setTabState] = useState<Tab>(
-    tabFromUrl && VALID_TABS.includes(tabFromUrl) ? tabFromUrl : isDeptHead ? "journal" : "groups"
-  );
+  const tab: Tab = tabFromUrl && VALID_TABS.includes(tabFromUrl) ? tabFromUrl : isDeptHead ? "journal" : "groups";
 
+  // У каждой вкладки свои параметры в адресе (группа, поиск, фильтры, страница). Уходя с вкладки,
+  // запоминаем их, а вернувшись — восстанавливаем: «Студенты» снова открываются на той же группе.
   function setTab(next: Tab) {
-    setTabState(next);
-    const params = new URLSearchParams(searchParams);
+    if (next === tab) return;
+    saveTabSearch("admin", tab, searchParams.toString());
+    const params = new URLSearchParams(savedTabSearch("admin", next) ?? "");
     params.set("tab", next);
-    if (next !== "journal") {
-      params.delete("group");
-      params.delete("date");
-    }
     setSearchParams(params, { replace: true });
   }
 

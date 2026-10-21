@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useEntryState } from "../hooks/useEntryState";
 import { api, ApiError, downloadFile } from "../api/client";
 import { useAuth } from "../auth/useAuth";
 import { COLLEGE_WIDE_ROLES, DOSSIER_AUDIT_ROLES, inRoles } from "../constants/roles";
@@ -153,15 +154,15 @@ export default function PassportPage() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const groupId = searchParams.get("group");
-  const [departmentId, setDepartmentId] = useState("");
+  const [departmentId, setDepartmentId] = useEntryState("departmentId", "");
   const [departments, setDepartments] = useState<DepartmentAdmin[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
-  const [course, setCourse] = useState<number | "all">("all");
-  const [focus, setFocus] = useState<Focus>("all");
-  const [category, setCategory] = useState("");
-  const [sort, setSort] = useState<SortState<string> | null>(null);
+  const [query, setQuery] = useEntryState("query", "");
+  const [course, setCourse] = useEntryState<number | "all">("course", "all");
+  const [focus, setFocus] = useEntryState<Focus>("focus", "all");
+  const [category, setCategory] = useEntryState("category", "");
+  const [sort, setSort] = useEntryState<SortState<string> | null>("sort", null);
 
   const canFilterDepartment = inRoles(user?.role, COLLEGE_WIDE_ROLES);
   // Причину (нет ключа шифрования на сервере) знать нужно администратору; остальным — что делать.
@@ -338,9 +339,9 @@ export default function PassportPage() {
 function GroupView({ passport: p, onExport, onExportWord }: { passport: GroupPassport; onExport: () => void; onExportWord: () => void }) {
   const { user } = useAuth();
   const technical = inRoles(user?.role, DOSSIER_AUDIT_ROLES);
-  const [part, setPart] = useState("info");
-  const [catQuery, setCatQuery] = useState("");
-  const [onlyMarked, setOnlyMarked] = useState(false);
+  const [part, setPart] = useEntryState("part", "info");
+  const [catQuery, setCatQuery] = useEntryState("catQuery", "");
+  const [onlyMarked, setOnlyMarked] = useEntryState("onlyMarked", false);
   const [catSort, setCatSort] = useState<SortState<string> | null>(null);
   const shownCategories = useMemo(() => {
     let list = p.categories;

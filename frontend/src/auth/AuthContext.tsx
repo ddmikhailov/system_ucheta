@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { api } from "../api/client";
 import type { MeResponse } from "../api/types";
 import { AuthContext } from "./authContextObject";
+import { clearNavMemory } from "../utils/navMemory";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<MeResponse | null>(null);
@@ -45,12 +46,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (username: string, password: string) => {
     // Сервер сам ставит cookie сессии; токен в ответе странице не нужен.
     await api.post("/auth/login", { username, password });
+    // Новый вход начинается с главного экрана: путь прошлого пользователя этой вкладки забываем.
+    clearNavMemory();
     await refresh();
   }, [refresh]);
 
   const logout = useCallback(() => {
     // Выход отзывает сессию на сервере; даже если запрос не дошёл, интерфейс выходит сразу.
     api.post("/auth/logout").catch(() => undefined);
+    clearNavMemory();
     setUser(null);
   }, []);
 

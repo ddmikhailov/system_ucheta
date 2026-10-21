@@ -190,10 +190,11 @@ describe("StudentCardPage — ссылка «назад» по роли", () => 
     // Куратор возвращается к списку своей группы.
     ["curator", "← К группе СА172", "/cabinet/groups/7?tab=students"],
     ["deputy_curator", "← К группе СА172", "/cabinet/groups/7?tab=students"],
-    ["psychologist", "← К поиску студентов", "/students"],
-    ["social_pedagogue", "← К поиску студентов", "/students"],
-    ["admin", "← К списку студентов", "/admin?tab=students"],
-    ["dept_head", "← К списку студентов", "/admin?tab=students"],
+    // Открыли карточку напрямую — сотрудник попадает в поиск/список, сразу отфильтрованный по группе студента.
+    ["psychologist", "← К поиску студентов", "/students?group=7"],
+    ["social_pedagogue", "← К поиску студентов", "/students?group=7"],
+    ["admin", "← К списку студентов", "/admin?tab=students&group=7"],
+    ["dept_head", "← К списку студентов", "/admin?tab=students&group=7"],
   ])("%s", async (role, label, href) => {
     open(role);
     expect(await screen.findByRole("link", { name: label })).toHaveAttribute("href", href);
