@@ -37,7 +37,7 @@
 .wizard__steps button {
   border-radius: 999px;
   padding: 5px 12px;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--muted);
   background: var(--sunken);
   border-color: transparent;
@@ -139,7 +139,7 @@
 
 .scope-count__warn {
   color: var(--warn-ink);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -273,7 +273,7 @@ button.template-card__pick:hover:not(:disabled) {
 
 .wizard__preview h4 {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--muted);
 }

@@ -4,7 +4,6 @@ import CommandPalette from "./CommandPalette";
 import { PLATFORM_NAME } from "../constants/brand";
 import type { ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { api } from "../api/client";
 import { useAuth } from "../auth/useAuth";
 import { MODULE } from "../constants/modules";
 import type { ModuleName } from "../constants/modules";
@@ -17,9 +16,8 @@ import type { NavIconName } from "./NavIcon";
 import NotificationBell from "./NotificationBell";
 import UserMenu from "./UserMenu";
 import { pageTitle } from "../utils/pageTitle";
-
-type CounterKey = "my_day" | "my_tasks" | "review" | "journal_changes";
-type Counters = Partial<Record<CounterKey, number>>;
+import { useNavCounters } from "../hooks/useNavCounters";
+import type { CounterKey } from "../hooks/useNavCounters";
 
 interface NavItem {
   to: string;
@@ -80,7 +78,8 @@ const COUNTER_LABELS: Record<CounterKey, string> = {
 export default function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const { pathname } = useLocation();
-  const [counters, setCounters] = useState<Counters>({});
+  // Счётчики меню и колокольчик — один запрос; при переходах не чаще раза в 30 с, в скрытой вкладке — пауза.
+  const { counters, setUnread } = useNavCounters(user?.id, pathname);
   const [moreOpen, setMoreOpen] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
@@ -89,15 +88,6 @@ export default function Layout({ children }: { children: ReactNode }) {
   useEffect(() => {
     document.title = title === PLATFORM_NAME ? `${PLATFORM_NAME} — КАИТ №20` : `${title} — ${PLATFORM_NAME}`;
   }, [title]);
-
-  // Счётчики на пунктах меню обновляем при каждом переходе: сдали день, отправили задачу — число уменьшилось.
-  useEffect(() => {
-    if (!user) return;
-    api
-      .get<Counters>("/my-day/counters")
-      .then((c) => setCounters(c && typeof c === "object" && !Array.isArray(c) ? c : {}))
-      .catch(() => setCounters({}));
-  }, [pathname, user]);
 
   const [closedOn, setClosedOn] = useState(pathname);
   if (closedOn !== pathname) {
@@ -191,7 +181,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           <div className="app-header__user">
             {user && (
               <>
-                <NotificationBell />
+                <NotificationBell unread={counters.notifications ?? 0} onUnreadChange={setUnread} />
                 <UserMenu name={user.full_name} onLogout={logout} />
               </>
             )}

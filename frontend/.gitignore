@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Playwright (npm run test:mobile)
+test-results
+playwright-report

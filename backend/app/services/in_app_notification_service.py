@@ -18,6 +18,15 @@ def notify(
     return entry
 
 
+def unread_count(db: Session, user: User) -> int:
+    """Число непрочитанных уведомлений пользователя — для колокольчика и общего опроса счётчиков меню."""
+    return (
+        db.query(InAppNotification)
+        .filter(InAppNotification.user_id == user.id, InAppNotification.read_at.is_(None))
+        .count()
+    )
+
+
 def dept_head_for(db: Session, department_id: int | None) -> User | None:
     if department_id is None:
         return None

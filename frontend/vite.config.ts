@@ -10,6 +10,9 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'jsdom',
+    // jsdom создаётся один раз на поток, а не на каждый файл (было 66 раз — четверть времени прогона);
+    // изоляция файлов друг от друга сохраняется. Весь набор — примерно вдвое быстрее.
+    pool: 'vmThreads',
     setupFiles: ['./src/test/setup.ts'],
     css: false,
     // Тесты лежат рядом с кодом (*.test.ts[x]) и в src/test (общие помощники).

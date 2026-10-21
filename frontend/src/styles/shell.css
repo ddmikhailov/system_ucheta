@@ -73,7 +73,7 @@
   border-radius: 999px;
   background: var(--hot);
   color: var(--on-fill);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   text-align: center;
   font-variant-numeric: tabular-nums;
@@ -191,7 +191,7 @@
     gap: 2px;
     padding: 4px 2px;
     min-height: 50px;
-    font-size: 11px;
+    font-size: 12px;
     border: 0;
     background: transparent;
     font-family: inherit;
@@ -224,7 +224,7 @@
     left: calc(50% + 6px);
     min-width: 18px;
     padding: 0 5px;
-    font-size: 10px;
+    font-size: 12px;
   }
 
   .nav-link--tab.active .nav-badge {

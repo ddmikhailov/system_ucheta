@@ -111,3 +111,35 @@ jobs:
       - name: npm audit
         working-directory: frontend
         run: npm audit --audit-level=high
+
+  mobile:
+    # Главные экраны куратора на ширине 375 px без горизонтальной прокрутки (Playwright): настоящий backend
+    # на временной SQLite с синтетическими данными + собранный интерфейс (frontend/e2e/server.py).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: backend/.python-version
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          pip install -r backend/requirements.txt
+          cd frontend && npm ci && npx playwright install --with-deps chromium
+
+      - name: Сборка интерфейса
+        working-directory: frontend
+        run: npm run build
+
+      - name: Экраны на 375 px
+        working-directory: frontend
+        env:
+          E2E_PYTHON: python
+        run: npm run test:mobile

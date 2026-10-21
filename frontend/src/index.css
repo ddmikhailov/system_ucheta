@@ -382,7 +382,7 @@ select:hover {
   background: var(--danger);
   color: var(--on-fill);
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   padding: 1px 5px;
   line-height: 1.4;
@@ -446,7 +446,7 @@ select:hover {
 
 .notification-bell__list time {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 400;
   color: var(--muted);
   margin-top: 2px;
@@ -571,7 +571,7 @@ select:hover {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   padding: 0 10px;
   cursor: pointer;
 }
@@ -774,7 +774,7 @@ select:hover {
   border: 1px solid var(--border);
   background: var(--input-bg);
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -805,7 +805,7 @@ select:hover {
   margin-top: 32px;
   text-align: right;
   opacity: 0.6;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .month-dot.remote-day {
@@ -864,7 +864,7 @@ select:hover {
 .roster-table th,
 .dash-table th {
   background: var(--bg);
-  font-size: 12px;
+  font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
@@ -935,14 +935,14 @@ select:hover {
 
 .draft-badge {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   margin-top: 2px;
 }
 
 .risk-badge {
   display: inline-block;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--warn-ink);
   background: var(--warn-bg);
@@ -1004,7 +1004,7 @@ select:hover {
 
 .percent-bar__value {
   min-width: 44px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -1051,8 +1051,23 @@ select:hover {
     padding: 14px;
   }
 
+  /* Шапка на 375 px: знак, поиск, колокольчик и имя. Длинное ФИО раньше выталкивало шапку за край экрана
+     (нашёл тест e2e/mobile.spec.ts) — теперь имя сжимается и обрезается многоточием. */
+  .app-header__user {
+    min-width: 0;
+    gap: 8px;
+  }
+
+  .user-menu {
+    min-width: 0;
+  }
+
+  .user-menu__toggle {
+    max-width: 100%;
+  }
+
   .user-menu__name {
-    max-width: 150px;
+    max-width: min(150px, 28vw);
   }
 
   /* Код отметки в конце горизонтального скролла было не видно и легко было
@@ -1115,7 +1130,7 @@ select:hover {
   .roster-table td[data-label]::before {
     content: attr(data-label);
     display: block;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -1526,7 +1541,7 @@ th.sortable-th:hover {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--muted);
 }
@@ -1683,7 +1698,7 @@ th.sortable-th:hover {
 }
 
 .filter-label {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--muted);
   text-transform: uppercase;

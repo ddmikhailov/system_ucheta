@@ -150,7 +150,7 @@ def test_follow_up_reminder_goes_to_the_author_once(client, curator_headers, adm
 
     def poll(headers):
         task_service.reset_reminder_throttle()
-        client.get("/notifications/unread-count", headers=headers)
+        client.post("/notifications/check", headers=headers)
 
     poll(curator_headers)
     poll(curator_headers)
@@ -166,5 +166,5 @@ def test_done_follow_up_gives_no_reminder(client, curator_headers, curator_group
     note = _note(client, curator_headers, s.id, occurred_on=_day(-5), follow_up_on=_day(-1)).json()
     client.put(f"/students/{s.id}/dossier/notes/{note['id']}/follow-up", headers=curator_headers, json={"done": True})
     task_service.reset_reminder_throttle()
-    client.get("/notifications/unread-count", headers=curator_headers)
+    client.post("/notifications/check", headers=curator_headers)
     assert db.query(InAppNotification).filter(InAppNotification.kind == "work_followup").count() == 0

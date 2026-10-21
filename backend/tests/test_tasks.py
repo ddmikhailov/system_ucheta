@@ -378,11 +378,11 @@ def _set_due(db, task_id, days):
 
 
 def _open_platform(client, headers):
-    """Как колокольчик при входе: опрос счётчика (и сброс 10-минутного ограничителя)."""
+    """Как интерфейс при входе: проверка сроков (и сброс 10-минутного ограничителя)."""
     from app.services import task_service
 
     task_service.reset_reminder_throttle()
-    return client.get("/notifications/unread-count", headers=headers)
+    return client.post("/notifications/check", headers=headers)
 
 
 @pytest.mark.parametrize("days,kind", [(2, "task_due_soon"), (0, "task_due_today"), (-1, "task_overdue")])
@@ -414,11 +414,25 @@ def test_no_reminders_for_far_closed_submitted_or_accepted(client, admin_headers
     assert _reminders(client, curator_headers) == []
 
 
+def test_reading_notifications_does_not_create_reminders(client, admin_headers, curator_headers, curator_group, imported, db):
+    """GET колокольчика и счётчиков — только чтение: напоминания появляются после POST /notifications/check."""
+    task = _create(client, admin_headers)
+    _set_due(db, task["id"], 0)
+    from app.services import task_service
+
+    task_service.reset_reminder_throttle()
+    client.get("/notifications/unread-count", headers=curator_headers)
+    client.get("/my-day/counters", headers=curator_headers)
+    assert _reminders(client, curator_headers) == []
+    assert _open_platform(client, curator_headers).json()["unread"] >= 1
+    assert [n["kind"] for n in _reminders(client, curator_headers)] == ["task_due_today"]
+
+
 def test_reminders_are_throttled_between_polls(client, admin_headers, curator_headers, curator_group, imported, db):
     task = _create(client, admin_headers)
     _open_platform(client, curator_headers)  # первый запуск: срок далеко
     _set_due(db, task["id"], 1)
-    client.get("/notifications/unread-count", headers=curator_headers)  # сразу же — в пределах 10 минут
+    client.post("/notifications/check", headers=curator_headers)  # сразу же — в пределах 10 минут
     assert _reminders(client, curator_headers) == []
     _open_platform(client, curator_headers)  # «новое открытие» после паузы
     assert [n["kind"] for n in _reminders(client, curator_headers)] == ["task_due_soon"]

@@ -6,12 +6,11 @@ import { MANAGEMENT_ROLES, inRoles } from "../constants/roles";
 import type { NotificationItem } from "../api/types";
 import { formatServerDateTime } from "../utils/date";
 
-const POLL_MS = 60_000;
-
-export default function NotificationBell() {
+/** Число непрочитанных приходит из общего опроса счётчиков меню (Layout → useNavCounters): колокольчик
+ * больше не опрашивает сервер сам — раньше это был ещё один запрос раз в минуту из каждой вкладки, даже скрытой. */
+export default function NotificationBell({ unread, onUnreadChange }: { unread: number; onUnreadChange: (unread: number) => void }) {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>([]);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -25,16 +24,6 @@ export default function NotificationBell() {
     return () => document.removeEventListener("mousedown", onOutsideClick);
   }, [open]);
 
-  function refreshCount() {
-    api.get<{ unread: number }>("/notifications/unread-count").then((r) => setUnread(r.unread)).catch(() => {});
-  }
-
-  useEffect(() => {
-    refreshCount();
-    const id = setInterval(refreshCount, POLL_MS);
-    return () => clearInterval(id);
-  }, []);
-
   function toggleOpen() {
     const next = !open;
     setOpen(next);
@@ -46,13 +35,13 @@ export default function NotificationBell() {
   async function markAllRead() {
     await api.post("/notifications/read-all");
     setItems((prev) => prev.map((n) => ({ ...n, read_at: n.read_at ?? new Date().toISOString() })));
-    setUnread(0);
+    onUnreadChange(0);
   }
 
   async function markRead(id: number) {
     await api.post(`/notifications/${id}/read`);
     setItems((prev) => prev.map((n) => (n.id === id ? { ...n, read_at: new Date().toISOString() } : n)));
-    refreshCount();
+    onUnreadChange(Math.max(0, unread - 1));
   }
 
   // Раньше клик по уведомлению никуда не вёл (см. TODO.md 4) — уведомление о

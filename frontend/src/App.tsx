@@ -14,14 +14,10 @@ import type { ModuleName } from "./constants/modules";
 import { isModuleOn } from "./utils/modules";
 import { DOSSIER_STAFF_ROLES, MANAGEMENT_ROLES, MEAL_VIEW_ROLES, ROLE, TASK_MANAGER_ROLES, VIEWER_ROLES, inRoles } from "./constants/roles";
 import MyDayPage from "./pages/MyDayPage";
-import MyIdPanel from "./components/MyIdPanel";
-import PlanPage from "./pages/PlanPage";
-import ReportPage from "./pages/ReportPage";
-import MyTasksPage from "./pages/MyTasksPage";
-import TaskAssignmentPage from "./pages/TaskAssignmentPage";
 
 // Разделы управления и справочные страницы грузятся по требованию: куратору на телефоне не нужно
-// скачивать витрины и админку, чтобы открыть «Мой день».
+// скачивать витрины и админку, чтобы открыть «Мой день». Сразу приходят только вход, «Мой день»,
+// «Мои группы» и журнал группы; вкладки группы (паспорт, работа, план…) тоже ленивые — см. CuratorGroupPage.
 const DashboardsPage = lazy(() => import("./pages/DashboardsPage"));
 const AdminPage = lazy(() => import("./pages/AdminPage"));
 const UserProfilePage = lazy(() => import("./pages/UserProfilePage"));
@@ -31,6 +27,11 @@ const IndividualWorkPage = lazy(() => import("./pages/IndividualWorkPage"));
 const PassportPage = lazy(() => import("./pages/PassportPage"));
 const TasksPage = lazy(() => import("./pages/TasksPage"));
 const MealsPage = lazy(() => import("./pages/MealsPage"));
+const MyTasksPage = lazy(() => import("./pages/MyTasksPage"));
+const TaskAssignmentPage = lazy(() => import("./pages/TaskAssignmentPage"));
+const PlanPage = lazy(() => import("./pages/PlanPage"));
+const ReportPage = lazy(() => import("./pages/ReportPage"));
+const MyIdPanel = lazy(() => import("./components/MyIdPanel"));
 
 function RequireAuth({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();

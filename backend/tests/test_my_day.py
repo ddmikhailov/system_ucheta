@@ -389,8 +389,21 @@ def test_nav_counters_for_reviewer_and_login(client, admin_headers, curator_head
     client.put(f"/tasks/assignments/{aid}/answers", headers=curator_headers, json={"group_values": {"f1": True}})
     client.post(f"/tasks/assignments/{aid}/submit", headers=curator_headers)
     counters = client.get("/my-day/counters", headers=admin_headers).json()
-    assert counters == {"my_day": 0, "my_tasks": 0, "review": 1, "journal_changes": 0}
+    unread = client.get("/notifications/unread-count", headers=admin_headers).json()["unread"]
+    assert counters == {"my_day": 0, "my_tasks": 0, "review": 1, "journal_changes": 0, "notifications": unread}
     assert client.get("/my-day/counters").status_code == 401
+
+
+def test_nav_counters_carry_unread_notifications(client, admin_headers, curator_headers, curator_group, imported):
+    """Меню и колокольчик обновляются одним запросом: число непрочитанных — в тех же счётчиках."""
+    before = client.get("/my-day/counters", headers=curator_headers).json()["notifications"]
+    client.post("/tasks", headers=admin_headers, json={
+        "title": "Видео", "collect_mode": "group", "due_date": _day(5),
+        "fields": [{"label": "Сдано", "type": "bool"}], "scope": {"all_groups": True}})
+    after = client.get("/my-day/counters", headers=curator_headers).json()["notifications"]
+    assert after == before + 1 == client.get("/notifications/unread-count", headers=curator_headers).json()["unread"]
+    client.post("/notifications/read-all", headers=curator_headers)
+    assert client.get("/my-day/counters", headers=curator_headers).json()["notifications"] == 0
 
 
 def test_group_rhythm_endpoint_matches_my_day_and_respects_access(

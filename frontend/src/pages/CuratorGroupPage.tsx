@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { MODULE } from "../constants/modules";
@@ -8,18 +8,21 @@ import { useAuth } from "../auth/useAuth";
 import type { GroupSummary, RosterResponse } from "../api/types";
 import DayJournal from "../components/DayJournal";
 import GroupListModal from "../components/GroupListModal";
-import MyIdPanel from "../components/MyIdPanel";
 import { Kpi, ProfileHero } from "../components/ProfileHero";
 import StudentCardModal from "../components/StudentCardModal";
-import GroupMealsPanel from "../components/meals/GroupMealsPanel";
 import { TabBar, TabPanel } from "../components/Tabs";
 import { filterByQuery } from "../utils/searchMatch";
 import { formatPercent } from "../utils/percent";
 import { todayIso } from "../utils/date";
-import IndividualWorkPage from "./IndividualWorkPage";
-import { GroupPassportPanel } from "./PassportPage";
-import PlanPage from "./PlanPage";
-import ReportPage from "./ReportPage";
+
+// Вкладки, кроме «Журнала» и «Студентов», грузятся при первом открытии: куратору с телефона не нужно
+// скачивать паспорт, план и отчёт, чтобы отметить посещаемость (заглушка загрузки — в TabPanel).
+const IndividualWorkPage = lazy(() => import("./IndividualWorkPage"));
+const GroupPassportPanel = lazy(() => import("./PassportPage").then((m) => ({ default: m.GroupPassportPanel })));
+const PlanPage = lazy(() => import("./PlanPage"));
+const ReportPage = lazy(() => import("./ReportPage"));
+const MyIdPanel = lazy(() => import("../components/MyIdPanel"));
+const GroupMealsPanel = lazy(() => import("../components/meals/GroupMealsPanel"));
 
 const TABS = ["journal", "students", "meals", "work", "passport", "plan", "report", "my-id"] as const;
 type GroupTab = (typeof TABS)[number];

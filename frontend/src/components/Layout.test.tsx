@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import { RELEASE_MODULES } from "../constants/modules";
 import { renderPage } from "../test/utils";
 import Layout from "./Layout";
+import { resetNavCounters } from "../hooks/useNavCounters";
 
 vi.mock("../api/client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api/client")>();
@@ -14,8 +15,11 @@ vi.mock("../api/client", async (importOriginal) => {
 const get = vi.mocked(api.get);
 
 beforeEach(() => {
+  resetNavCounters();
   get.mockReset();
-  get.mockImplementation(async (path: string) => (path === "/notifications/unread-count" ? { unread: 0 } : []));
+  get.mockImplementation(async (path: string) => (path === "/my-day/counters" ? { notifications: 0 } : []));
+  vi.mocked(api.post).mockReset();
+  vi.mocked(api.post).mockResolvedValue({ unread: 0 });
 });
 
 /** Названия пунктов основного меню в порядке показа. */
@@ -105,8 +109,7 @@ describe("Layout — нижняя панель и счётчики", () => {
 
   it("счётчики на пунктах: дела на сегодня, задачи, проверка", async () => {
     get.mockImplementation(async (path: string) => {
-      if (path === "/my-day/counters") return { my_day: 3, my_tasks: 2, review: 0 };
-      if (path === "/notifications/unread-count") return { unread: 0 };
+      if (path === "/my-day/counters") return { my_day: 3, my_tasks: 2, review: 0, notifications: 0 };
       return [];
     });
     renderPage(<Layout><div /></Layout>, { role: "curator" });
@@ -119,9 +122,12 @@ describe("Layout — нижняя панель и счётчики", () => {
 
 describe("Уведомления (колокольчик)", () => {
   it("показывает число непрочитанных", async () => {
-    get.mockImplementation(async (path: string) => (path === "/notifications/unread-count" ? { unread: 3 } : []));
+    get.mockImplementation(async (path: string) => (path === "/my-day/counters" ? { notifications: 3 } : []));
+    vi.mocked(api.post).mockResolvedValue({ unread: 3 });
     renderPage(<Layout><div /></Layout>, { role: "curator" });
     expect(await screen.findByText("3")).toBeInTheDocument();
+    // Колокольчик сам сервер не опрашивает: число приходит вместе со счётчиками меню.
+    expect(get).not.toHaveBeenCalledWith("/notifications/unread-count");
   });
 
   it("клик по уведомлению о задаче открывает назначение и помечает прочитанным", async () => {
@@ -130,7 +136,7 @@ describe("Уведомления (колокольчик)", () => {
     post.mockReset();
     post.mockResolvedValue({});
     get.mockImplementation(async (path: string) => {
-      if (path === "/notifications/unread-count") return { unread: 1 };
+      if (path === "/my-day/counters") return { notifications: 1 };
       return [{ id: 7, kind: "task_assigned", message: "Новая задача «Кружки»", entity_type: "task_assignment", entity_id: "12", created_at: "2026-10-01T09:00:00", read_at: null }];
     });
     renderPage(<Layout><div /></Layout>, { role: "curator" });
@@ -147,7 +153,7 @@ describe("Уведомления (колокольчик)", () => {
     post.mockReset();
     post.mockResolvedValue({ ok: true });
     get.mockImplementation(async (path: string) => {
-      if (path === "/notifications/unread-count") return { unread: 2 };
+      if (path === "/my-day/counters") return { notifications: 2 };
       return [
         { id: 1, kind: "task_due_soon", message: "Скоро срок", entity_type: "task_assignment", entity_id: "1", created_at: "2026-10-01T09:00:00", read_at: null },
         { id: 2, kind: "task_overdue", message: "Просрочена", entity_type: "task_assignment", entity_id: "2", created_at: "2026-10-01T10:00:00", read_at: null },
@@ -158,6 +164,44 @@ describe("Уведомления (колокольчик)", () => {
     await user.click(await screen.findByRole("button", { name: "Прочитать все" }));
     expect(post).toHaveBeenCalledWith("/notifications/read-all");
     await waitFor(() => expect(screen.queryByRole("button", { name: "Прочитать все" })).not.toBeInTheDocument());
+  });
+});
+
+describe("Счётчики меню: один запрос и пауза в скрытой вкладке", () => {
+  function counterCalls() {
+    return get.mock.calls.filter(([path]) => path === "/my-day/counters").length;
+  }
+
+  it("при входе — один запрос счётчиков и одна проверка сроков задач", async () => {
+    renderPage(<Layout><div /></Layout>, { role: "curator" });
+    await waitFor(() => expect(counterCalls()).toBe(1));
+    expect(vi.mocked(api.post)).toHaveBeenCalledWith("/notifications/check");
+    expect(vi.mocked(api.post)).toHaveBeenCalledTimes(1);
+  });
+
+  it("повторный показ в пределах 30 с не спрашивает сервер, а после сохранения — спрашивает", async () => {
+    const first = renderPage(<Layout><div /></Layout>, { role: "curator" });
+    await waitFor(() => expect(counterCalls()).toBe(1));
+    first.unmount();
+    renderPage(<Layout><div /></Layout>, { role: "curator" });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(counterCalls()).toBe(1);
+    window.dispatchEvent(new Event("api:changed"));
+    const third = renderPage(<Layout><div /></Layout>, { role: "curator" });
+    await waitFor(() => expect(counterCalls()).toBe(2));
+    third.unmount();
+  });
+
+  it("скрытая вкладка не опрашивает сервер, при возвращении — обновляет", async () => {
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    renderPage(<Layout><div /></Layout>, { role: "curator" });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(counterCalls()).toBe(0);
+    expect(vi.mocked(api.post)).not.toHaveBeenCalled();
+    hidden.mockReturnValue(false);
+    document.dispatchEvent(new Event("visibilitychange"));
+    await waitFor(() => expect(counterCalls()).toBe(1));
+    expect(vi.mocked(api.post)).toHaveBeenCalledWith("/notifications/check");
   });
 });
 

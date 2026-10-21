@@ -207,7 +207,7 @@ input[aria-invalid="true"] {
 .required-mark {
   font-weight: 500;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .answer-value {
@@ -234,7 +234,7 @@ input[aria-invalid="true"] {
 
 .answer-grid__head {
   background: var(--bg);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--muted);
   border-bottom: 1px solid var(--border);
@@ -261,7 +261,7 @@ input[aria-invalid="true"] {
   background: var(--primary-light);
   color: var(--primary);
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   transition: background 0.2s ease, color 0.2s ease;
 }
@@ -283,19 +283,19 @@ input[aria-invalid="true"] {
 }
 
 .answer-row__remark {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--hot);
 }
 
 .answer-row__dossier {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--ok);
 }
 
 .answer-row__todo {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--warn-ink);
 }
@@ -426,7 +426,7 @@ input[aria-invalid="true"] {
   flex-wrap: wrap;
   gap: 4px 8px;
   align-items: center;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--muted);
 }
 
@@ -485,7 +485,7 @@ input[aria-invalid="true"] {
 
   .answer-row__label {
     display: block;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--muted);
   }
