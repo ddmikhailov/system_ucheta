@@ -5,7 +5,7 @@ import io
 import pytest
 from openpyxl import load_workbook
 
-from app.core.time import utcnow
+from app.core.time import today_local, utcnow
 from app.models import Department, Student, StudyGroup, Task, TaskAssignment
 
 FIELDS_STUDENT = [
@@ -16,7 +16,7 @@ FIELDS_STUDENT = [
 
 
 def _future(days=7):
-    return str(datetime.date.today() + datetime.timedelta(days=days))
+    return str(today_local() + datetime.timedelta(days=days))
 
 
 def _payload(**overrides):
@@ -86,7 +86,7 @@ def test_task_validation(client, admin_headers, imported):
     bad_select = [{"label": "Выбор", "type": "select", "options": []}]
     assert client.post("/tasks", headers=admin_headers, json=_payload(fields=bad_select)).status_code == 400
     assert client.post("/tasks", headers=admin_headers, json=_payload(fields=[])).status_code == 400
-    past = str(datetime.date.today() - datetime.timedelta(days=1))
+    past = str(today_local() - datetime.timedelta(days=1))
     assert client.post("/tasks", headers=admin_headers, json=_payload(due_date=past)).status_code == 400
     assert client.post("/tasks", headers=admin_headers, json=_payload(collect_mode="everyone")).status_code == 422
 
@@ -309,7 +309,7 @@ def test_comments_notify_the_other_side(client, admin_headers, dept_head_headers
 
 def test_overdue_flag_and_progress(client, admin_headers, curator_headers, curator_group, imported, db):
     task = _create(client, admin_headers)
-    db.query(Task).filter(Task.id == task["id"]).update({"due_date": datetime.date.today() - datetime.timedelta(days=2)})
+    db.query(Task).filter(Task.id == task["id"]).update({"due_date": today_local() - datetime.timedelta(days=2)})
     db.commit()
     detail = client.get(f"/tasks/{task['id']}", headers=admin_headers).json()
     assert detail["progress"]["overdue"] == detail["progress"]["total"]
@@ -373,7 +373,7 @@ def _reminders(client, headers):
 
 
 def _set_due(db, task_id, days):
-    db.query(Task).filter(Task.id == task_id).update({"due_date": datetime.date.today() + datetime.timedelta(days=days)})
+    db.query(Task).filter(Task.id == task_id).update({"due_date": today_local() + datetime.timedelta(days=days)})
     db.commit()
 
 
@@ -425,7 +425,7 @@ def test_reminders_are_throttled_between_polls(client, admin_headers, curator_he
 
 
 def _iso(days):
-    return (datetime.date.today() + datetime.timedelta(days=days)).isoformat()
+    return (today_local() + datetime.timedelta(days=days)).isoformat()
 
 
 def test_extending_the_deadline_restarts_the_reminders(client, admin_headers, curator_headers, curator_group, imported, db):
@@ -536,7 +536,7 @@ def test_new_group_gets_open_tasks_in_scope(client, admin_headers, dept_head_hea
     closed = _create(client, admin_headers, title="Закрытая")
     client.patch(f"/tasks/{closed['id']}", headers=admin_headers, json={"is_closed": True})
     expired = _create(client, admin_headers, title="Истёкшая")
-    db.query(Task).filter(Task.id == expired["id"]).update({"due_date": datetime.date.today() - datetime.timedelta(days=1)})
+    db.query(Task).filter(Task.id == expired["id"]).update({"due_date": today_local() - datetime.timedelta(days=1)})
     db.commit()
 
     r = client.post("/admin/groups", headers=admin_headers,
