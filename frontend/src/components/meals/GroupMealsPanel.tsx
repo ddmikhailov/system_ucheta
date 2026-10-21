@@ -366,12 +366,12 @@ function StudentsList({
             </tr>
           </thead>
           <tbody>
-            {visible.map((s) => {
+            {visible.map((s, index) => {
               const lockedRow = s.locked_reason != null;
               const off = !editable || lockedRow || saving.includes(s.student_id);
               return (
                 <tr key={s.student_id} className={s.eats ? undefined : "meals-students__off"}>
-                  <td data-label="№">{students.indexOf(s) + 1}</td>
+                  <td data-label="№">{index + 1}</td>
                   <td data-label="Студент">{s.full_name}</td>
                   <td data-label="Питается" className="meals-students__cell">
                     <div className="meals-students__body">

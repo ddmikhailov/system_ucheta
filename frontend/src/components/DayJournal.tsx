@@ -498,6 +498,7 @@ export default function DayJournal({
               <table className="roster-table compact-cards journal-roster">
                 <thead>
                   <tr>
+                    <th>№</th>
                     <th>ФИО</th>
                     <th>Статус</th>
                     <th>Комментарий</th>
@@ -505,13 +506,14 @@ export default function DayJournal({
                   </tr>
                 </thead>
                 <tbody>
-                  {roster.entries.map((entry) => {
+                  {roster.entries.map((entry, index) => {
                     const current = pending[entry.student_id];
                     const code = current?.mark_code ?? null;
                     const risky = entry.is_risk;
                     const hasComment = Boolean(current?.comment || current?.basis_reference);
                     return (
                       <tr key={entry.student_id} className={risky ? "risk-row" : ""}>
+                        <td data-label="№">{index + 1}</td>
                         <td data-label="ФИО">
                           <Link to={`/students/${entry.student_id}`} className="link-btn">
                             {entry.full_name}
