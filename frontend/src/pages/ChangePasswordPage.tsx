@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/useAuth";
 import { MIN_PASSWORD_LENGTH, passwordRulesMet } from "../constants/password";
+import PasswordField from "../components/PasswordField";
 import PasswordRequirements from "../components/PasswordRequirements";
 import type { MeResponse } from "../api/types";
 import { CollegeLogo } from "../components/BrandMark";
@@ -69,8 +70,8 @@ export default function ChangePasswordPage() {
           {!forced && (
             <label>
               Текущий пароль
-              <input
-                type="password"
+              <PasswordField
+                label="Текущий пароль"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 autoFocus
@@ -81,8 +82,8 @@ export default function ChangePasswordPage() {
 
           <label>
             Новый пароль
-            <input
-              type="password"
+            <PasswordField
+              label="Новый пароль"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               autoFocus={forced}
@@ -96,8 +97,8 @@ export default function ChangePasswordPage() {
 
           <label>
             Повторите новый пароль
-            <input
-              type="password"
+            <PasswordField
+              label="Повторите новый пароль"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
