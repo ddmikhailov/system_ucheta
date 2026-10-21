@@ -74,6 +74,20 @@ jobs:
         working-directory: backend
         run: pip install -r requirements-dev.txt
 
+      - name: Миграции на пустой MySQL (одна голова, upgrade head)
+        working-directory: backend
+        env:
+          JWT_SECRET: Ci4vXn8Lw2KzR7pYb5HdJ9cMfA3sUe6Gt
+          DB_HOST: 127.0.0.1
+          DB_USER: root
+          DB_PASSWORD: ""
+          DB_NAME: kait20_migrate
+        run: |
+          heads=$(alembic heads | wc -l)
+          if [ "$heads" -ne 1 ]; then alembic heads; echo "Голов миграций: $heads, должна быть одна"; exit 1; fi
+          mysql -h 127.0.0.1 -u root -e "CREATE DATABASE kait20_migrate CHARACTER SET utf8mb4"
+          alembic upgrade head
+
       - name: pytest (MySQL)
         working-directory: backend
         env:
