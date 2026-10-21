@@ -1037,3 +1037,15 @@ export interface MealOverview {
   rows: MealOverviewRow[];
   totals: Record<string, number>;
 }
+
+export interface StudentDeletionRequest {
+  id: number;
+  student_id: number;
+  student_name: string;
+  group_code: string;
+  reason: string;
+  status: "pending" | "approved" | "rejected" | "cancelled";
+  requested_by_name: string;
+  created_at: string;
+  review_comment: string | null;
+}

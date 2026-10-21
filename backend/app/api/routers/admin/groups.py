@@ -264,9 +264,9 @@ def delete_group(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Группа не найдена")
     policies.assert_can_manage_group(user, group)
     if force:
-        if user.role.code not in policies.ELEVATED_ROLES:
+        if user.role.code not in policies.FORCE_DELETE_ROLES:
             raise HTTPException(
-                status.HTTP_403_FORBIDDEN, "Полное удаление группы с историей доступно только администратору/тьютору"
+                status.HTTP_403_FORBIDDEN, "Полное удаление группы с историей доступно администратору, тьютору и зав. отделением"
             )
         if confirm_code != group.code:
             raise HTTPException(

@@ -168,13 +168,21 @@ def test_force_delete_keeps_students_transferred_out_of_the_group(client, admin_
     assert [m.study_group_id for m in memberships] == [other_group.id]
 
 
-def test_force_delete_forbidden_for_dept_head(client, dept_head_headers, db, curator_group):
+def test_force_delete_forbidden_for_curator(client, curator_headers, db, curator_group):
     r = client.delete(
         f"/admin/groups/{curator_group.id}?force=true&confirm_code={curator_group.code}",
-        headers=dept_head_headers,
+        headers=curator_headers,
     )
     assert r.status_code == 403
     assert db.get(StudyGroup, curator_group.id) is not None
+
+
+def test_dept_head_force_deletes_group_of_own_department(client, dept_head_headers, db, curator_group):
+    gid = curator_group.id
+    r = client.delete(f"/admin/groups/{gid}?force=true&confirm_code={curator_group.code}", headers=dept_head_headers)
+    assert r.status_code == 200, r.text
+    db.expire_all()
+    assert db.get(StudyGroup, gid) is None
 
 
 def test_plain_delete_of_active_group_still_requires_archive(client, admin_headers, db, curator_group):

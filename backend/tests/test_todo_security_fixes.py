@@ -70,21 +70,25 @@ def test_edu_department_cannot_reset_admin_password(client, admin_headers, impor
 # --- 1.3 зав. отделением не может захватить/понизить старших по рангу ---
 
 
-def test_dept_head_cannot_manage_tutor_admin_or_edu_department(client, dept_head_headers, imported, db):
+def test_dept_head_manages_department_staff_but_not_admin_or_edu_department(client, dept_head_headers, imported, db):
     from app.models import User
 
     dept_head = db.query(User).filter(User.username == "zavotd").one()
 
     tutor = _make_user(db, "tutor", "tutor_sec_test", department_id=dept_head.department_id)
     admin_in_same_dept = _make_user(db, "admin", "admin_sec_test", department_id=dept_head.department_id)
-    edu = _make_user(db, "edu_department", "edu_sec_test", department_id=dept_head.department_id)
+    edu = _make_user(db, "edu_department", "edu_sec_test", department_id=None)  # пока у воспитательного отдела нет отделения
     other_dept_head = _make_user(db, "dept_head", "other_zav_sec_test", department_id=dept_head.department_id)
 
-    for target in (tutor, admin_in_same_dept, edu, other_dept_head):
+    for target in (admin_in_same_dept, edu):
         r = client.post(f"/admin/users/{target.id}/set-password", headers=dept_head_headers, json={})
         assert r.status_code == 403, f"{target.username} должен быть недоступен для dept_head"
         r = client.patch(f"/admin/users/{target.id}", headers=dept_head_headers, json={"role": "curator"})
         assert r.status_code == 403
+    # Тьютор и другой зав. отделением своего отделения — как у админа внутри отделения.
+    for target in (tutor, other_dept_head):
+        r = client.post(f"/admin/users/{target.id}/set-password", headers=dept_head_headers, json={})
+        assert r.status_code == 200, r.text
 
 
 def test_tutor_cannot_manage_other_tutor_or_admin(client, imported, db):

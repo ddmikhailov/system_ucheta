@@ -41,10 +41,9 @@ describe("assignableRoles", () => {
   it("админ — любые; зав. отделением — рабочие роли и зав. отделением; тьютор — без зав. отделением; остальные — никакие", () => {
     expect(assignableRoles("admin").sort()).toEqual(Object.values(ROLE).sort());
     expect(assignableRoles("dept_head")).toEqual(
-      expect.arrayContaining(["curator", "deputy_curator", "social_pedagogue", "psychologist", "dept_head"])
+      expect.arrayContaining(["curator", "deputy_curator", "social_pedagogue", "psychologist", "dept_head", "tutor"])
     );
     expect(assignableRoles("dept_head")).not.toContain("admin");
-    expect(assignableRoles("dept_head")).not.toContain("tutor");
     expect(assignableRoles("tutor")).not.toContain("dept_head");
     expect(assignableRoles("tutor")).toContain("psychologist");
     for (const role of ["curator", "edu_department", "social_pedagogue", undefined]) {

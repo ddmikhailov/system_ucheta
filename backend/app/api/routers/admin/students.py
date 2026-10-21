@@ -1,5 +1,4 @@
 """Студенты: список, создание, статус, правка, удаление/обезличивание."""
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -17,7 +16,7 @@ from app.db.session import get_db
 from app.models import AttendanceMark, Student, StudentGroupMembership, StudentStatus, StudyGroup, User
 from app.schemas.admin import DeleteResult, StudentCreate, StudentRead, StudentUpdate, StudentUpdateStatus
 from app.services import group_membership_service
-from app.services.erasure_service import erase_student_personal_data
+from app.services.erasure_service import delete_student_completely, erase_student_personal_data
 from app.services.audit_service import log_action, redact_audit_history
 
 router = APIRouter()
@@ -136,6 +135,7 @@ def update_student(
 @router.delete("/students/{student_id}", response_model=DeleteResult)
 def delete_student(
     student_id: int,
+    force: bool = False,
     user: User = Depends(require_structure_editor), db: Session = Depends(get_db),
 ):
     student = db.get(Student, student_id)
@@ -147,6 +147,12 @@ def delete_student(
             status.HTTP_400_BAD_REQUEST,
             "Сначала переведите студента в академ. отпуск или отчислите — удалить можно только архивного",
         )
+    if force:
+        if user.role.code not in policies.FORCE_DELETE_ROLES:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Полное удаление студента с историей доступно администратору, тьютору и зав. отделением (своего отделения)"
+            )
+        return DeleteResult(deleted=True, anonymized=False, detail=delete_student_completely(db, user, student))
 
     # Членство в группе само по себе не «история» в смысле этой проверки —
     # это просто учётная запись "кто где состоял", у неё нет собственной

@@ -9,10 +9,9 @@
   - tutor — как admin, но не может трогать учётки admin/tutor (иначе один
     тьютор мог бы захватить учётку другого тьютора или администратора) и
     не может менять роли вообще;
-  - dept_head — только curator/deputy_curator своего отделения, и может
-    назначать только роли curator/deputy_curator/dept_head (не может
-    повысить кого-то до admin/tutor/edu_department или тронуть чужого
-    dept_head/admin/tutor/edu_department, даже в своём отделении);
+  - dept_head — как admin, но только в своём отделении: управляет любым пользователем своего
+    отделения (кураторы, замы, соц. педагоги, психологи, тьюторы, другие зав. отделением) и назначает
+    любые роли с отделением; админов и воспитательный отдел (у них нет отделения) не трогает;
   - edu_department — не управляет учётками вообще (раньше могло сбросить
     пароль администратору — TODO.md 1.2).
 """
@@ -23,6 +22,9 @@ from app.core.roles import DEPARTMENT_SCOPED_ROLES
 from app.models import RoleCode, Student, StudyGroup, User
 
 ELEVATED_ROLES = {RoleCode.ADMIN.value, RoleCode.TUTOR.value}
+# Кто может стереть студента/группу насовсем вместе с историей (зав. отделением — только в своём отделении,
+# это проверяют assert_can_manage_group / assert_can_manage_student).
+FORCE_DELETE_ROLES = ELEVATED_ROLES | {RoleCode.DEPT_HEAD.value}
 # Кто может вести группу (быть назначен куратором/заместителем). Куратором человек
 # становится назначением на группу, а не ролью: соц. педагог и психолог тоже ведут
 # свои группы, оставаясь соц. педагогом/психологом.
@@ -36,7 +38,7 @@ DEPT_HEAD_MANAGEABLE_ROLES = {
     RoleCode.CURATOR.value, RoleCode.DEPUTY_CURATOR.value,
     RoleCode.SOCIAL_PEDAGOGUE.value, RoleCode.PSYCHOLOGIST.value,
 }
-DEPT_HEAD_ASSIGNABLE_ROLES = DEPT_HEAD_MANAGEABLE_ROLES | {RoleCode.DEPT_HEAD.value}
+DEPT_HEAD_ASSIGNABLE_ROLES = DEPT_HEAD_MANAGEABLE_ROLES | {RoleCode.DEPT_HEAD.value, RoleCode.TUTOR.value}
 TUTOR_ASSIGNABLE_ROLES = DEPT_HEAD_MANAGEABLE_ROLES
 # Роли, которым обязательно нужно отделение, и роли, которым оно не нужно
 # (см. TODO.md 1.4: без этого зав. отделением/куратор без отделения получает
@@ -60,6 +62,10 @@ def assert_can_manage_user(admin: User, target: User) -> None:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "У вас не задано отделение — обратитесь к администратору")
         if target.department_id != admin.department_id:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Пользователь не относится к вашему отделению")
+        if admin_role == RoleCode.DEPT_HEAD and target.role.code != RoleCode.ADMIN.value:
+            # Как админ в своём отделении: любая роль, у которой есть отделение (когда воспитательный отдел
+            # получит отделение, он окажется здесь же).
+            return
         if target.role.code not in DEPT_HEAD_MANAGEABLE_ROLES:
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN, "Можно управлять только кураторами, заместителями, соц. педагогами и психологами своего отделения"
@@ -98,6 +104,18 @@ def assert_can_review_attendance_change(user: User, group: StudyGroup) -> None:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Группа не относится к вашему отделению")
         return
     raise HTTPException(status.HTTP_403_FORBIDDEN, "Решать запросы на изменение посещаемости может зав. отделением")
+
+
+def assert_can_review_student_deletion(user: User, group: StudyGroup) -> None:
+    """Запрос куратора на полное удаление студента решает админ, а зав. отделением и тьютор — в своём отделении."""
+    role = RoleCode(user.role.code)
+    if role == RoleCode.ADMIN:
+        return
+    if role in (RoleCode.DEPT_HEAD, RoleCode.TUTOR):
+        if user.department_id is None or group.department_id != user.department_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Студент не из вашего отделения")
+        return
+    raise HTTPException(status.HTTP_403_FORBIDDEN, "Решать запросы на удаление студентов может админ или зав. отделением")
 
 
 def assert_can_assign_role(admin: User, new_role_code: str) -> None:

@@ -304,7 +304,7 @@ describe("StudentCardPage — управление", () => {
     expect(del).not.toHaveBeenCalled();
     confirm.mockReturnValueOnce(true);
     await user.click(button);
-    expect(del).toHaveBeenCalledWith("/admin/students/10");
+    expect(del).toHaveBeenCalledWith("/admin/students/10?force=true");
     await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent('/admin?tab=students'));
     expect(screen.getByTestId("where")).toHaveTextContent("данные обезличены"); // итог передан вкладке «Студенты»
   });

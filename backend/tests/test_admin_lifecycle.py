@@ -254,3 +254,36 @@ def test_dept_head_cannot_end_assignment_outside_department(client, dept_head_he
 
     r = client.post(f"/admin/curator-assignments/{assignment.id}/end", headers=dept_head_headers)
     assert r.status_code == 403
+
+
+def test_force_delete_student_erases_everything(client, admin_headers, curator_headers, curator_group, db, today):
+    from app.models import AbsencePeriod, AttendanceMark, AuditLog, Student, StudentGroupMembership
+    from app.services.attendance_service import get_active_students
+
+    student = get_active_students(db, curator_group.id, today)[0]
+    sid, name = student.id, student.full_name
+    client.post(
+        f"/curator/groups/{curator_group.id}/day/submit?date={today}", headers=curator_headers,
+        json={"exceptions": [{"student_id": sid, "mark_code": "б", "comment": f"{name} заболел", "basis_reference": "Справка"}]},
+    )
+    assert db.query(AttendanceMark).filter(AttendanceMark.student_id == sid).count() >= 1
+    client.patch(f"/admin/students/{sid}", headers=admin_headers, json={"status": "expelled"})
+
+    r = client.delete(f"/admin/students/{sid}?force=true", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["deleted"] is True and r.json()["anonymized"] is False
+
+    db.expire_all()
+    assert db.get(Student, sid) is None
+    assert db.query(AttendanceMark).filter(AttendanceMark.student_id == sid).count() == 0
+    assert db.query(AbsencePeriod).filter(AbsencePeriod.student_id == sid).count() == 0
+    assert db.query(StudentGroupMembership).filter(StudentGroupMembership.student_id == sid).count() == 0
+    entries = db.query(AuditLog).filter(AuditLog.entity_type == "student", AuditLog.entity_id == str(sid)).all()
+    assert all(name not in (e.old_value or "") + (e.new_value or "") for e in entries)
+
+
+def test_force_delete_still_requires_archived_student(client, admin_headers, imported, db):
+    from app.models import Student
+
+    student = db.query(Student).first()
+    assert client.delete(f"/admin/students/{student.id}?force=true", headers=admin_headers).status_code == 400

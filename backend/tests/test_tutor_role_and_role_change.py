@@ -119,7 +119,7 @@ def test_admin_can_promote_to_tutor(client, admin_headers, imported, db):
     assert r.json()["role"] == "tutor"
 
 
-def test_dept_head_cannot_promote_to_admin_or_tutor(client, dept_head_headers, imported, db):
+def test_dept_head_cannot_promote_to_admin(client, dept_head_headers, imported, db):
     from app.models import Role, User
 
     curator_role = db.query(Role).filter(Role.code == "curator").one()
@@ -128,7 +128,7 @@ def test_dept_head_cannot_promote_to_admin_or_tutor(client, dept_head_headers, i
     r = client.patch(f"/admin/users/{curator.id}", headers=dept_head_headers, json={"role": "admin"})
     assert r.status_code == 403
 
-    r = client.patch(f"/admin/users/{curator.id}", headers=dept_head_headers, json={"role": "tutor"})
+    r = client.patch(f"/admin/users/{curator.id}", headers=dept_head_headers, json={"role": "edu_department"})
     assert r.status_code == 403
 
 

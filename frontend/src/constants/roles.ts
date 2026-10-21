@@ -66,8 +66,8 @@ export const REFERENCE_EDITOR_ROLES: Roles = [ROLE.ADMIN, ROLE.EDU_DEPARTMENT];
 /** Кто видит все отделения колледжа (фильтр по отделению в витринах и паспорте). */
 export const COLLEGE_WIDE_ROLES: Roles = [ROLE.ADMIN, ROLE.EDU_DEPARTMENT, ...DOSSIER_STAFF_ROLES];
 
-/** Кто может удалить группу насовсем вместе с историей (backend: ELEVATED_ROLES); тьютор — только в своём отделении. */
-export const FORCE_DELETE_GROUP_ROLES: Roles = [ROLE.ADMIN, ROLE.TUTOR];
+/** Кто может удалить группу/студента насовсем вместе с историей (backend: FORCE_DELETE_ROLES); тьютор и зав. отделением — только в своём отделении. */
+export const FORCE_DELETE_ROLES: Roles = [ROLE.ADMIN, ROLE.TUTOR, ROLE.DEPT_HEAD];
 
 /** Кто видит журнал просмотров досье (по студентам своей области доступа). */
 export const DOSSIER_AUDIT_ROLES: Roles = [ROLE.ADMIN, ROLE.TUTOR];
@@ -86,7 +86,7 @@ export const DEPARTMENT_REQUIRED_ROLES: Roles = [
 /** Какие роли может назначать пользователь с ролью `myRole` (backend: assert_can_assign_role). */
 export function assignableRoles(myRole: string | undefined): RoleCode[] {
   if (myRole === ROLE.ADMIN) return Object.values(ROLE);
-  if (myRole === ROLE.DEPT_HEAD) return [...TEACHER_ROLES, ...DOSSIER_STAFF_ROLES, ROLE.DEPT_HEAD] as RoleCode[];
+  if (myRole === ROLE.DEPT_HEAD) return [...TEACHER_ROLES, ...DOSSIER_STAFF_ROLES, ROLE.DEPT_HEAD, ROLE.TUTOR] as RoleCode[];
   if (myRole === ROLE.TUTOR) return [...TEACHER_ROLES, ...DOSSIER_STAFF_ROLES] as RoleCode[];
   return [];
 }
