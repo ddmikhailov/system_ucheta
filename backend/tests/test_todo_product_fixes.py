@@ -254,3 +254,60 @@ def test_export_excel_rejects_huge_date_range(client, admin_headers, today):
         params={"date_from": "1900-01-01", "date_to": today.isoformat()},
     )
     assert r.status_code == 400
+
+
+def test_absence_period_can_be_edited_and_deleted(client, curator_headers, curator_group, db, today):
+    """Длительное отсутствие можно изменить (код, даты, основание) и удалить: отметки пересчитываются."""
+    from app.models import AttendanceMark, Student
+
+    student = db.query(Student).filter(Student.study_group_id == curator_group.id).first()
+    start = today + datetime.timedelta(days=60)
+    r = client.post(
+        "/curator/absence-periods", headers=curator_headers,
+        json={"student_id": student.id, "mark_code": "б", "date_from": start.isoformat(),
+              "date_to": (start + datetime.timedelta(days=13)).isoformat()},
+    )
+    assert r.status_code == 201
+    period_id = r.json()["id"]
+    before = db.query(AttendanceMark).filter(AttendanceMark.student_id == student.id, AttendanceMark.date >= start).count()
+    assert before > 0
+
+    r = client.put(
+        f"/curator/absence-periods/{period_id}", headers=curator_headers,
+        json={"mark_code": "б", "date_from": start.isoformat(),
+              "date_to": (start + datetime.timedelta(days=6)).isoformat(), "basis_reference": "справка 5"},
+    )
+    assert r.status_code == 200
+    db.expire_all()
+    marks = db.query(AttendanceMark).filter(AttendanceMark.student_id == student.id, AttendanceMark.date >= start).all()
+    assert 0 < len(marks) < before
+    assert all(m.basis_reference == "справка 5" for m in marks)
+    assert max(m.date for m in marks) <= start + datetime.timedelta(days=6)
+
+    r = client.put(
+        f"/curator/absence-periods/{period_id}", headers=curator_headers,
+        json={"mark_code": "н", "date_from": start.isoformat(), "date_to": start.isoformat()},
+    )
+    assert r.status_code == 400
+
+    assert client.delete(f"/curator/absence-periods/{period_id}", headers=curator_headers).status_code == 204
+    db.expire_all()
+    assert db.query(AttendanceMark).filter(AttendanceMark.student_id == student.id, AttendanceMark.date >= start).count() == 0
+    assert client.delete(f"/curator/absence-periods/{period_id}", headers=curator_headers).status_code == 404
+
+
+def test_roster_exposes_absence_period_for_locked_mark(client, curator_headers, curator_group, db, today):
+    """Для отметки из периода журнал отдаёт сам период — по нему фронтенд показывает «Редактировать»."""
+    from app.models import Student
+
+    student = db.query(Student).filter(Student.study_group_id == curator_group.id).first()
+    r = client.post(
+        "/curator/absence-periods", headers=curator_headers,
+        json={"student_id": student.id, "mark_code": "б", "date_from": today.isoformat(), "date_to": today.isoformat()},
+    )
+    period_id = r.json()["id"]
+    roster = client.get(f"/curator/groups/{curator_group.id}/day", headers=curator_headers, params={"date": today.isoformat()}).json()
+    entry = next(e for e in roster["entries"] if e["student_id"] == student.id)
+    assert entry["is_locked"] is True
+    assert entry["absence_period"]["id"] == period_id
+    assert entry["absence_period"]["mark_code"] == "б"

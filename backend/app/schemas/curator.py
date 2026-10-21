@@ -3,6 +3,16 @@ import datetime
 from pydantic import BaseModel, Field
 
 
+class RosterAbsencePeriod(BaseModel):
+    """Длительное отсутствие, из которого взята отметка (для кнопки «Редактировать»)."""
+
+    id: int
+    mark_code: str
+    date_from: datetime.date
+    date_to: datetime.date
+    basis_reference: str | None
+
+
 class RosterEntry(BaseModel):
     student_id: int
     full_name: str
@@ -12,6 +22,7 @@ class RosterEntry(BaseModel):
     basis_reference: str | None
     is_draft_suggestion: bool
     is_locked: bool
+    absence_period: RosterAbsencePeriod | None = None
     risk_streak: int  # сколько дней подряд «н» — справочно
     attendance_percent: float | None = None  # посещаемость с начала семестра, %
     is_risk: bool = False  # группа риска: посещаемость ниже порога
@@ -73,12 +84,15 @@ class MonthDayStatus(BaseModel):
     marks_count: int = 0
 
 
-class AbsencePeriodCreate(BaseModel):
-    student_id: int
+class AbsencePeriodUpdate(BaseModel):
     mark_code: str
     date_from: datetime.date
     date_to: datetime.date
     basis_reference: str | None = Field(default=None, max_length=255)
+
+
+class AbsencePeriodCreate(AbsencePeriodUpdate):
+    student_id: int
 
 
 class AbsencePeriodRead(BaseModel):

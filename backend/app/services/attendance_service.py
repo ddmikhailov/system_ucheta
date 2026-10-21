@@ -312,7 +312,7 @@ def get_roster(db: Session, study_group_id: int, date: datetime.date) -> dict:
     if student_ids:
         rows = db.execute(
             select(AttendanceMark)
-            .options(joinedload(AttendanceMark.mark_code))
+            .options(joinedload(AttendanceMark.mark_code), joinedload(AttendanceMark.absence_period))
             .where(AttendanceMark.student_id.in_(student_ids), AttendanceMark.date == date)
         ).scalars().all()
         existing_marks = {row.student_id: row for row in rows}
@@ -379,6 +379,17 @@ def get_roster(db: Session, study_group_id: int, date: datetime.date) -> dict:
                 "basis_reference": mark.basis_reference if mark else None,
                 "is_draft_suggestion": source_is_draft,
                 "is_locked": bool(mark and mark.source == MarkSource.PERIOD),
+                "absence_period": (
+                    {
+                        "id": mark.absence_period.id,
+                        "mark_code": mark.mark_code.code,
+                        "date_from": mark.absence_period.date_from,
+                        "date_to": mark.absence_period.date_to,
+                        "basis_reference": mark.absence_period.basis_reference,
+                    }
+                    if mark and mark.source == MarkSource.PERIOD and mark.absence_period
+                    else None
+                ),
                 "risk_streak": risk_streak,
                 "attendance_percent": rates[student.id].percent,
                 "is_risk": rates[student.id].is_risk,
@@ -556,6 +567,62 @@ def submit_day(
     return submission
 
 
+def _apply_period_marks(db: Session, period: AbsencePeriod, mark_code: MarkCode, user: User) -> None:
+    """Расставить отметки периода по учебным дням студента: чужие ручные отметки на эти дни перезаписываются."""
+    student = db.get(Student, period.student_id)
+    study_days = calendar_service.study_days_between(
+        db, period.date_from, period.date_to, study_group_id=student.study_group_id if student else None
+    )
+    basis_status = _compute_basis(period.basis_reference)
+
+    for day in study_days:
+        existing = db.execute(
+            select(AttendanceMark).where(
+                AttendanceMark.student_id == period.student_id, AttendanceMark.date == day
+            )
+        ).scalar_one_or_none()
+
+        if existing is not None:
+            old_code = existing.mark_code.code
+            existing.mark_code_id = mark_code.id
+            existing.source = MarkSource.PERIOD
+            existing.absence_period_id = period.id
+            existing.basis_reference = period.basis_reference
+            existing.basis_status = basis_status
+            existing.updated_by_user_id = user.id
+            existing.updated_at = utcnow()
+            log_action(
+                db, user, "period.overwrite_mark", "attendance_mark", str(existing.id),
+                old_value=old_code, new_value=mark_code.code,
+            )
+        else:
+            db.add(
+                AttendanceMark(
+                    student_id=period.student_id,
+                    date=day,
+                    mark_code_id=mark_code.id,
+                    source=MarkSource.PERIOD,
+                    absence_period_id=period.id,
+                    basis_reference=period.basis_reference,
+                    basis_status=basis_status,
+                    created_by_user_id=user.id,
+                )
+            )
+
+
+def _drop_period_marks(db: Session, period: AbsencePeriod, user: User) -> None:
+    """Убрать отметки, которые поставил период (при правке или удалении периода)."""
+    marks = db.execute(
+        select(AttendanceMark)
+        .options(joinedload(AttendanceMark.mark_code))
+        .where(AttendanceMark.absence_period_id == period.id, AttendanceMark.source == MarkSource.PERIOD)
+    ).scalars().all()
+    for mark in marks:
+        log_action(db, user, "period.remove_mark", "attendance_mark", str(mark.id), old_value=mark.mark_code.code)
+        db.delete(mark)
+    db.flush()
+
+
 def create_absence_period(
     db: Session,
     student_id: int,
@@ -580,46 +647,46 @@ def create_absence_period(
     db.add(period)
     db.flush()
 
-    student = db.get(Student, student_id)
-    study_days = calendar_service.study_days_between(
-        db, date_from, date_to, study_group_id=student.study_group_id if student else None
-    )
-
-    basis_status = _compute_basis(basis_reference)
-
-    for day in study_days:
-        existing = db.execute(
-            select(AttendanceMark).where(
-                AttendanceMark.student_id == student_id, AttendanceMark.date == day
-            )
-        ).scalar_one_or_none()
-
-        if existing is not None:
-            old_code = existing.mark_code.code
-            existing.mark_code_id = mark_code_id
-            existing.source = MarkSource.PERIOD
-            existing.absence_period_id = period.id
-            existing.basis_reference = basis_reference
-            existing.basis_status = basis_status
-            existing.updated_by_user_id = user.id
-            existing.updated_at = utcnow()
-            log_action(
-                db, user, "period.overwrite_mark", "attendance_mark", str(existing.id),
-                old_value=old_code, new_value=mark_code.code,
-            )
-        else:
-            new_mark = AttendanceMark(
-                student_id=student_id,
-                date=day,
-                mark_code_id=mark_code_id,
-                source=MarkSource.PERIOD,
-                absence_period_id=period.id,
-                basis_reference=basis_reference,
-                basis_status=basis_status,
-                created_by_user_id=user.id,
-            )
-            db.add(new_mark)
+    _apply_period_marks(db, period, mark_code, user)
 
     log_action(db, user, "period.create", "absence_period", str(period.id), new_value=mark_code.code)
     db.commit()
     return period
+
+
+def update_absence_period(
+    db: Session,
+    period: AbsencePeriod,
+    mark_code_id: int,
+    date_from: datetime.date,
+    date_to: datetime.date,
+    basis_reference: str | None,
+    user: User,
+) -> AbsencePeriod:
+    """Правка периода: прежние отметки снимаются и ставятся заново по новым датам и коду.
+    Дни, выпавшие из периода, остаются без отметки (студент снова считается присутствующим)."""
+    mark_code = db.get(MarkCode, mark_code_id)
+    if mark_code is None:
+        raise ValueError("Неизвестный код отметки")
+    old_code = period.mark_code.code
+
+    _drop_period_marks(db, period, user)
+    period.mark_code_id = mark_code_id
+    period.date_from = date_from
+    period.date_to = date_to
+    period.basis_reference = basis_reference
+    db.flush()
+    db.refresh(period)
+
+    _apply_period_marks(db, period, mark_code, user)
+
+    log_action(db, user, "period.update", "absence_period", str(period.id), old_value=old_code, new_value=mark_code.code)
+    db.commit()
+    return period
+
+
+def delete_absence_period(db: Session, period: AbsencePeriod, user: User) -> None:
+    _drop_period_marks(db, period, user)
+    log_action(db, user, "period.delete", "absence_period", str(period.id), old_value=period.mark_code.code)
+    db.delete(period)
+    db.commit()

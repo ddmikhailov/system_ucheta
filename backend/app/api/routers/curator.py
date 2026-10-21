@@ -9,9 +9,10 @@ from app.api.deps import assert_can_access_group, assert_can_view_group, get_cur
 from app.core.config import get_settings
 from app.core.time import today_local
 from app.db.session import get_db
-from app.models import AttendanceMark, DaySubmission, DayType, MarkCode, Student, StudyGroup, User
+from app.models import AbsencePeriod, AttendanceMark, DaySubmission, DayType, MarkCode, Student, StudyGroup, User
 from app.schemas.curator import (
     AbsencePeriodCreate,
+    AbsencePeriodUpdate,
     ChangeRequestInput,
     GroupSummary,
     MonthDayStatus,
@@ -308,16 +309,7 @@ def month_status(
     return result
 
 
-@router.post("/absence-periods", status_code=status.HTTP_201_CREATED)
-def create_absence_period(
-    payload: AbsencePeriodCreate,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    student = db.get(Student, payload.student_id)
-    if student is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Студент не найден")
-
+def _checked_period_input(db: Session, user: User, student: Student, payload: AbsencePeriodUpdate) -> MarkCode:
     # Раньше не проверялось совсем (см. TODO.md 3): период мог кончаться
     # раньше, чем начинался (даты просто менялись местами при расчёте, и
     # период создавался пустым — 201 без единой отметки), тянуться на годы
@@ -343,11 +335,58 @@ def create_absence_period(
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, "Для длительного периода нужен код с уважительной причиной"
         )
+    return mark_code
 
+
+def _period_or_404(db: Session, user: User, period_id: int) -> tuple[AbsencePeriod, Student]:
+    period = db.get(AbsencePeriod, period_id)
+    student = db.get(Student, period.student_id) if period else None
+    if period is None or student is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Период не найден")
+    # Правит тот, у кого есть доступ к группе студента, а не только автор периода.
+    assert_can_access_group(db, user, student.study_group_id, period.date_from)
+    return period, student
+
+
+@router.post("/absence-periods", status_code=status.HTTP_201_CREATED)
+def create_absence_period(
+    payload: AbsencePeriodCreate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    student = db.get(Student, payload.student_id)
+    if student is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Студент не найден")
+    mark_code = _checked_period_input(db, user, student, payload)
     period = attendance_service.create_absence_period(
         db, student.id, mark_code.id, payload.date_from, payload.date_to, payload.basis_reference, user
     )
     return {"id": period.id}
+
+
+@router.put("/absence-periods/{period_id}")
+def update_absence_period(
+    period_id: int,
+    payload: AbsencePeriodUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    period, student = _period_or_404(db, user, period_id)
+    mark_code = _checked_period_input(db, user, student, payload)
+    attendance_service.update_absence_period(
+        db, period, mark_code.id, payload.date_from, payload.date_to, payload.basis_reference, user
+    )
+    return {"id": period_id}
+
+
+@router.delete("/absence-periods/{period_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_absence_period(
+    period_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    period, _ = _period_or_404(db, user, period_id)
+    attendance_service.delete_absence_period(db, period, user)
 
 
 @router.get("/groups/{study_group_id}/cards", dependencies=[Depends(require_module("dossier"))])
