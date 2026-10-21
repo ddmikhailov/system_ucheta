@@ -12,7 +12,18 @@ const THEMES: [ThemePref, string][] = [
 
 /** Имя пользователя с выпадающим меню («Сменить пароль», «Выйти»). Раньше имя, ссылка и кнопка
  * стояли в шапке отдельными элементами, и на телефоне занимали ещё две строки. */
-export default function UserMenu({ name, onLogout }: { name: string; onLogout: () => void }) {
+export default function UserMenu({
+  name,
+  onLogout,
+  carryOver,
+  onCarryOverChange,
+}: {
+  name: string;
+  onLogout: () => void;
+  /** Настройка куратора «подставлять отметки прошлого дня»; undefined — пункт не показывается. */
+  carryOver?: boolean;
+  onCarryOverChange?: (value: boolean) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState<ThemePref>(getThemePref);
   const ref = useRef<HTMLDivElement>(null);
@@ -62,6 +73,17 @@ export default function UserMenu({ name, onLogout }: { name: string; onLogout: (
               </button>
             ))}
           </div>
+          {carryOver !== undefined && onCarryOverChange && (
+            <button
+              type="button"
+              role="menuitemcheckbox"
+              aria-checked={carryOver}
+              title="Журнал дня открывается с отметками предыдущего учебного дня (их можно поправить). Выключите, если нужен чистый журнал."
+              onClick={() => onCarryOverChange(!carryOver)}
+            >
+              {carryOver ? "✓ " : ""}Подставлять отметки прошлого дня
+            </button>
+          )}
           <Link to="/change-password" role="menuitem" onClick={() => setOpen(false)}>
             Сменить пароль
           </Link>

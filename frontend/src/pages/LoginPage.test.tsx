@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
-import { ApiError } from "../api/client";
+import { api, ApiError } from "../api/client";
 import { AuthContext } from "../auth/authContextObject";
 import type { AuthContextValue } from "../auth/authContextObject";
 import { makeUser } from "../test/utils";
@@ -99,5 +99,26 @@ describe("LoginPage", () => {
   it("пока идёт проверка сохранённого входа, форма остаётся (не мигает редиректом)", () => {
     renderLogin({ user: null, loading: true });
     expect(screen.getByRole("button", { name: "Войти" })).toBeInTheDocument();
+  });
+
+  it("«Забыли пароль?» отправляет запрос по логину и показывает нейтральный ответ", async () => {
+    const user = userEvent.setup();
+    const post = vi.spyOn(api, "post").mockResolvedValue({ detail: "Запрос отправлен администрации" });
+    renderLogin();
+    await user.type(screen.getByLabelText("Логин"), "kurator");
+    await user.click(screen.getByRole("button", { name: "Забыли пароль?" }));
+    expect(post).toHaveBeenCalledWith("/auth/forgot-password", { username: "kurator" });
+    expect(await screen.findByText("Запрос отправлен администрации")).toBeInTheDocument();
+    post.mockRestore();
+  });
+
+  it("«Забыли пароль?» без логина просит ввести логин и ничего не отправляет", async () => {
+    const user = userEvent.setup();
+    const post = vi.spyOn(api, "post").mockResolvedValue({ detail: "x" });
+    renderLogin();
+    await user.click(screen.getByRole("button", { name: "Забыли пароль?" }));
+    expect(post).not.toHaveBeenCalled();
+    expect(await screen.findByText(/Введите логин/)).toBeInTheDocument();
+    post.mockRestore();
   });
 });

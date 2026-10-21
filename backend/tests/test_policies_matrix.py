@@ -43,7 +43,12 @@ MANAGE_USER_CASES = [
     (DEPT_HEAD, DEPT_A, DEPT_HEAD, DEPT_A, False),  # не может управлять другим зав. отделением
     (DEPT_HEAD, DEPT_A, ADMIN, None, False),
     (DEPT_HEAD, None, CURATOR, DEPT_A, False),  # у самого нет отделения
-    (EDU_DEPARTMENT, None, CURATOR, DEPT_A, False),  # не управляет учётками вообще
+    (EDU_DEPARTMENT, None, CURATOR, DEPT_A, False),  # у самого нет отделения
+    (EDU_DEPARTMENT, DEPT_A, CURATOR, DEPT_A, True),  # воспитательный отдел выдаёт пароли в своём отделении
+    (EDU_DEPARTMENT, DEPT_A, CURATOR, DEPT_B, False),
+    (EDU_DEPARTMENT, DEPT_A, DEPT_HEAD, DEPT_A, False),
+    (EDU_DEPARTMENT, DEPT_A, TUTOR, DEPT_A, False),
+    (EDU_DEPARTMENT, DEPT_A, ADMIN, None, False),
     ("meal_manager", None, CURATOR, DEPT_A, False),  # ответственная по питанию — только вкладка «Питание»
     (ADMIN, None, "meal_manager", None, True),
     (DEPT_HEAD, DEPT_A, "meal_manager", None, False),  # учётку ответственной заводит только администратор
@@ -102,7 +107,7 @@ RESOLVE_DEPARTMENT_CASES = [
     (ADMIN, None, None),
     (ADMIN, DEPT_A, None),  # роль запрещает отделение — молча обнуляется
     (TUTOR, DEPT_A, DEPT_A),
-    (EDU_DEPARTMENT, DEPT_A, None),
+    (EDU_DEPARTMENT, DEPT_A, DEPT_A),  # закреплён за отделением
     (DEPT_HEAD, DEPT_A, DEPT_A),
     (CURATOR, DEPT_A, DEPT_A),
     (DEPUTY_CURATOR, DEPT_A, DEPT_A),
@@ -126,7 +131,8 @@ MANAGE_GROUP_CASES = [
     (ADMIN, None, DEPT_A, True),
     (TUTOR, DEPT_A, DEPT_A, True),
     (TUTOR, DEPT_A, DEPT_B, False),
-    (EDU_DEPARTMENT, None, DEPT_A, True),
+    (EDU_DEPARTMENT, DEPT_A, DEPT_A, True),
+    (EDU_DEPARTMENT, DEPT_A, DEPT_B, False),
     (DEPT_HEAD, DEPT_A, DEPT_A, True),
     (DEPT_HEAD, DEPT_A, DEPT_B, False),
 ]
@@ -158,7 +164,8 @@ MANAGE_STUDENT_CASES = [
     (ADMIN, None, DEPT_A, True),
     (TUTOR, DEPT_A, DEPT_A, True),
     (TUTOR, DEPT_A, DEPT_B, False),
-    (EDU_DEPARTMENT, None, DEPT_A, True),
+    (EDU_DEPARTMENT, DEPT_A, DEPT_A, True),
+    (EDU_DEPARTMENT, DEPT_A, DEPT_B, False),
     (DEPT_HEAD, DEPT_A, DEPT_A, True),
     (DEPT_HEAD, DEPT_A, DEPT_B, False),
 ]
@@ -182,7 +189,8 @@ def test_assert_can_manage_student_matrix(actor_role, actor_dept, student_group_
 MANAGER_SEES_CASES = [
     # (роль, отделение пользователя, отделение группы, пользователь — автор задачи, видит ли)
     (ADMIN, None, DEPT_A, False, True),
-    (EDU_DEPARTMENT, None, DEPT_B, False, True),
+    (EDU_DEPARTMENT, DEPT_A, DEPT_A, False, True),
+    (EDU_DEPARTMENT, DEPT_A, DEPT_B, False, False),
     (DEPT_HEAD, DEPT_A, DEPT_A, False, True),
     (DEPT_HEAD, DEPT_A, DEPT_B, False, False),
     (DEPT_HEAD, DEPT_A, DEPT_B, True, True),  # автор видит всю свою задачу
@@ -210,8 +218,9 @@ VIEW_USER_CASES = [
     # (роль актёра, отделение актёра, роль цели, отделение цели, можно ли)
     (ADMIN, None, CURATOR, DEPT_A, True),
     (ADMIN, None, TUTOR, DEPT_B, True),
-    (EDU_DEPARTMENT, None, CURATOR, DEPT_A, True),  # смотрит, но не управляет
-    (EDU_DEPARTMENT, None, ADMIN, None, True),
+    (EDU_DEPARTMENT, DEPT_A, CURATOR, DEPT_A, True),
+    (EDU_DEPARTMENT, DEPT_A, CURATOR, DEPT_B, False),
+    (EDU_DEPARTMENT, DEPT_A, ADMIN, None, False),
     (DEPT_HEAD, DEPT_A, CURATOR, DEPT_A, True),
     (DEPT_HEAD, DEPT_A, DEPT_HEAD, DEPT_A, True),  # коллега своего отделения — только просмотр
     (DEPT_HEAD, DEPT_A, CURATOR, DEPT_B, False),

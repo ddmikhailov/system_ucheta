@@ -66,6 +66,7 @@ def test_meal_manager_cannot_write_anything_outside_meals(client, meal_manager_h
     for path, ops in spec.items():
         if path.startswith(ALLOWED_PREFIXES) or path in (
             "/auth/logout", "/auth/login", "/auth/change-password", "/notifications/read-all",  # свои уведомления
+            "/auth/preferences", "/auth/forgot-password",  # свои настройки; запрос с экрана входа (без входа в систему)
         ):
             continue
         for method in ("post", "put", "patch", "delete"):

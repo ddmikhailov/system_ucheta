@@ -150,7 +150,9 @@ export default function DayJournal({
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Не удалось загрузить день");
     }
-  }, [groupId, date, applyRoster]);
+    // carryOver: смена настройки «подставлять отметки прошлого дня» в меню пользователя перечитывает журнал.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupId, date, applyRoster, user?.carry_over_marks]);
 
   useEffect(() => {
     loadRoster();

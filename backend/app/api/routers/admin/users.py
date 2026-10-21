@@ -23,7 +23,7 @@ from app.schemas.admin import (
     UserUpdate,
 )
 from app.services.audit_service import log_action, redact_audit_history
-from app.services import user_profile_service
+from app.services import password_reset_service, user_profile_service
 from app.services.password_service import generate_temporary_password
 
 router = APIRouter()
@@ -257,6 +257,8 @@ def set_password(
     target.token_version += 1
 
     log_action(db, admin, "user.password_set", "user", str(target.id))
+    if password_reset_service.close_requests(db, target, admin):
+        log_action(db, admin, "password.reset_issued", "user", str(target.id))
     db.commit()
 
     return SetPasswordResponse(username=target.username, password=password)

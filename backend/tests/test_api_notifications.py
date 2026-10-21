@@ -134,3 +134,27 @@ def test_mark_all_read_also_purges_old_read(client, db, dept_head_user, dept_hea
     db.expire_all()
     messages = {n.message for n in db.query(InAppNotification).filter(InAppNotification.user_id == dept_head_user.id)}
     assert messages == {"свежее"}
+
+
+def test_notifications_split_into_work_and_manage_tabs(client, db, dept_head_user, dept_head_headers):
+    from app.services import in_app_notification_service as svc
+
+    svc.notify(db, dept_head_user, "task_assigned", "Новая задача по моей группе")
+    svc.notify(db, dept_head_user, "late_edit", "Правка дня задним числом")
+    svc.notify(db, dept_head_user, "password_reset", "Просят восстановить пароль")
+    db.commit()
+
+    work = client.get("/notifications?category=work", headers=dept_head_headers).json()
+    manage = client.get("/notifications?category=manage", headers=dept_head_headers).json()
+    assert [n["kind"] for n in work] == ["task_assigned"]
+    assert {n["kind"] for n in manage} == {"late_edit", "password_reset"}
+    assert {n["category"] for n in manage} == {"manage"}
+    assert len(client.get("/notifications", headers=dept_head_headers).json()) == 3
+
+    counts = client.get("/notifications/unread-count", headers=dept_head_headers).json()
+    assert (counts["unread"], counts["unread_work"], counts["unread_manage"]) == (3, 1, 2)
+
+    # «Прочитать все» во вкладке «Управление» не трогает рабочие.
+    assert client.post("/notifications/read-all?category=manage", headers=dept_head_headers).status_code == 200
+    counts = client.get("/notifications/unread-count", headers=dept_head_headers).json()
+    assert (counts["unread_work"], counts["unread_manage"]) == (1, 0)

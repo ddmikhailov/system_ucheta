@@ -78,7 +78,13 @@ const COUNTER_LABELS: Record<CounterKey, string> = {
 };
 
 export default function Layout({ children }: { children: ReactNode }) {
-  const { user, logout } = useAuth();
+  const { user, logout, refresh } = useAuth();
+  // Настройка про журнал дня нужна тем, кто ведёт группу.
+  const showCarryOver = (user?.groups.length ?? 0) > 0;
+  async function changeCarryOver(value: boolean) {
+    await api.patch("/auth/preferences", { carry_over_marks: value });
+    await refresh();
+  }
   const { pathname } = useLocation();
   const [counters, setCounters] = useState<Counters>({});
   const [moreOpen, setMoreOpen] = useState(false);
@@ -192,7 +198,12 @@ export default function Layout({ children }: { children: ReactNode }) {
             {user && (
               <>
                 <NotificationBell />
-                <UserMenu name={user.full_name} onLogout={logout} />
+                <UserMenu
+                  name={user.full_name}
+                  onLogout={logout}
+                  carryOver={showCarryOver ? user.carry_over_marks ?? true : undefined}
+                  onCarryOverChange={changeCarryOver}
+                />
               </>
             )}
           </div>

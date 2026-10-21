@@ -42,7 +42,7 @@ let groups: StudyGroupAdmin[];
 beforeEach(() => {
   for (const fn of [post, patch, del]) fn.mockReset();
   groups = [
-    group(1, "СА172", { study_form: "очная", deputy_name: "Заместов З.", deputy_assignment_id: 201 }),
+    group(1, "СА172", { students_count: 27, study_form: "очная", deputy_name: "Заместов З.", deputy_assignment_id: 201 }),
     group(2, "ИИ112", { curator_name: null, curator_assignment_id: null }),
     group(3, "АРХ-1", { is_active: false }),
   ];
@@ -74,6 +74,8 @@ describe("GroupsTab — список", () => {
     await screen.findByRole("button", { name: "СА172" });
     expect(within(row("СА172")).getByText("очная")).toBeInTheDocument();
     expect(within(row("СА172")).getByText("Иванова А.")).toBeInTheDocument();
+    expect(within(row("СА172")).getByText("27")).toBeInTheDocument(); // столбец «Студентов»
+    expect(screen.getByRole("columnheader", { name: /Студентов/ })).toBeInTheDocument();
     expect(within(row("ИИ112")).getByText("нет куратора")).toBeInTheDocument();
     expect(row("ИИ112")).toHaveClass("not-submitted-row");
     expect(screen.queryByText("АРХ-1")).not.toBeInTheDocument();

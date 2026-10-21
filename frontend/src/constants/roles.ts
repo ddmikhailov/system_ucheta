@@ -40,7 +40,7 @@ export const TEACHER_ROLES: Roles = [ROLE.CURATOR, ROLE.DEPUTY_CURATOR];
 export const DOSSIER_STAFF_ROLES: Roles = [ROLE.SOCIAL_PEDAGOGUE, ROLE.PSYCHOLOGIST];
 
 /** Роли, ограниченные своим отделением (backend: DEPARTMENT_SCOPED_ROLES). */
-export const DEPARTMENT_SCOPED_ROLES: Roles = [ROLE.DEPT_HEAD, ROLE.TUTOR];
+export const DEPARTMENT_SCOPED_ROLES: Roles = [ROLE.DEPT_HEAD, ROLE.TUTOR, ROLE.EDU_DEPARTMENT];
 
 /** Роли с доступом к админке и витринам управленца. */
 export const MANAGEMENT_ROLES: Roles = [ROLE.DEPT_HEAD, ROLE.EDU_DEPARTMENT, ROLE.ADMIN, ROLE.TUTOR];
@@ -64,7 +64,7 @@ export const JOURNAL_REVIEWER_ROLES: Roles = [ROLE.ADMIN, ROLE.TUTOR, ROLE.DEPT_
 export const REFERENCE_EDITOR_ROLES: Roles = [ROLE.ADMIN, ROLE.EDU_DEPARTMENT];
 
 /** Кто видит все отделения колледжа (фильтр по отделению в витринах и паспорте). */
-export const COLLEGE_WIDE_ROLES: Roles = [ROLE.ADMIN, ROLE.EDU_DEPARTMENT, ...DOSSIER_STAFF_ROLES];
+export const COLLEGE_WIDE_ROLES: Roles = [ROLE.ADMIN, ...DOSSIER_STAFF_ROLES];
 
 /** Кто может удалить группу насовсем вместе с историей (backend: ELEVATED_ROLES); тьютор — только в своём отделении. */
 export const FORCE_DELETE_GROUP_ROLES: Roles = [ROLE.ADMIN, ROLE.TUTOR];
@@ -80,7 +80,8 @@ export const MEAL_VIEW_ROLES: Roles = [
 
 /** Роли, которым отделение обязательно (backend: DEPARTMENT_REQUIRED_ROLES). */
 export const DEPARTMENT_REQUIRED_ROLES: Roles = [
-  ROLE.DEPT_HEAD, ROLE.TUTOR, ROLE.CURATOR, ROLE.DEPUTY_CURATOR, ROLE.SOCIAL_PEDAGOGUE, ROLE.PSYCHOLOGIST,
+  ROLE.DEPT_HEAD, ROLE.TUTOR, ROLE.EDU_DEPARTMENT, ROLE.CURATOR, ROLE.DEPUTY_CURATOR, ROLE.SOCIAL_PEDAGOGUE,
+  ROLE.PSYCHOLOGIST,
 ];
 
 /** Какие роли может назначать пользователь с ролью `myRole` (backend: assert_can_assign_role). */

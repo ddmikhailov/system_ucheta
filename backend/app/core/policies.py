@@ -30,7 +30,7 @@ CURATOR_CAPABLE_ROLES = {
     RoleCode.CURATOR.value, RoleCode.DEPUTY_CURATOR.value,
     RoleCode.SOCIAL_PEDAGOGUE.value, RoleCode.PSYCHOLOGIST.value,
 }
-# Зав. отделением и тьютор (ограничены своим отделением) управляют кураторами,
+# Зав. отделением, тьютор и воспитательный отдел (ограничены своим отделением) управляют кураторами,
 # заместителями, соц. педагогами и психологами своего отделения.
 DEPT_HEAD_MANAGEABLE_ROLES = {
     RoleCode.CURATOR.value, RoleCode.DEPUTY_CURATOR.value,
@@ -43,10 +43,11 @@ TUTOR_ASSIGNABLE_ROLES = DEPT_HEAD_MANAGEABLE_ROLES
 # фактически доступ ко всему колледжу, т.к. фильтры по department_id=None
 # просто не применяются).
 DEPARTMENT_REQUIRED_ROLES = {
-    RoleCode.DEPT_HEAD.value, RoleCode.TUTOR.value, RoleCode.CURATOR.value, RoleCode.DEPUTY_CURATOR.value,
+    RoleCode.DEPT_HEAD.value, RoleCode.TUTOR.value, RoleCode.EDU_DEPARTMENT.value,
+    RoleCode.CURATOR.value, RoleCode.DEPUTY_CURATOR.value,
     RoleCode.SOCIAL_PEDAGOGUE.value, RoleCode.PSYCHOLOGIST.value,
 }
-DEPARTMENT_FORBIDDEN_ROLES = {RoleCode.ADMIN.value, RoleCode.EDU_DEPARTMENT.value, RoleCode.MEAL_MANAGER.value}
+DEPARTMENT_FORBIDDEN_ROLES = {RoleCode.ADMIN.value, RoleCode.MEAL_MANAGER.value}
 
 
 def assert_can_manage_user(admin: User, target: User) -> None:
@@ -68,14 +69,23 @@ def assert_can_manage_user(admin: User, target: User) -> None:
     raise HTTPException(status.HTTP_403_FORBIDDEN, "Недостаточно прав для управления пользователями")
 
 
+def can_manage_user(admin: User, target: User) -> bool:
+    """assert_can_manage_user без исключения — для расчёта получателей уведомлений."""
+    try:
+        assert_can_manage_user(admin, target)
+    except HTTPException:
+        return False
+    return True
+
+
 def assert_can_view_user(viewer: User, target: User) -> None:
     """Профиль пользователя (закрепления, дисциплина, журнал действий) — для чтения.
-    Видят те же, кому виден список пользователей: администратор и воспитательный
-    отдел — всех, зав. отделением и тьютор — людей своего отделения."""
+    Видят те же, кому виден список пользователей: администратор — всех, зав. отделением,
+    тьютор и воспитательный отдел — людей своего отделения."""
     if target.id == viewer.id:
         return
     viewer_role = RoleCode(viewer.role.code)
-    if viewer_role in (RoleCode.ADMIN, RoleCode.EDU_DEPARTMENT):
+    if viewer_role == RoleCode.ADMIN:
         return
     if viewer_role in DEPARTMENT_SCOPED_ROLES:
         if viewer.department_id is None:

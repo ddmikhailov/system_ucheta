@@ -7,9 +7,9 @@
 Зеркало для интерфейса — frontend/src/constants/roles.ts: меняя состав групп, правьте оба."""
 from app.models import RoleCode, User
 
-# Роли, ограниченные своим отделением: зав. отделением и тьютор. Тьютор — полный доступ,
-# но только к своему отделению (группы, студенты, досье, кураторы).
-DEPARTMENT_SCOPED_ROLES = (RoleCode.DEPT_HEAD, RoleCode.TUTOR)
+# Роли, ограниченные своим отделением: зав. отделением, тьютор и воспитательный отдел. Тьютор — полный
+# доступ, но только к своему отделению (группы, студенты, досье, кураторы).
+DEPARTMENT_SCOPED_ROLES = (RoleCode.DEPT_HEAD, RoleCode.TUTOR, RoleCode.EDU_DEPARTMENT)
 
 # Соц. педагог и психолог: досье и карточка любого студента колледжа, просмотр всех групп,
 # но не посещаемость/структура (запись посещаемости — только в группах, которые они ведут
@@ -17,7 +17,7 @@ DEPARTMENT_SCOPED_ROLES = (RoleCode.DEPT_HEAD, RoleCode.TUTOR)
 DOSSIER_STAFF_ROLES = (RoleCode.SOCIAL_PEDAGOGUE, RoleCode.PSYCHOLOGIST)
 
 # Кто видит группы, витрины и списки по всему колледжу, а не только свои группы.
-COLLEGE_WIDE_ROLES = (RoleCode.ADMIN, RoleCode.EDU_DEPARTMENT, *DOSSIER_STAFF_ROLES)
+COLLEGE_WIDE_ROLES = (RoleCode.ADMIN, *DOSSIER_STAFF_ROLES)
 
 
 # Кто видит вкладку «Питание» (своды питающихся): администрация, воспитательный отдел, зав. отделением и тьютор

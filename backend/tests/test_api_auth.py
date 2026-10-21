@@ -115,3 +115,18 @@ def test_invitation_endpoints_removed(client, seeded):
     assert r.status_code == 404
     r = client.post("/auth/invitations/anything/accept", json={"password": "whatever123"})
     assert r.status_code == 404
+
+
+def test_carry_over_preference_switches_drafts_in_the_journal(client, db, curator_headers, curator_group):
+    """PATCH /auth/preferences: куратор сам включает и выключает перенос отметок прошлого дня."""
+    me = client.get("/auth/me", headers=curator_headers).json()
+    assert me["carry_over_marks"] is True  # по умолчанию — как было
+
+    r = client.patch("/auth/preferences", headers=curator_headers, json={"carry_over_marks": False})
+    assert r.status_code == 200 and r.json()["carry_over_marks"] is False
+    assert client.get("/auth/me", headers=curator_headers).json()["carry_over_marks"] is False
+
+    # Пустой запрос ничего не меняет.
+    assert client.patch("/auth/preferences", headers=curator_headers, json={}).json()["carry_over_marks"] is False
+    r = client.patch("/auth/preferences", headers=curator_headers, json={"carry_over_marks": True})
+    assert r.json()["carry_over_marks"] is True

@@ -58,6 +58,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "user.delete": "Удалил(а) пользователя",
   "user.anonymize": "Обезличил(а) пользователя",
   "password.change": "Сменил(а) свой пароль",
+  "password.reset_requested": "Запросил(а) восстановление пароля",
+  "password.reset_issued": "Выдан временный пароль по запросу",
 };
 
 /** Области для фильтра ленты: значение уходит на сервер как `area` (начало кода действия). */

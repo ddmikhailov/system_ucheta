@@ -146,10 +146,10 @@ describe("UserProfilePage — обзор", () => {
     expect(screen.getByRole("link", { name: "← К пользователям" })).toHaveAttribute("href", "/admin?tab=users");
   });
 
-  it("воспитательный отдел смотрит, но вкладки «Управление» нет", async () => {
+  it("воспитательный отдел: вкладка «Управление» есть ради выдачи пароля, без правки учётной записи", async () => {
     open({ role: "edu_department" });
     await screen.findByRole("heading", { name: "Иванова Анна" });
-    expect(screen.queryByRole("tab", { name: "Управление" })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Управление" })).toBeInTheDocument();
     expect(get).not.toHaveBeenCalledWith("/admin/departments");
   });
 });

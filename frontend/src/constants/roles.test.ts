@@ -74,6 +74,9 @@ describe("состав групп ролей", () => {
     expect(DEPARTMENT_SCOPED_ROLES).toContain("tutor");
     expect(COLLEGE_WIDE_ROLES).not.toContain("tutor");
     expect(DEPARTMENT_REQUIRED_ROLES).not.toContain("admin");
-    expect(DEPARTMENT_REQUIRED_ROLES).not.toContain("edu_department");
+    // воспитательный отдел закреплён за отделением и видит только его
+    expect(DEPARTMENT_REQUIRED_ROLES).toContain("edu_department");
+    expect(DEPARTMENT_SCOPED_ROLES).toContain("edu_department");
+    expect(COLLEGE_WIDE_ROLES).not.toContain("edu_department");
   });
 });

@@ -6,6 +6,16 @@ from app.core.time import utcnow
 from app.models import InAppNotification, RoleCode, StudyGroup, User
 
 
+# Колокольчик делится на «Моя работа» (задачи и напоминания по своим группам) и «Управление» (то, что приходит
+# по должности: проверка, запросы на правку дня, поздние правки, запросы пароля). Один человек может быть и
+# куратором, и заведующим — вкладки не смешивают эти потоки. Неизвестный вид считается рабочим.
+MANAGE_KINDS = frozenset({"task_submitted", "task_review_waiting", "attendance_change", "late_edit", "password_reset"})
+
+
+def category_of(kind: str) -> str:
+    return "manage" if kind in MANAGE_KINDS else "work"
+
+
 def notify(
     db: Session, user: User, kind: str, message: str,
     entity_type: str | None = None, entity_id: str | None = None,

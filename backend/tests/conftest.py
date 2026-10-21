@@ -233,10 +233,12 @@ def dept_head_headers(client, dept_head_user):
 @pytest.fixture()
 def edu_department_user(db, seeded):
     role = db.query(Role).filter(Role.code == RoleCode.EDU_DEPARTMENT.value).one()
+    dept = db.query(Department).one()
     user = User(
         username="vospitatel",
         full_name="Воспитательный отдел",
         role_id=role.id,
+        department_id=dept.id,
         password_hash=hash_password("VospOtdel#58x!"),
     )
     db.add(user)

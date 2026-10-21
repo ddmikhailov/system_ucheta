@@ -16,6 +16,7 @@ export default function UserManagePanel({
   departments,
   onChanged,
   onDeleted,
+  passwordOnly = false,
 }: {
   user: UserAdmin;
   me: { id: number; role: string } | null | undefined;
@@ -23,6 +24,8 @@ export default function UserManagePanel({
   onChanged: () => void;
   /** Удалён или обезличен — профиля больше нет, итог показывается в списке. */
   onDeleted: (detail: string) => void;
+  /** Воспитательный отдел только выдаёт пароли: ФИО, роль, архив и удаление ему недоступны. */
+  passwordOnly?: boolean;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -126,47 +129,52 @@ export default function UserManagePanel({
           </div>
         )}
 
-        <label>
-          ФИО
-          <input value={editFullName} onChange={(e) => setEditFullName(e.target.value)} />
-        </label>
-        <label>
-          Логин
-          <input value={editUsername} onChange={(e) => setEditUsername(e.target.value)} />
-        </label>
-        <label>
-          Роль
-          {isSelf || roleOptions.length <= 1 ? (
-            <input value={ROLE_LABELS[user.role as RoleCode] ?? user.role} disabled />
-          ) : (
-            <select value={editRole} onChange={(e) => setEditRole(e.target.value)}>
-              {roleOptions.map((r) => (
-                <option key={r} value={r}>
-                  {ROLE_LABELS[r as RoleCode] ?? r}
-                </option>
-              ))}
-            </select>
-          )}
-        </label>
+        {!passwordOnly && (
+          <>
+            <label>
+              ФИО
+              <input value={editFullName} onChange={(e) => setEditFullName(e.target.value)} />
+            </label>
+            <label>
+              Логин
+              <input value={editUsername} onChange={(e) => setEditUsername(e.target.value)} />
+            </label>
+            <label>
+              Роль
+              {isSelf || roleOptions.length <= 1 ? (
+                <input value={ROLE_LABELS[user.role as RoleCode] ?? user.role} disabled />
+              ) : (
+                <select value={editRole} onChange={(e) => setEditRole(e.target.value)}>
+                  {roleOptions.map((r) => (
+                    <option key={r} value={r}>
+                      {ROLE_LABELS[r as RoleCode] ?? r}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </label>
 
-        {!isSelf && DEPARTMENT_REQUIRED_ROLES.includes(editRole) && !inRoles(me?.role, DEPARTMENT_SCOPED_ROLES) && (
-          <label>
-            Отделение
-            <select value={editDepartmentId ?? ""} onChange={(e) => setEditDepartmentId(Number(e.target.value))}>
-              {departments.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          </label>
+            {!isSelf && DEPARTMENT_REQUIRED_ROLES.includes(editRole) && !inRoles(me?.role, DEPARTMENT_SCOPED_ROLES) && (
+              <label>
+                Отделение
+                <select value={editDepartmentId ?? ""} onChange={(e) => setEditDepartmentId(Number(e.target.value))}>
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            <div className="actions">
+              <button onClick={saveProfile}>Сохранить</button>
+            </div>
+
+            <hr />
+
+          </>
         )}
-
-        <div className="actions">
-          <button onClick={saveProfile}>Сохранить</button>
-        </div>
-
-        <hr />
 
         <p className="hint">Статус: {statusLabel(user)}</p>
 
@@ -199,22 +207,26 @@ export default function UserManagePanel({
           </div>
         )}
 
-        <hr />
+        {!passwordOnly && (
+          <>
+            <hr />
 
-        <div className="actions">
-          {!isSelf && (
-            <>
-              <button className="link-btn" onClick={toggleActive}>
-                {user.is_active ? "В архив" : "Вернуть из архива"}
-              </button>
-              {!user.is_active && (
-                <button className="link-btn" onClick={removeUser}>
-                  Удалить насовсем
-                </button>
+            <div className="actions">
+              {!isSelf && (
+                <>
+                  <button className="link-btn" onClick={toggleActive}>
+                    {user.is_active ? "В архив" : "Вернуть из архива"}
+                  </button>
+                  {!user.is_active && (
+                    <button className="link-btn" onClick={removeUser}>
+                      Удалить насовсем
+                    </button>
+                  )}
+                </>
               )}
-            </>
-          )}
-        </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

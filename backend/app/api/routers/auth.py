@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import bearer_scheme, extract_token, get_current_user
 from app.core.config import get_settings
@@ -13,11 +13,15 @@ from app.db.session import get_db
 from app.models import CuratorAssignment, RoleCode, User
 from app.schemas.auth import (
     ChangePasswordRequest,
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
     LoginRequest,
     MeGroupInfo,
     MeResponse,
+    PreferencesUpdate,
     TokenResponse,
 )
+from app.services import password_reset_service
 from app.services.audit_service import log_action
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -106,6 +110,27 @@ def login(payload: LoginRequest, request: Request, response: Response, db: Sessi
     return TokenResponse(access_token=token)
 
 
+FORGOT_PASSWORD_REPLY = "Если такой логин есть, запрос отправлен администрации. Пароль вам выдадут лично."
+
+
+@router.post("/forgot-password", response_model=ForgotPasswordResponse, status_code=status.HTTP_202_ACCEPTED)
+def forgot_password(payload: ForgotPasswordRequest, request: Request, db: Session = Depends(get_db)):
+    """«Восстановить пароль» с экрана входа: всем, кто вправе выдать этому человеку пароль, уходит
+    уведомление в колокольчик. Ответ всегда один и тот же, чтобы по нему нельзя было узнавать логины."""
+    ip = client_ip(request)
+    if not check_rate_limit(f"forgot:{ip}", max_attempts=5, window_seconds=3600):
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS, "Слишком много запросов — попробуйте позже",
+            headers={"Retry-After": "3600"},
+        )
+    user = db.query(User).filter(User.username == payload.username.strip()).one_or_none()
+    if user is not None and user.is_active:
+        if password_reset_service.open_request(db, user, ip) is not None:
+            log_action(db, user, "password.reset_requested", "user", str(user.id), new_value=ip)
+            db.commit()
+    return ForgotPasswordResponse(detail=FORGOT_PASSWORD_REPLY)
+
+
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(
     request: Request,
@@ -136,7 +161,10 @@ def logout(
 @router.get("/me", response_model=MeResponse)
 def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     today = today_local()
-    assignments = db.query(CuratorAssignment).filter(CuratorAssignment.user_id == user.id).all()
+    assignments = (
+        db.query(CuratorAssignment).options(joinedload(CuratorAssignment.study_group))
+        .filter(CuratorAssignment.user_id == user.id).all()
+    )
     groups = [
         MeGroupInfo(id=a.study_group.id, code=a.study_group.code, course=a.study_group.course)
         for a in assignments
@@ -164,8 +192,21 @@ def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
         groups=groups,
         dept_head_name=dept_head_name,
         must_change_password=user.must_change_password,
+        carry_over_marks=user.carry_over_marks,
         modules=sorted(enabled_modules()),
     )
+
+
+@router.patch("/preferences", response_model=MeResponse)
+def update_preferences(
+    payload: PreferencesUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db),
+):
+    """Личные настройки текущего пользователя (сейчас — переносить ли отметки прошлого дня в журнал)."""
+    if payload.carry_over_marks is not None and payload.carry_over_marks != user.carry_over_marks:
+        user.carry_over_marks = payload.carry_over_marks
+        log_action(db, user, "preferences.carry_over_marks", "user", str(user.id), new_value=str(payload.carry_over_marks))
+        db.commit()
+    return me(user, db)
 
 
 @router.post("/change-password", response_model=MeResponse)

@@ -15,7 +15,7 @@ import { filterByQuery } from "../../utils/searchMatch";
 import { nextSort, sortRows } from "../../utils/tableView";
 import type { SortState } from "../../utils/tableView";
 
-type GroupSortKey = "code" | "course" | "form" | "curator" | "active";
+type GroupSortKey = "code" | "course" | "form" | "students" | "curator" | "active";
 
 export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; canCreate: boolean }) {
   const { user: me } = useAuth();
@@ -109,7 +109,7 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
     if (onlyVacant) list = list.filter((g) => !g.curator_name);
     list = filterByQuery(list, query, (g) => `${g.code} ${g.curator_name ?? "нет куратора"}`);
     return sortRows(list, sort, {
-      code: (g) => g.code, course: (g) => g.course, form: (g) => g.study_form,
+      code: (g) => g.code, course: (g) => g.course, form: (g) => g.study_form, students: (g) => g.students_count ?? 0,
       curator: (g) => g.curator_name, active: (g) => g.is_active,
     });
   }, [baseRows, courseFilter, onlyVacant, query, sort]);
@@ -178,6 +178,7 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
             <SortHeader label="Код" sortKey="code" sort={sort} onSort={(k) => setSort((s) => nextSort(s, k))} />
             <SortHeader label="Курс" sortKey="course" sort={sort} onSort={(k) => setSort((s) => nextSort(s, k))} />
             <SortHeader label="Форма обучения" sortKey="form" sort={sort} onSort={(k) => setSort((s) => nextSort(s, k))} />
+            <SortHeader label="Студентов" sortKey="students" sort={sort} onSort={(k) => setSort((s) => nextSort(s, k))} />
             <SortHeader label="Куратор" sortKey="curator" sort={sort} onSort={(k) => setSort((s) => nextSort(s, k))} />
             <SortHeader label="Активна" sortKey="active" sort={sort} onSort={(k) => setSort((s) => nextSort(s, k))} />
           </tr>
@@ -196,6 +197,7 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
               </td>
               <td>{g.course}</td>
               <td>{g.study_form ?? "—"}{g.funding === "contract" ? " · договор" : ""}</td>
+              <td>{g.students_count ?? 0}</td>
               <td>{g.curator_name ?? "нет куратора"}</td>
               <td>
                 {canEdit ? (
@@ -220,7 +222,7 @@ export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; ca
           ))}
           {visibleRows.length === 0 && (
             <tr>
-              <td colSpan={5}>{baseRows.length === 0 ? "Групп пока нет." : "Под выбранные фильтры ничего не подошло."}</td>
+              <td colSpan={6}>{baseRows.length === 0 ? "Групп пока нет." : "Под выбранные фильтры ничего не подошло."}</td>
             </tr>
           )}
         </tbody>
