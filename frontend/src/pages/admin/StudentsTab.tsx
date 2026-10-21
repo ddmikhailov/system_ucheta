@@ -130,6 +130,7 @@ export default function StudentsTab({ canCreate }: { canEdit?: boolean; canCreat
       <table className="dash-table">
         <thead>
           <tr>
+            <th>№</th>
             <th>ФИО</th>
             <th>Группа</th>
             <th>Статус</th>
@@ -138,8 +139,9 @@ export default function StudentsTab({ canCreate }: { canEdit?: boolean; canCreat
           </tr>
         </thead>
         <tbody>
-          {visibleStudents.map((s) => (
+          {visibleStudents.map((s, index) => (
             <tr key={s.id}>
+              <td data-label="№">{index + 1}</td>
               <td data-label="ФИО">
                 <Link to={`/students/${s.id}`} className="link-btn">
                   {s.full_name}
@@ -153,7 +155,7 @@ export default function StudentsTab({ canCreate }: { canEdit?: boolean; canCreat
           ))}
           {visibleStudents.length === 0 && (
             <tr>
-              <td colSpan={5}>{isSearching ? "Никого не найдено." : "В группе нет студентов."}</td>
+              <td colSpan={6}>{isSearching ? "Никого не найдено." : "В группе нет студентов."}</td>
             </tr>
           )}
         </tbody>
