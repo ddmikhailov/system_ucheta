@@ -16,12 +16,95 @@
   - edu_department — в своём отделении только выдаёт временные пароли кураторам, замам, соц. педагогам
     и психологам (assert_can_manage_user); править, блокировать и удалять учётки не может
     (assert_can_edit_user).
+
+Кто что видит (весь колледж, отделение или свои группы) — scope_of ниже; состав зон по ролям —
+ROLE_SCOPES в core/roles.py.
 """
+import datetime
+from dataclasses import dataclass
+from typing import Literal
+
 from fastapi import HTTPException, status
+from sqlalchemy import false, true
 from sqlalchemy.orm import Session
 
-from app.core.roles import DEPARTMENT_SCOPED_ROLES
+from app.core.roles import DEPARTMENT_LEADER_ROLES, ROLE_SCOPES, ScopeKind
 from app.models import RoleCode, Student, StudyGroup, User
+from app.services.access_service import led_group_ids
+
+NO_DEPARTMENT_MESSAGE = "У вас не задано отделение — обратитесь к администратору"
+
+
+@dataclass(frozen=True)
+class Scope:
+    """Зона видимости пользователя: весь колледж, одно отделение или группы, которые он ведёт.
+
+    Раньше то же самое решали в каждом месте заново (свои кортежи ролей в deps, policies, сервисах
+    задач, паспорта, питания), и правка прав расходилась: роль была «на весь колледж» в одних местах
+    и «в отделении» в других. Теперь списки и проверки спрашивают зону, а не роль."""
+
+    kind: ScopeKind
+    department_id: int | None = None  # для DEPARTMENT; None — отделение не задано
+    user_id: int | None = None  # для GROUPS
+
+    @property
+    def is_department(self) -> bool:
+        return self.kind is ScopeKind.DEPARTMENT
+
+    def within(self, department_id: int | None) -> bool:
+        """Не выходит ли объект отделения department_id за пределы отделения пользователя. Для зон
+        «колледж» и «группы» — да: кого вообще пускать к действию, решает ролевая зависимость эндпоинта."""
+        if not self.is_department:
+            return True
+        return self.department_id is not None and department_id == self.department_id
+
+    def in_department(self, department_id: int | None) -> bool:
+        """Ограничен отделением, и объект — из этого отделения (руководитель отделения решает его запросы)."""
+        return self.is_department and self.within(department_id)
+
+    def department_or(self, requested: int | None) -> int | None:
+        """Фильтр витрин и списков по отделению: ограниченным отделением — всегда своё (не задано —
+        403, а не None: иначе фильтр не применился бы и открыл весь колледж), остальным — запрошенное."""
+        if self.is_department:
+            if self.department_id is None:
+                raise HTTPException(status.HTTP_403_FORBIDDEN, NO_DEPARTMENT_MESSAGE)
+            return self.department_id
+        return requested
+
+    def group_ids(self, db: Session, on_date: datetime.date) -> list[int]:
+        return led_group_ids(db, self.user_id, on_date) if self.user_id is not None else []
+
+    def group_filter(self, db: Session, on_date: datetime.date):
+        """Условие на StudyGroup для запроса: какие группы в зоне."""
+        if self.kind is ScopeKind.COLLEGE:
+            return true()
+        if self.is_department:
+            return StudyGroup.department_id == self.department_id if self.department_id is not None else false()
+        ids = self.group_ids(db, on_date)
+        return StudyGroup.id.in_(ids) if ids else false()
+
+    def require_group(self, db: Session, study_group_id: int, on_date: datetime.date) -> None:
+        """403, если группа вне зоны (тексты ошибок — те, что показывает интерфейс)."""
+        if self.kind is ScopeKind.COLLEGE:
+            return
+        if self.is_department:
+            group = db.get(StudyGroup, study_group_id)
+            if group is None or not self.within(group.department_id):
+                raise HTTPException(status.HTTP_403_FORBIDDEN, "Группа не относится к вашему отделению")
+            return
+        if study_group_id not in self.group_ids(db, on_date):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Это не ваша группа")
+
+
+def scope_of(user: User, purpose: Literal["view", "edit"] = "view") -> Scope:
+    """Зона пользователя для чтения (view) или для записи в журнал и планы группы (edit)."""
+    view, edit = ROLE_SCOPES[RoleCode(user.role.code)]
+    kind = view if purpose == "view" else edit
+    if kind is ScopeKind.DEPARTMENT:
+        return Scope(kind, department_id=user.department_id)
+    if kind is ScopeKind.GROUPS:
+        return Scope(kind, user_id=user.id)
+    return Scope(kind)
 
 ELEVATED_ROLES = {RoleCode.ADMIN.value, RoleCode.TUTOR.value}
 # Кто может стереть студента/группу насовсем вместе с историей (зав. отделением — только в своём отделении,
@@ -62,10 +145,11 @@ def assert_can_manage_user(admin: User, target: User) -> None:
     admin_role = RoleCode(admin.role.code)
     if admin_role == RoleCode.ADMIN:
         return
-    if admin_role in DEPARTMENT_SCOPED_ROLES:
-        if admin.department_id is None:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "У вас не задано отделение — обратитесь к администратору")
-        if target.department_id != admin.department_id:
+    scope = scope_of(admin)
+    if scope.is_department:
+        if scope.department_id is None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, NO_DEPARTMENT_MESSAGE)
+        if not scope.within(target.department_id):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Пользователь не относится к вашему отделению")
         if admin_role == RoleCode.DEPT_HEAD and target.role.code != RoleCode.ADMIN.value:
             # Как админ в своём отделении: любая роль, у которой есть отделение, включая воспитательный отдел.
@@ -104,10 +188,11 @@ def assert_can_view_user(viewer: User, target: User) -> None:
     viewer_role = RoleCode(viewer.role.code)
     if viewer_role == RoleCode.ADMIN:
         return
-    if viewer_role in DEPARTMENT_SCOPED_ROLES:
-        if viewer.department_id is None:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "У вас не задано отделение — обратитесь к администратору")
-        if target.department_id != viewer.department_id:
+    scope = scope_of(viewer)
+    if scope.is_department:
+        if scope.department_id is None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, NO_DEPARTMENT_MESSAGE)
+        if not scope.within(target.department_id):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Пользователь не относится к вашему отделению")
         return
     raise HTTPException(status.HTTP_403_FORBIDDEN, "Недостаточно прав для просмотра профиля")
@@ -120,8 +205,8 @@ def assert_can_review_attendance_change(user: User, group: StudyGroup) -> None:
     role = RoleCode(user.role.code)
     if role == RoleCode.ADMIN:
         return
-    if role in (RoleCode.DEPT_HEAD, RoleCode.TUTOR):
-        if user.department_id is None or group.department_id != user.department_id:
+    if role in DEPARTMENT_LEADER_ROLES:
+        if not scope_of(user).within(group.department_id):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Группа не относится к вашему отделению")
         return
     raise HTTPException(status.HTTP_403_FORBIDDEN, "Решать запросы на изменение посещаемости может зав. отделением")
@@ -132,8 +217,8 @@ def assert_can_review_student_deletion(user: User, group: StudyGroup) -> None:
     role = RoleCode(user.role.code)
     if role == RoleCode.ADMIN:
         return
-    if role in (RoleCode.DEPT_HEAD, RoleCode.TUTOR):
-        if user.department_id is None or group.department_id != user.department_id:
+    if role in DEPARTMENT_LEADER_ROLES:
+        if not scope_of(user).within(group.department_id):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Студент не из вашего отделения")
         return
     raise HTTPException(status.HTTP_403_FORBIDDEN, "Решать запросы на удаление студентов может админ или зав. отделением")
@@ -162,13 +247,14 @@ def resolve_department_for_role(role_code: str, requested_department_id: int | N
 
 
 def assert_can_manage_group(user: User, group: StudyGroup) -> None:
-    if RoleCode(user.role.code) in DEPARTMENT_SCOPED_ROLES and group.department_id != user.department_id:
+    if not scope_of(user).within(group.department_id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Группа не относится к вашему отделению")
 
 
 def assert_can_manage_student(db: Session, user: User, student: Student) -> None:
-    if RoleCode(user.role.code) not in DEPARTMENT_SCOPED_ROLES:
+    scope = scope_of(user)
+    if not scope.is_department:
         return
     group = db.get(StudyGroup, student.study_group_id)
-    if group is None or group.department_id != user.department_id:
+    if group is None or not scope.within(group.department_id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Студент не из вашего отделения")

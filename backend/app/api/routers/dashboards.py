@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import require_management, require_roles, require_viewer, scope_department_id, validate_date_range
 from app.core import policies
-from app.core.roles import is_department_scoped
 from app.db.session import get_db
 from app.models import AttendanceMark, RoleCode, Student, StudyGroup, User
 from app.schemas.dashboards import (
@@ -160,7 +159,7 @@ def student_card(
     if student is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Студент не найден")
 
-    if is_department_scoped(user) and student.study_group.department_id != user.department_id:
+    if not policies.scope_of(user).within(student.study_group.department_id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Студент не из вашего отделения")
 
     marks = (

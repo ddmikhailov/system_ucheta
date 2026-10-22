@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import assert_can_access_group, get_current_user, require_roles, scope_department_id
 from app.core import policies
-from app.core.roles import is_department_scoped
 from app.core.time import today_local
 from app.db.session import get_db
 from app.models import RoleCode, Student, StudyGroup, User
@@ -33,7 +32,7 @@ def _request_or_404(db: Session, request_id: int):
 @router.get("", response_model=list[StudentDeletionRead])
 def pending(user: User = Depends(require_reviewer), db: Session = Depends(get_db)):
     """Ждущие решения запросы: зав. отделением и тьютору — своего отделения, администратору — все."""
-    department_id = scope_department_id(user, None) if is_department_scoped(user) else None
+    department_id = scope_department_id(user, None)
     return [_read(db, r) for r in deletions.list_pending(db, department_id)]
 
 

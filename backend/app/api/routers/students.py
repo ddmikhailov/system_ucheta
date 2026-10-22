@@ -7,15 +7,13 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import assert_can_access_group, get_current_user, require_viewer, scope_department_id, validate_date_range
-from app.core.roles import DOSSIER_STAFF_ROLES, is_department_scoped
+from app.api.deps import assert_can_view_group, get_current_user, require_viewer, scope_department_id, validate_date_range
 from app.core.time import today_local
 from app.db.session import get_db
 from app.models import (
     AttendanceMark,
     DaySubmission,
     DayType,
-    RoleCode,
     Student,
     StudentGroupMembership,
     StudentProfile,
@@ -48,9 +46,7 @@ def _get_accessible_student(db: Session, user: User, student_id: int) -> Student
     student = db.get(Student, student_id)
     if student is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Студент не найден")
-    if RoleCode(user.role.code) in DOSSIER_STAFF_ROLES:
-        return student
-    assert_can_access_group(db, user, student.study_group_id, today_local())
+    assert_can_view_group(db, user, student.study_group_id, today_local())
     return student
 
 
@@ -70,8 +66,9 @@ def search_students(
     психолога и администрации. Куратор работает через «Мои группы». Список допущенных ролей —
     разрешающий (require_viewer), а не запрещающий: новая роль не получает всех студентов колледжа по умолчанию."""
     query = db.query(Student).join(StudyGroup, StudyGroup.id == Student.study_group_id)
-    if is_department_scoped(user):
-        query = query.filter(StudyGroup.department_id == scope_department_id(user, None))
+    department_id = scope_department_id(user, None)
+    if department_id is not None:
+        query = query.filter(StudyGroup.department_id == department_id)
     if group_id is not None:
         query = query.filter(Student.study_group_id == group_id)
     for word in q.split():

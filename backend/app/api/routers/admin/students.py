@@ -10,7 +10,6 @@ from app.api.deps import (
     scope_department_id,
 )
 from app.core import policies
-from app.core.roles import is_department_scoped
 from app.core.time import today_local
 from app.db.session import get_db
 from app.models import AttendanceMark, Student, StudentGroupMembership, StudentStatus, StudyGroup, User
@@ -31,10 +30,9 @@ def list_students(
     q = db.query(Student)
     if study_group_id is not None:
         q = q.filter(Student.study_group_id == study_group_id)
-    if is_department_scoped(user):
-        q = q.join(StudyGroup, StudyGroup.id == Student.study_group_id).filter(
-            StudyGroup.department_id == scope_department_id(user, None)
-        )
+    department_id = scope_department_id(user, None)
+    if department_id is not None:
+        q = q.join(StudyGroup, StudyGroup.id == Student.study_group_id).filter(StudyGroup.department_id == department_id)
     students = q.order_by(Student.last_name, Student.first_name).all()
     return [_student_read(s) for s in students]
 

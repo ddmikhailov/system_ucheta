@@ -118,7 +118,7 @@ def list_groups(
 def create_group(
     payload: StudyGroupCreate, user: User = Depends(require_dept_editor), db: Session = Depends(get_db),
 ):
-    if is_department_scoped(user) and payload.department_id != user.department_id:
+    if not policies.scope_of(user).within(payload.department_id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Группу можно создать только в своём отделении")
     group = StudyGroup(**payload.model_dump())
     db.add(group)

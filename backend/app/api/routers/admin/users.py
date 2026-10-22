@@ -45,9 +45,9 @@ def _user_read(u: User) -> UserRead:
 @router.get("/users", response_model=list[UserRead])
 def list_users(user: User = Depends(require_management), db: Session = Depends(get_db)):
     q = db.query(User)
-    if is_department_scoped(user):
-        scope = scope_department_id(user, None)
-        q = q.filter(User.department_id == scope)
+    department_id = scope_department_id(user, None)
+    if department_id is not None:
+        q = q.filter(User.department_id == department_id)
     users = q.all()
     return [_user_read(u) for u in users]
 

@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles, scope_department_id
 from app.core import policies
-from app.core.roles import is_department_scoped
 from app.db.session import get_db
 from app.models import RoleCode, User
 from app.schemas.curator import AttendanceChangeRead, ReviewDecision
@@ -20,7 +19,7 @@ require_reviewer = require_roles(RoleCode.ADMIN, RoleCode.TUTOR, RoleCode.DEPT_H
 @router.get("", response_model=list[AttendanceChangeRead])
 def pending_changes(user: User = Depends(require_reviewer), db: Session = Depends(get_db)):
     """Ждущие решения запросы: зав. отделением и тьютору — своего отделения, администратору — все."""
-    department_id = scope_department_id(user, None) if is_department_scoped(user) else None
+    department_id = scope_department_id(user, None)
     return [changes.to_read(db, r) for r in changes.list_pending(db, department_id)]
 
 

@@ -6,12 +6,15 @@ meal_service.visible_groups) — после перевода на scope_of ни 
 Отделение A — «своё», B — «чужое». Куратор, заместитель, соц. педагог и психолог числятся в
 отделении B, а ведут группу из A: видимость «по группам» определяется назначением, а не отделением."""
 import datetime
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
 
 from app.api import deps
 from app.core import policies, roles
+from app.core.roles import ScopeKind
 from app.core.security import hash_password
 from app.core.time import today_local
 from app.models import CuratorAssignment, Department, Role, RoleCode, Student, StudyGroup, User
@@ -191,4 +194,27 @@ def test_meal_groups(db, world, name):
 
 def test_every_role_is_in_the_matrix():
     assert {role for role, _, _ in PEOPLE.values()} == set(RoleCode)
-    assert roles.DEPARTMENT_SCOPED_ROLES  # группы ролей не пустые — проверка, что импорт живой
+    assert set(roles.ROLE_SCOPES) == set(RoleCode)  # у новой роли зона задаётся явно
+
+
+def test_routers_and_services_ask_the_scope_not_the_role_groups():
+    """Сторож: роутеры и сервисы спрашивают зону (policies.scope_of / deps.assert_can_*), а не перебирают
+    группы ролей сами — иначе разброс проверок, из-за которого права расходились, вернётся."""
+    app_dir = Path(__file__).resolve().parents[1] / "app"
+    offenders = []
+    for path in [*(app_dir / "api" / "routers").rglob("*.py"), *(app_dir / "services").rglob("*.py")]:
+        text = path.read_text(encoding="utf-8")
+        for name in ("DEPARTMENT_SCOPED_ROLES", "COLLEGE_WIDE_ROLES", "DOSSIER_STAFF_ROLES"):
+            if name in text:
+                offenders.append(f"{path.relative_to(app_dir)}: {name}")
+    assert offenders == []
+
+
+@pytest.mark.parametrize("role", list(RoleCode))
+def test_scope_of_matches_the_role_table(role):
+    user = SimpleNamespace(id=7, role=SimpleNamespace(code=role.value), department_id=3)
+    view, edit = roles.ROLE_SCOPES[role]
+    assert policies.scope_of(user, "view").kind is view
+    assert policies.scope_of(user, "edit").kind is edit
+    if view is ScopeKind.DEPARTMENT:
+        assert policies.scope_of(user).department_id == 3

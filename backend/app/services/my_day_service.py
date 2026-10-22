@@ -13,6 +13,7 @@ import datetime
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.roles import DEPARTMENT_LEADER_ROLES
 from app.core.time import today_local
 from app.models import (
     AttendanceChangeRequest, AttendanceMark, CuratorAssignment, DaySubmission, MarkCode, RoleCode, Student, StudentProfile, StudyGroup,
@@ -277,7 +278,7 @@ def journal_change_count(db: Session, user: User) -> int:
     role = RoleCode(user.role.code)
     if role == RoleCode.ADMIN:
         return db.query(AttendanceChangeRequest).filter(AttendanceChangeRequest.status == "pending").count()
-    if role in (RoleCode.DEPT_HEAD, RoleCode.TUTOR) and user.department_id is not None:
+    if role in DEPARTMENT_LEADER_ROLES and user.department_id is not None:
         return (
             db.query(AttendanceChangeRequest)
             .join(StudyGroup, StudyGroup.id == AttendanceChangeRequest.study_group_id)

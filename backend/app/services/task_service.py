@@ -18,11 +18,12 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.roles import DEPARTMENT_SCOPED_ROLES
+from app.core import policies
+from app.core.roles import DEPARTMENT_LEADER_ROLES
 from app.core.time import today_local, utcnow
 from app.core.xlsx import append_row
 from app.models import (
-    AuditLog, CuratorAssignment, InAppNotification, RoleCode, Student, StudyGroup, Task, TaskAssignment, TaskComment, TaskRow, TaskTemplate, User,
+    AuditLog, CuratorAssignment, InAppNotification, Role, RoleCode, Student, StudyGroup, Task, TaskAssignment, TaskComment, TaskRow, TaskTemplate, User,
 )
 from app.schemas.tasks import FieldDef, Progress, ScopeDef, TaskCreate
 from app.core.modules import module_enabled
@@ -177,8 +178,8 @@ def resolve_scope_groups(db: Session, scope: ScopeDef, creator: User) -> list[St
         raise _bad("Укажите охват: весь колледж, отделения, курсы или группы")
     groups = db.query(StudyGroup).filter(StudyGroup.is_active.is_(True)).all()
     chosen = [g for g in groups if scope_matches(scope, g)]
-    if RoleCode(creator.role.code) in DEPARTMENT_SCOPED_ROLES:
-        chosen = [g for g in chosen if g.department_id == creator.department_id]
+    scope = policies.scope_of(creator)
+    chosen = [g for g in chosen if scope.within(g.department_id)]
     if not chosen:
         raise _bad("В охват не попала ни одна группа")
     return chosen
@@ -328,14 +329,15 @@ def can_review(user: User, assignment: TaskAssignment) -> bool:
     if role == RoleCode.ADMIN:
         return True
     rule = task.reviewer_rule
+    in_department = policies.scope_of(user).in_department(assignment.study_group.department_id)
     if rule == "two_step":
         if assignment.review_step == 1:
-            return role in (RoleCode.DEPT_HEAD, RoleCode.TUTOR) and user.department_id == assignment.study_group.department_id
-        return role == RoleCode.EDU_DEPARTMENT and user.department_id == assignment.study_group.department_id
+            return role in DEPARTMENT_LEADER_ROLES and in_department
+        return role == RoleCode.EDU_DEPARTMENT and in_department
     if rule == "dept_head":
-        return role in (RoleCode.DEPT_HEAD, RoleCode.TUTOR) and user.department_id == assignment.study_group.department_id
+        return role in DEPARTMENT_LEADER_ROLES and in_department
     if rule == "edu_department":
-        return role == RoleCode.EDU_DEPARTMENT and user.department_id == assignment.study_group.department_id
+        return role == RoleCode.EDU_DEPARTMENT and in_department
     if rule == "author":
         return user.id == task.created_by
     return False
@@ -347,7 +349,7 @@ def manager_sees(user: User, assignment: TaskAssignment) -> bool:
     role = RoleCode(user.role.code)
     if role == RoleCode.ADMIN:
         return True
-    if role in DEPARTMENT_SCOPED_ROLES and user.department_id == assignment.study_group.department_id:
+    if policies.scope_of(user).in_department(assignment.study_group.department_id):
         return True
     return user.id == assignment.task.created_by
 
@@ -464,7 +466,7 @@ def reviewers_to_notify(db: Session, assignment: TaskAssignment) -> list[User]:
         dept = assignment.study_group.department_id
         return db.query(User).join(User.role).filter(
             User.is_active.is_(True), User.department_id == dept,
-            User.role.has(code=RoleCode.DEPT_HEAD.value) | User.role.has(code=RoleCode.TUTOR.value),
+            User.role.has(Role.code.in_([r.value for r in DEPARTMENT_LEADER_ROLES])),
         ).all()
     if task.reviewer_rule == "edu_department" or (task.reviewer_rule == "two_step" and assignment.review_step == 2):
         return db.query(User).join(User.role).filter(
@@ -754,8 +756,7 @@ def assign_new_group(db: Session, group: StudyGroup) -> int:
             if before is None or before[0] not in existing:
                 continue
         author = task.author
-        if author is not None and RoleCode(author.role.code) in DEPARTMENT_SCOPED_ROLES \
-                and author.department_id != group.department_id:
+        if author is not None and not policies.scope_of(author).within(group.department_id):
             continue
         locked = task.step_no > 1  # у новой группы предыдущий шаг только что создан — значит, ещё не сдан
         assignment = TaskAssignment(task_id=task.id, study_group_id=group.id, status="new", locked=locked)
@@ -870,8 +871,8 @@ def scope_preview(db: Session, creator: User, scope: ScopeDef) -> dict:
         return {"groups": 0, "students": 0, "curators": 0, "without_curator": []}
     groups = db.query(StudyGroup).filter(StudyGroup.is_active.is_(True)).all()
     chosen = [g for g in groups if scope_matches(scope, g)]
-    if RoleCode(creator.role.code) in DEPARTMENT_SCOPED_ROLES:
-        chosen = [g for g in chosen if g.department_id == creator.department_id]
+    scope = policies.scope_of(creator)
+    chosen = [g for g in chosen if scope.within(g.department_id)]
     ids = [g.id for g in chosen]
     if not ids:
         return {"groups": 0, "students": 0, "curators": 0, "without_curator": []}

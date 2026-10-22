@@ -10,12 +10,10 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.core import field_crypto
-from app.core.roles import COLLEGE_WIDE_ROLES, DEPARTMENT_SCOPED_ROLES
+from app.core import field_crypto, policies
 from app.core.time import today_local
-from app.models import RoleCode, Student, StudentGroupMembership, StudentGuardian, StudentProfile, StudyGroup, User
+from app.models import Student, StudentGroupMembership, StudentGuardian, StudentProfile, StudyGroup, User
 from app.schemas.dossier import SpecialData
-from app.services.access_service import get_curator_group_ids
 
 # (ключ, название, функция по SpecialData)
 CATEGORIES: list[tuple[str, str, callable]] = [
@@ -58,16 +56,9 @@ class GroupPassport:
 def accessible_groups(db: Session, user: User, department_id: int | None = None) -> list[StudyGroup]:
     """Группы, паспорт которых пользователь вправе видеть: куратор — свои, зав. отделением
     и тьютор — своего отделения, остальные (админ, воспитательный отдел, соц. педагог, психолог) — все."""
-    today = today_local()
-    role = RoleCode(user.role.code)
-    q = db.query(StudyGroup).options(joinedload(StudyGroup.department)).filter(StudyGroup.is_active.is_(True))
-    if role in DEPARTMENT_SCOPED_ROLES:
-        q = q.filter(StudyGroup.department_id == user.department_id) if user.department_id is not None else q.filter(False)
-    elif role in COLLEGE_WIDE_ROLES:
-        pass
-    else:
-        ids = get_curator_group_ids(db, user, today)
-        q = q.filter(StudyGroup.id.in_(ids)) if ids else q.filter(False)
+    q = db.query(StudyGroup).options(joinedload(StudyGroup.department)).filter(
+        StudyGroup.is_active.is_(True), policies.scope_of(user).group_filter(db, today_local()),
+    )
     if department_id is not None:
         q = q.filter(StudyGroup.department_id == department_id)
     return q.order_by(StudyGroup.course, StudyGroup.code).all()

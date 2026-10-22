@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import require_management
 from app.core import policies
-from app.core.roles import is_department_scoped
 from app.core.time import today_local
 from app.db.session import get_db
 from app.models import AssignmentRole, CuratorAssignment, StudyGroup, User
@@ -38,11 +37,11 @@ def create_curator_assignment(
     if payload.end_date is not None and payload.end_date < payload.start_date:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Дата окончания раньше даты начала")
 
-    if is_department_scoped(user):
-        if group.department_id != user.department_id:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Группа не относится к вашему отделению")
-        if curator.department_id != user.department_id:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Куратор не из вашего отделения")
+    scope = policies.scope_of(user)
+    if not scope.within(group.department_id):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Группа не относится к вашему отделению")
+    if not scope.within(curator.department_id):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Куратор не из вашего отделения")
 
     role_type = AssignmentRole(payload.role_type)
     # Новое назначение на ту же роль (куратор/заместитель) в этой группе
