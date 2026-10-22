@@ -7,9 +7,12 @@ from app.models import InAppNotification, RoleCode, StudyGroup, User
 
 
 # Колокольчик делится на «Моя работа» (задачи и напоминания по своим группам) и «Управление» (то, что приходит
-# по должности: проверка, запросы на правку дня, поздние правки, запросы пароля). Один человек может быть и
-# куратором, и заведующим — вкладки не смешивают эти потоки. Неизвестный вид считается рабочим.
-MANAGE_KINDS = frozenset({"task_submitted", "task_review_waiting", "attendance_change", "late_edit", "password_reset"})
+# по должности: проверка, запросы на правку дня, поздние правки, запросы пароля и удаления студента, сообщения
+# о проблемах). Один человек может быть и куратором, и заведующим — вкладки не смешивают эти потоки. Неизвестный вид считается рабочим.
+MANAGE_KINDS = frozenset({
+    "task_submitted", "task_review_waiting", "attendance_change", "late_edit", "password_reset",
+    "student_deletion", "problem_report",
+})
 
 
 def category_of(kind: str) -> str:

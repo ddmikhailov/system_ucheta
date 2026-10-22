@@ -4,14 +4,15 @@ import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/useAuth";
 import { MODULE } from "../constants/modules";
 import { isModuleOn } from "../utils/modules";
-import type { DepartmentAdmin, UserActivityEntry, UserActivityPage, UserProfile } from "../api/types";
+import type { DepartmentAdmin, UserActivityEntry, UserActivityPage, UserJournalOverview, UserProfile } from "../api/types";
 import { Kpi, ProfileHero } from "../components/ProfileHero";
 import { TabBar, TabPanel, type TabItem } from "../components/Tabs";
 import { AUDIT_AREAS, auditActionLabel } from "../constants/auditActions";
 import { MANAGEMENT_ROLES, ROLE_LABELS, STRUCTURE_EDITOR_ROLES, inRoles, type RoleCode } from "../constants/roles";
 import { useTabParam } from "../hooks/useTabParam";
 import BackLink from "../components/BackLink";
-import { formatDateRu, formatServerDateTimeFull, parseServerDateTime } from "../utils/date";
+import { activityCsv } from "../utils/activityCsv";
+import { formatDateRu, formatMonthTitle, formatServerDateTimeFull, parseServerDateTime, todayIso } from "../utils/date";
 import { plural } from "../utils/plural";
 import { userStatusLabel } from "../utils/userStatus";
 import UserManagePanel from "./admin/UserManagePanel";
@@ -77,7 +78,7 @@ export default function UserProfilePage() {
   const tabs: TabItem[] = [
     { key: "overview", label: "Обзор" },
     { key: "groups", label: "Группы", badge: current.length || undefined },
-    { key: "activity", label: "Действия" },
+    { key: "activity", label: "Журнал" },
     ...(canManage ? [{ key: "manage", label: "Управление" }] : []),
   ];
   const disciplineTone = d.percent_on_time === null ? undefined : d.percent_on_time >= 90 ? "ok" : d.percent_on_time >= 70 ? "warn" : "hot";
@@ -94,7 +95,6 @@ export default function UserProfilePage() {
           u.display_title || (ROLE_LABELS[u.role as RoleCode] ?? u.role),
           profile.department_name,
           `логин ${u.username}`,
-          profile.last_activity_at ? `последнее действие ${formatServerDateTimeFull(profile.last_activity_at)}` : "действий в журнале нет",
         ]}
       >
         <Kpi
@@ -112,11 +112,6 @@ export default function UserProfilePage() {
       <TabBar tabs={tabs} active={tab} onChange={setTab} label="Разделы профиля пользователя" idPrefix="user" />
 
       <TabPanel idPrefix="user" tabKey="overview" active={tab}>
-        <section className="profile-section">
-          <h3>Активность за 30 дней</h3>
-          <ActivityBars days={profile.activity_30d} />
-        </section>
-
         <div className="profile-grid">
           <section className="profile-section">
             <h3>Дисциплина сдачи дней</h3>
@@ -304,9 +299,25 @@ function entityLink(e: UserActivityEntry): string | null {
   return null;
 }
 
-/** Лента действий: что сделано и во сколько, по дням, новые сверху; фильтр по области
- * и «Показать ещё». Значения «было/стало» сервер не отдаёт — в них бывают данные досье. */
+function saveActivityCsv(entries: UserActivityEntry[], filename: string) {
+  const url = URL.createObjectURL(new Blob([activityCsv(entries)], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Вкладка «Журнал»: ритм за 30 дней и лента действий — что сделано и во сколько, по дням, новые сверху;
+ * фильтр по области и «Показать ещё». Журнал запрашивается только при открытии вкладки (профиль его не читает).
+ * Значения «было/стало» сервер не отдаёт — в них бывают данные досье.
+ * Помесячный архив: по умолчанию — текущий месяц, прошлые выбираются в «Архиве» и скачиваются
+ * файлом для Excel. Записи старше года сервер удаляет сам (срок хранения журнала). */
 function ActivityFeed({ userId }: { userId: number }) {
+  const thisMonth = todayIso().slice(0, 7);
+  const [month, setMonth] = useState(thisMonth);
+  const [overview, setOverview] = useState<UserJournalOverview | null>(null);
+  const [downloading, setDownloading] = useState(false);
   const [area, setArea] = useState("");
   const [items, setItems] = useState<UserActivityEntry[] | null>(null);
   const [next, setNext] = useState<number | null>(null);
@@ -315,13 +326,48 @@ function ActivityFeed({ userId }: { userId: number }) {
 
   const request = useCallback(
     (before: number | null) => {
-      const qs = new URLSearchParams({ limit: "50" });
+      const qs = new URLSearchParams({ limit: "50", month });
       if (before !== null) qs.set("before_id", String(before));
       if (area) qs.set("area", area);
       return api.get<UserActivityPage>(`/admin/users/${userId}/activity?${qs}`);
     },
-    [userId, area]
+    [userId, area, month]
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get<UserJournalOverview>(`/admin/users/${userId}/activity/overview`)
+      .then((data) => {
+        if (!cancelled) setOverview(data);
+      })
+      .catch(() => undefined); // без шапки остаётся текущий месяц — лента работает
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+  const archive = (overview?.months ?? []).filter((m) => m.month !== thisMonth);
+
+  // Весь месяц (все области) одним файлом: листаем страницы по 100, пока сервер отдаёт.
+  async function downloadMonth() {
+    setDownloading(true);
+    try {
+      const all: UserActivityEntry[] = [];
+      let before: number | null = null;
+      do {
+        const qs = new URLSearchParams({ limit: "100", month });
+        if (before !== null) qs.set("before_id", String(before));
+        const page: UserActivityPage = await api.get<UserActivityPage>(`/admin/users/${userId}/activity?${qs}`);
+        all.push(...page.items);
+        before = page.next_before_id;
+      } while (before !== null);
+      saveActivityCsv(all, `zhurnal_deystviy_${userId}_${month}.csv`);
+    } catch (err) {
+      fail(err);
+    } finally {
+      setDownloading(false);
+    }
+  }
   const fail = (err: unknown) => setError(err instanceof ApiError ? err.message : "Не удалось загрузить действия");
 
   // Первая страница (и заново — при смене области): старый список заменяется новым.
@@ -365,7 +411,33 @@ function ActivityFeed({ userId }: { userId: number }) {
 
   return (
     <div className="activity-feed">
+      {overview && (
+        <section className="profile-section">
+          <h3>Активность за 30 дней</h3>
+          <p className="hint">
+            {overview.last_activity_at
+              ? `Последнее действие — ${formatServerDateTimeFull(overview.last_activity_at)}.`
+              : "Действий в журнале нет."}
+          </p>
+          <ActivityBars days={overview.activity_30d} />
+        </section>
+      )}
       <div className="toolbar">
+        <label className="form-field">
+          Месяц
+          <select value={month} onChange={(e) => setMonth(e.target.value)}>
+            <option value={thisMonth}>Текущий — {formatMonthTitle(thisMonth)}</option>
+            {archive.length > 0 && (
+              <optgroup label="Архив">
+                {archive.map((m) => (
+                  <option key={m.month} value={m.month}>
+                    {formatMonthTitle(m.month)} · {m.count}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+        </label>
         <label className="form-field">
           Что показать
           <select value={area} onChange={(e) => setArea(e.target.value)}>
@@ -376,6 +448,9 @@ function ActivityFeed({ userId }: { userId: number }) {
             ))}
           </select>
         </label>
+        <button type="button" className="btn-secondary" disabled={downloading} onClick={downloadMonth}>
+          {downloading ? "Готовим файл…" : "Скачать месяц (Excel)"}
+        </button>
       </div>
       {error && <div className="error-text">{error}</div>}
       {items === null ? (

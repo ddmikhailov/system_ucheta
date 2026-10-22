@@ -242,6 +242,7 @@ def me(user: User, db: Session) -> MeResponse:
         must_change_password=user.must_change_password,
         carry_over_marks=user.carry_over_marks,
         modules=sorted(enabled_modules()),
+        seen_release=user.seen_release,
     )
 
 

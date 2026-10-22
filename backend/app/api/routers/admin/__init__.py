@@ -5,8 +5,8 @@
 объявлен раньше /calendar/{date}, иначе DELETE уходил бы не туда)."""
 from fastapi import APIRouter
 
-from app.api.routers.admin import assignments, departments, groups, references, students, users
+from app.api.routers.admin import assignments, debug, departments, groups, references, students, users
 
 router = APIRouter(prefix="/admin", tags=["admin"])
-for _module in (departments, groups, students, references, assignments, users):
+for _module in (departments, groups, students, references, assignments, users, debug):
     router.include_router(_module.router)

@@ -44,8 +44,8 @@ def test_admin_sees_curator_profile_with_groups_and_discipline(client, admin_hea
     assert disc["on_time"] == min(len(days), 1)
     assert disc["late"] == (1 if len(days) > 1 else 0)
     assert disc["missed"] == len(days) - disc["submitted"]
-    assert len(body["activity_30d"]) == 30
-    assert body["activity_30d"][-1]["date"] == str(today_local())
+    # Журнал действий профиль не читает: он загружается только во вкладке «Журнал».
+    assert "activity_30d" not in body and "last_activity_at" not in body
 
 
 def test_profile_counts_individual_work_and_activity(client, admin_headers, db, curator_user, curator_group):
@@ -58,8 +58,11 @@ def test_profile_counts_individual_work_and_activity(client, admin_headers, db, 
     body = client.get(f"/admin/users/{curator_user.id}/profile", headers=admin_headers).json()
     assert body["notes_written_30d"] == 1
     assert body["follow_ups_open"] == 1
-    assert body["last_activity_at"] is not None
-    assert body["activity_30d"][-1]["count"] >= 1
+    journal = client.get(f"/admin/users/{curator_user.id}/activity/overview", headers=admin_headers).json()
+    assert journal["last_activity_at"] is not None
+    assert len(journal["activity_30d"]) == 30
+    assert journal["activity_30d"][-1]["date"] == str(today_local())
+    assert journal["activity_30d"][-1]["count"] >= 1
 
 
 def test_activity_feed_pages_and_hides_values(client, admin_headers, db, curator_user):

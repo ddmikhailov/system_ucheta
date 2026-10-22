@@ -60,6 +60,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "password.change": "Сменил(а) свой пароль",
   "password.reset_requested": "Запросил(а) восстановление пароля",
   "password.reset_issued": "Выдан временный пароль по запросу",
+  "debug.audit_view": "Открыл(а) полный журнал действий («Отладка»)",
+  "dossier.key_rotate": "Особые поля досье перешифрованы новым ключом",
 };
 
 /** Области для фильтра ленты: значение уходит на сервер как `area` (начало кода действия). */

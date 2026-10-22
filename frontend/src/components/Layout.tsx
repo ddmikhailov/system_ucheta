@@ -1,6 +1,7 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import BrandMark from "./BrandMark";
 import CommandPalette from "./CommandPalette";
+import ErrorBoundary from "./ErrorBoundary";
 import { PLATFORM_NAME } from "../constants/brand";
 import type { ReactNode } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
@@ -16,6 +17,7 @@ import NavIcon from "./NavIcon";
 import type { NavIconName } from "./NavIcon";
 import NotificationBell from "./NotificationBell";
 import UserMenu from "./UserMenu";
+import WhatsNewBanner from "./WhatsNewBanner";
 import { pageTitle } from "../utils/pageTitle";
 import { dialogs, toast } from "../utils/feedback";
 import { clearJournalDrafts, hasJournalDrafts } from "../utils/journalDraft";
@@ -240,8 +242,12 @@ export default function Layout({ children }: { children?: ReactNode }) {
         </header>
         <main className="app-main">
           <h1 className="visually-hidden">{title}</h1>
-          {/* Раздел, который грузится по требованию: меню остаётся на месте, пока он подгружается. */}
-          <Suspense fallback={<p className="hint">Загрузка…</p>}>{children ?? <Outlet />}</Suspense>
+          <WhatsNewBanner />
+          {/* Раздел, который грузится по требованию: меню остаётся на месте, пока он подгружается. Сбой раздела
+              не роняет меню, а переход в другой раздел (key) снимает сообщение об ошибке. */}
+          <ErrorBoundary key={pathname}>
+            <Suspense fallback={<p className="hint">Загрузка…</p>}>{children ?? <Outlet />}</Suspense>
+          </ErrorBoundary>
         </main>
       </div>
 

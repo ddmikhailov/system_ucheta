@@ -56,6 +56,8 @@ class User(Base):
     # Личная настройка куратора: подставлять ли в журнал дня отметки предыдущего учебного дня
     # как «черновик» (их можно поправить и сдать). Выключено — журнал дня открывается пустым.
     carry_over_marks: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa.true(), nullable=False)
+    # Версия платформы, чью плашку «Что нового» пользователь уже закрыл: показываем её один раз на все устройства.
+    seen_release: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, default=utcnow, nullable=False

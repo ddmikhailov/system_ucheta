@@ -7,10 +7,13 @@ from app.api.deps import get_current_user
 from app.core.time import utcnow
 from app.db.session import get_db
 from app.models import InAppNotification, User
-from app.services import in_app_notification_service, meal_service, task_schedule, task_service
+from app.services import audit_service, in_app_notification_service, meal_service, task_schedule, task_service
 from app.schemas.notifications import NotificationRead, UnreadCountResponse
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
+
+# Больше колокольчик не показывает; без верхней границы ?limit=100000 выгружал бы всё накопленное разом.
+MAX_LIMIT = 200
 
 
 def _in_category(category: str):
@@ -23,6 +26,8 @@ def _task_reminders(db: Session, user: User) -> None:
     # Сначала периодические задачи: их «новая задача» тоже попадёт в этот же опрос.
     task_schedule.run_due_templates(db)
     meal_service.ensure_weekly_task(db)
+    # Срок хранения журнала действий (не больше года) — раз в сутки.
+    audit_service.purge_expired_daily(db)
     if task_service.generate_reminders(db, user):
         db.commit()
 
@@ -38,7 +43,7 @@ def list_notifications(
     q = db.query(InAppNotification).filter(InAppNotification.user_id == user.id)
     if category is not None:
         q = q.filter(_in_category(category))
-    rows = q.order_by(InAppNotification.created_at.desc()).limit(limit).all()
+    rows = q.order_by(InAppNotification.created_at.desc()).limit(max(1, min(limit, MAX_LIMIT))).all()
     return rows
 
 

@@ -4,6 +4,7 @@ import { Navigate, Outlet, RouterProvider, createBrowserRouter, useLocation } fr
 import type { RouteObject } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthContext";
 import { useAuth } from "./auth/useAuth";
+import ErrorBoundary from "./components/ErrorBoundary";
 import FeedbackHost from "./components/FeedbackHost";
 import Layout from "./components/Layout";
 import NavMemory from "./components/NavMemory";
@@ -222,9 +223,12 @@ export default function App() {
   const [router] = useState(() => createBrowserRouter(routes));
   return (
     <AuthProvider>
-      <Suspense fallback={<div className="loading-screen">Загрузка…</div>}>
-        <RouterProvider router={router} />
-      </Suspense>
+      {/* Внешняя страховка от белого экрана: разделы внутри Layout ловят свои сбои сами, сюда доходит остальное. */}
+      <ErrorBoundary>
+        <Suspense fallback={<div className="loading-screen">Загрузка…</div>}>
+          <RouterProvider router={router} />
+        </Suspense>
+      </ErrorBoundary>
       <FeedbackHost />
     </AuthProvider>
   );

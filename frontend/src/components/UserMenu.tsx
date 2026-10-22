@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { APP_VERSION } from "../constants/release";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import { getThemePref, setThemePref } from "../utils/theme";
 import type { ThemePref } from "../utils/theme";
+import ProblemReportModal from "./ProblemReportModal";
 
 const THEMES: [ThemePref, string][] = [
   ["system", "Как в системе"],
@@ -10,8 +12,8 @@ const THEMES: [ThemePref, string][] = [
   ["dark", "Тёмная"],
 ];
 
-/** Имя пользователя с выпадающим меню («Сменить пароль», «Выйти»). Раньше имя, ссылка и кнопка
- * стояли в шапке отдельными элементами, и на телефоне занимали ещё две строки. «Выйти» — только из этого
+/** Имя пользователя с выпадающим меню («Сменить пароль», «Сообщить о проблеме», «Выйти», номер версии). Раньше имя,
+ * ссылка и кнопка стояли в шапке отдельными элементами, и на телефоне занимали ещё две строки. «Выйти» — только из этого
  * браузера, «Выйти на всех устройствах» — отзывает все сессии (забытый вход на чужом компьютере, потерянный телефон). */
 export default function UserMenu({
   name,
@@ -28,6 +30,7 @@ export default function UserMenu({
   onCarryOverChange?: (value: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [reporting, setReporting] = useState(false);
   const [theme, setTheme] = useState<ThemePref>(getThemePref);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -97,6 +100,17 @@ export default function UserMenu({
             className="user-menu__item"
             onClick={() => {
               setOpen(false);
+              setReporting(true);
+            }}
+          >
+            Сообщить о проблеме
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="user-menu__item"
+            onClick={() => {
+              setOpen(false);
               onLogout();
             }}
           >
@@ -115,8 +129,10 @@ export default function UserMenu({
               Выйти на всех устройствах
             </button>
           )}
+          <span className="user-menu__version">Версия {APP_VERSION}</span>
         </div>
       )}
+      {reporting && <ProblemReportModal onClose={() => setReporting(false)} />}
     </div>
   );
 }

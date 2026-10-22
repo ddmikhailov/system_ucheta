@@ -2,22 +2,26 @@ import logging
 import re
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
-from app.api.routers import admin, attendance_changes, student_deletions, auth, curator, dashboards, dossier, dossier_import, export, individual_work, my_day, notifications, passport, students, tasks, events, meetings, reports, my_id, meals, contingent_import
+from app.api.routers import admin, attendance_changes, student_deletions, auth, curator, dashboards, dossier, dossier_import, export, individual_work, my_day, notifications, passport, students, support, tasks, events, meetings, reports, my_id, meals, contingent_import
 from app.core.config import get_settings
 from app.core.modules import enabled_modules
 from app.core.observability import init_sentry
 from app.core.rate_limit import client_ip
 from app.core.request_context import set_client_ip
+from app.db.session import get_db
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 settings = get_settings()
-init_sentry(settings)
 
 # Сюда кладётся собранный фронтенд (frontend/dist → backend/static). В
 # локальной разработке (frontend — отдельный `npm run dev` на 5173) этой папки
@@ -42,6 +46,8 @@ app = FastAPI(
     redoc_url="/redoc" if _docs_enabled else None,
     openapi_url="/openapi.json" if _docs_enabled else None,
 )
+# Номер версии в Sentry: видно, с какого обновления пошла ошибка.
+init_sentry(settings, release=app.version)
 
 # Сжатие ответов: собранный интерфейс и JSON уходили по сети как есть, и первая загрузка на хостинге была заметно медленнее.
 app.add_middleware(GZipMiddleware, minimum_size=1024)
@@ -116,6 +122,7 @@ MODULE_ROUTERS = (
     (tasks.router, "tasks"),
     (meals.router, "meals"),
     (contingent_import.router, None),
+    (support.router, None),
 )
 
 
@@ -139,7 +146,15 @@ def hidden_api_patterns(modules: frozenset[str]) -> tuple[re.Pattern, ...]:
 
 
 @app.get("/health")
-def health():
+def health(db: Session = Depends(get_db)):
+    """Проверка работы для мониторинга: «ok» только если отвечает и база. Раньше ответ был «ok» и при упавшей базе,
+    и платформа считалась живой, хотя ни одна страница не открывалась."""
+    try:
+        db.execute(text("SELECT 1"))
+    except SQLAlchemyError as exc:
+        # warning, не error: проверка идёт каждые 30 с, и при упавшей базе Sentry не должен получать событие на каждую.
+        logger.warning("Проверка /health: база данных недоступна (%s)", type(exc).__name__)
+        return JSONResponse({"status": "error", "detail": "База данных недоступна"}, status_code=503)
     return {"status": "ok"}
 
 
