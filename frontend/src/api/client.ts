@@ -73,8 +73,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return res.json();
 }
 
+/** Запрос отменён (AbortController): ответ больше никому не нужен, показывать ошибку не надо. */
+export function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === "AbortError";
+}
+
 export const api = {
-  get: <T,>(path: string) => request<T>(path),
+  // signal — чтобы отменить запрос, ответ на который уже не нужен (переключили группу, ушли со страницы).
+  get: <T,>(path: string, signal?: AbortSignal) => request<T>(path, { signal }),
   post: <T,>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: body !== undefined ? JSON.stringify(body) : undefined }),
   put: <T,>(path: string, body?: unknown) =>
