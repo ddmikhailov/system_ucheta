@@ -53,7 +53,9 @@
     таблицы password_reset_requests, student_deletion_requests, absence_compensations, колонки
     users.carry_over_marks, users.seen_release и mark_codes.no_compensation, индекс audit_log по объекту.
     Применяются сами при запуске (scripts.entrypoint).
-  - Новых Python-пакетов нет, но requirements.txt всё равно установить (шаг 3 ниже).
+  - Новых Python-пакетов нет, но обновлены pillow (13.0.0, через него строятся PDF) и certifi
+    (2026.10.19) — исправления безопасности. Поэтому шаг 3 с pip install обязателен: серверу нужен
+    доступ к PyPI или заранее скачанные пакеты.
   - Новые параметры .env — необязательные, значения по умолчанию подходят:
       SESSION_RENEW_BEFORE_MINUTES=120   SESSION_MAX_DAYS=7
       RISK_UNEXCUSED_PERCENT=40          COMPENSATION_REOPEN_DAYS=3
