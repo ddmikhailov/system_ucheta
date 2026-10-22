@@ -130,7 +130,7 @@ def update_user(
     target = db.get(User, user_id)
     if target is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Пользователь не найден")
-    policies.assert_can_manage_user(admin, target)
+    policies.assert_can_edit_user(admin, target)
 
     if payload.role is not None and payload.role != target.role.code:
         if target.id == admin.id:
@@ -210,7 +210,7 @@ def delete_user(
     target = db.get(User, user_id)
     if target is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Пользователь не найден")
-    policies.assert_can_manage_user(admin, target)
+    policies.assert_can_edit_user(admin, target)
     if target.id == admin.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Нельзя удалить самого себя")
     if target.is_active:

@@ -107,6 +107,16 @@ def test_edu_department_issues_passwords_only_in_own_department(
     assert client.post(f"/admin/users/{own.id}/set-password", headers=edu_department_headers, json={}).status_code == 200
 
 
+def test_edu_department_cannot_edit_block_or_delete_accounts(client, db, imported, edu_department_headers):
+    """Воспитательный отдел в своём отделении только выдаёт пароли: учётки кураторов не правит и не удаляет."""
+    own = _curator(db)
+    assert client.patch(f"/admin/users/{own.id}", headers=edu_department_headers, json={"full_name": "Другое Имя"}).status_code == 403
+    assert client.patch(f"/admin/users/{own.id}", headers=edu_department_headers, json={"is_active": False}).status_code == 403
+    assert client.delete(f"/admin/users/{own.id}", headers=edu_department_headers).status_code == 403
+    db.refresh(own)
+    assert own.is_active and own.full_name != "Другое Имя"
+
+
 def test_edu_department_is_attached_to_a_department_and_sees_only_it(
     client, db, imported, edu_department_user, edu_department_headers, other_department
 ):

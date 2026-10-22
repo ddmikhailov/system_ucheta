@@ -13,8 +13,9 @@
     отделения (кураторы, замы, соц. педагоги, психологи, тьюторы, воспитательный отдел, другие зав.
     отделением) и назначает любые роли с отделением; админов и ответственную по питанию (у них нет
     отделения) не трогает;
-  - edu_department — не управляет учётками вообще (раньше могло сбросить
-    пароль администратору — TODO.md 1.2).
+  - edu_department — в своём отделении только выдаёт временные пароли кураторам, замам, соц. педагогам
+    и психологам (assert_can_manage_user); править, блокировать и удалять учётки не может
+    (assert_can_edit_user).
 """
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -75,6 +76,14 @@ def assert_can_manage_user(admin: User, target: User) -> None:
             )
         return
     raise HTTPException(status.HTTP_403_FORBIDDEN, "Недостаточно прав для управления пользователями")
+
+
+def assert_can_edit_user(admin: User, target: User) -> None:
+    """Правка, блокировка и удаление учётной записи. То же, что assert_can_manage_user, но воспитательному отделу
+    в своём отделении доступна только выдача временных паролей, а не управление учётками."""
+    if target.id != admin.id and RoleCode(admin.role.code) == RoleCode.EDU_DEPARTMENT:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Воспитательный отдел может только выдавать временные пароли")
+    assert_can_manage_user(admin, target)
 
 
 def can_manage_user(admin: User, target: User) -> bool:

@@ -77,6 +77,34 @@ def test_assert_can_manage_user_self_always_allowed_regardless_of_role():
         policies.assert_can_manage_user(user, user)
 
 
+# --- assert_can_edit_user: правка и удаление учётки (воспитательному отделу — только пароли) ---
+
+EDIT_USER_CASES = [
+    (ADMIN, None, CURATOR, DEPT_A, True),
+    (DEPT_HEAD, DEPT_A, CURATOR, DEPT_A, True),
+    (DEPT_HEAD, DEPT_A, EDU_DEPARTMENT, DEPT_A, True),
+    (TUTOR, DEPT_A, CURATOR, DEPT_A, True),
+    (EDU_DEPARTMENT, DEPT_A, CURATOR, DEPT_A, False),  # пароль выдать может (assert_can_manage_user), править — нет
+    (EDU_DEPARTMENT, DEPT_A, CURATOR, DEPT_B, False),
+]
+
+
+@pytest.mark.parametrize("actor_role,actor_dept,target_role,target_dept,allowed", EDIT_USER_CASES)
+def test_assert_can_edit_user_matrix(actor_role, actor_dept, target_role, target_dept, allowed):
+    actor = _user(actor_role, actor_dept, user_id=1)
+    target = _user(target_role, target_dept, user_id=2)
+    if allowed:
+        policies.assert_can_edit_user(actor, target)
+    else:
+        with pytest.raises(Exception):
+            policies.assert_can_edit_user(actor, target)
+
+
+def test_assert_can_edit_user_self_allowed_for_edu_department():
+    user = _user(EDU_DEPARTMENT, DEPT_A, user_id=42)
+    policies.assert_can_edit_user(user, user)
+
+
 # --- assert_can_assign_role ---
 
 ASSIGN_ROLE_CASES = [
