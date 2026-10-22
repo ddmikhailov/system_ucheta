@@ -6,6 +6,19 @@ from app.core.time import utcnow
 from app.models import InAppNotification, RoleCode, StudyGroup, User
 
 
+# Колокольчик делится на «Моя работа» (задачи и напоминания по своим группам) и «Управление» (то, что приходит
+# по должности: проверка, запросы на правку дня, поздние правки, запросы пароля и удаления студента, сообщения
+# о проблемах). Один человек может быть и куратором, и заведующим — вкладки не смешивают эти потоки. Неизвестный вид считается рабочим.
+MANAGE_KINDS = frozenset({
+    "task_submitted", "task_review_waiting", "attendance_change", "late_edit", "password_reset",
+    "student_deletion", "problem_report",
+})
+
+
+def category_of(kind: str) -> str:
+    return "manage" if kind in MANAGE_KINDS else "work"
+
+
 def notify(
     db: Session, user: User, kind: str, message: str,
     entity_type: str | None = None, entity_id: str | None = None,
@@ -16,6 +29,19 @@ def notify(
     )
     db.add(entry)
     return entry
+
+
+def in_category(category: str):
+    """Условие на вид уведомления: вкладка «Управление» или «Моя работа»."""
+    manage = InAppNotification.kind.in_(MANAGE_KINDS)
+    return manage if category == "manage" else ~manage
+
+
+def unread_counts(db: Session, user: User) -> tuple[int, int]:
+    """Непрочитанные уведомления пользователя: всего и из них во вкладке «Управление» — для колокольчика и общего
+    опроса счётчиков меню."""
+    unread = db.query(InAppNotification).filter(InAppNotification.user_id == user.id, InAppNotification.read_at.is_(None))
+    return unread.count(), unread.filter(in_category("manage")).count()
 
 
 def dept_head_for(db: Session, department_id: int | None) -> User | None:

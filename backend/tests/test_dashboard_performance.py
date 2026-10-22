@@ -131,7 +131,7 @@ def test_college_wide_screens_do_not_query_per_group(busy, db, today):
     assert q["n"] <= 12, q["n"]
 
     with count_queries(db) as q:
-        stats_service.risk_students(db, today, 1)
+        stats_service.risk_students(db, today)
     assert q["n"] <= 12, q["n"]
 
 
@@ -166,3 +166,32 @@ def test_day_stats_bulk_is_zero_on_days_without_classes(imported, db, today):
     db.commit()
     fast = stats_service.compute_day_stats_bulk(db, weekday, [group.id])[group.id]
     assert (fast.in_list, fast.absent_total) == (0, 0)
+
+
+def test_absent_totals_bulk_matches_per_student_calculation(busy, db, today):
+    """PDF-табель группы: пакетный подсчёт дней отсутствия совпадает с построчным compute_period_stats."""
+    from app.services.attendance_service import get_active_students
+
+    groups, days = busy
+    date_from, date_to = min(days) - datetime.timedelta(days=3), today
+    for group in groups[:3]:
+        students = get_active_students(db, group.id, date_to)
+        bulk = stats_service.absent_totals_by_student(db, students, date_from, date_to)
+        expected = {
+            s.id: stats_service.compute_period_stats(db, date_from, date_to, student_id=s.id).absent_total
+            for s in students
+        }
+        assert bulk == expected
+        assert any(expected.values())
+    assert stats_service.absent_totals_by_student(db, [], date_from, date_to) == {}
+
+
+def test_signature_pdf_makes_no_queries_per_student(busy, db, today):
+    from app.services import export_service
+
+    groups, days = busy
+    with count_queries(db) as queries:
+        export_service.build_signature_pdf(db, groups[0].id, min(days), today)
+    students = db.query(Student).filter_by(study_group_id=groups[0].id).count()
+    assert students >= 20
+    assert queries["n"] < 15, queries["n"]  # раньше — несколько запросов на каждого студента

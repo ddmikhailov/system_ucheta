@@ -5,11 +5,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "../api/client";
 import { AuthContext } from "../auth/authContextObject";
 import type { StudentCard } from "../api/types";
-import { RELEASE_MODULES } from "../constants/modules";
+import type { ModuleName } from "../constants/modules";
 import { makeUser } from "../test/utils";
 import { todayIso } from "../utils/date";
 import StudentCardPage from "./StudentCardPage";
 import { chooseOption } from "../test/searchSelect";
+
+// Урезанный набор без досье и индивидуальной работы (режим настраиваемый; релизный набор их включает).
+const RELEASE_MODULES: readonly ModuleName[] = ["attendance", "tasks", "my_id", "meals"];
 
 vi.mock("../api/client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api/client")>();
@@ -69,7 +72,7 @@ function open(role: string, c: StudentCard = card(), tab?: string, modules?: str
     throw new Error(`неожиданный запрос ${path}`);
   });
   render(
-    <AuthContext.Provider value={{ user: makeUser(role, modules ? { modules } : {}), loading: false, login: vi.fn(), logout: vi.fn(), refresh: vi.fn() }}>
+    <AuthContext.Provider value={{ user: makeUser(role, modules ? { modules } : {}), loading: false, login: vi.fn(), logout: vi.fn(), logoutAll: vi.fn(), refresh: vi.fn() }}>
       <MemoryRouter initialEntries={[tab ? `/students/10?tab=${tab}` : "/students/10"]}>
         <Routes>
           <Route path="/students/:studentId" element={<StudentCardPage />} />
@@ -174,7 +177,7 @@ describe("StudentCardPage — просмотр", () => {
   it("ошибка загрузки (чужая группа) показывается вместо карточки", async () => {
     get.mockRejectedValue(new ApiError(403, "Это не ваша группа"));
     render(
-      <AuthContext.Provider value={{ user: makeUser("curator"), loading: false, login: vi.fn(), logout: vi.fn(), refresh: vi.fn() }}>
+      <AuthContext.Provider value={{ user: makeUser("curator"), loading: false, login: vi.fn(), logout: vi.fn(), logoutAll: vi.fn(), refresh: vi.fn() }}>
         <MemoryRouter initialEntries={["/students/10"]}>
           <Routes><Route path="/students/:studentId" element={<StudentCardPage />} /></Routes>
         </MemoryRouter>
@@ -190,10 +193,11 @@ describe("StudentCardPage — ссылка «назад» по роли", () => 
     // Куратор возвращается к списку своей группы.
     ["curator", "← К группе СА172", "/cabinet/groups/7?tab=students"],
     ["deputy_curator", "← К группе СА172", "/cabinet/groups/7?tab=students"],
-    ["psychologist", "← К поиску студентов", "/students"],
-    ["social_pedagogue", "← К поиску студентов", "/students"],
-    ["admin", "← К списку студентов", "/admin?tab=students"],
-    ["dept_head", "← К списку студентов", "/admin?tab=students"],
+    // Открыли карточку напрямую — сотрудник попадает в поиск/список, сразу отфильтрованный по группе студента.
+    ["psychologist", "← К поиску студентов", "/students?group=7"],
+    ["social_pedagogue", "← К поиску студентов", "/students?group=7"],
+    ["admin", "← К списку студентов", "/admin?tab=students&group=7"],
+    ["dept_head", "← К списку студентов", "/admin?tab=students&group=7"],
   ])("%s", async (role, label, href) => {
     open(role);
     expect(await screen.findByRole("link", { name: label })).toHaveAttribute("href", href);
@@ -304,7 +308,7 @@ describe("StudentCardPage — управление", () => {
     expect(del).not.toHaveBeenCalled();
     confirm.mockReturnValueOnce(true);
     await user.click(button);
-    expect(del).toHaveBeenCalledWith("/admin/students/10");
+    expect(del).toHaveBeenCalledWith("/admin/students/10?force=true");
     await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent('/admin?tab=students'));
     expect(screen.getByTestId("where")).toHaveTextContent("данные обезличены"); // итог передан вкладке «Студенты»
   });

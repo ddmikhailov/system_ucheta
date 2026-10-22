@@ -9,16 +9,19 @@ from app.api.deps import assert_can_access_group, assert_can_view_group, get_cur
 from app.core.config import get_settings
 from app.core.time import today_local
 from app.db.session import get_db
-from app.models import AttendanceMark, DaySubmission, DayType, MarkCode, Student, StudyGroup, User
+from app.models import AbsencePeriod, AttendanceMark, DaySubmission, DayType, MarkCode, Student, StudyGroup, User
 from app.schemas.curator import (
     AbsencePeriodCreate,
+    AbsencePeriodUpdate,
     ChangeRequestInput,
+    CompensationClose,
+    CompensationOverview,
     GroupSummary,
     MonthDayStatus,
     RosterResponse,
     SubmitDayRequest,
 )
-from app.services import attendance_change_service, attendance_service, calendar_service, group_list_service, my_day_service, student_card_service
+from app.services import attendance_change_service, attendance_service, calendar_service, compensation_service, group_list_service, my_day_service, student_card_service
 from app.services.audit_service import log_action
 from app.schemas.my_day import RhythmDay
 from app.services.access_service import get_curator_group_ids
@@ -29,8 +32,11 @@ settings = get_settings()
 
 @router.get("/settings")
 def curator_settings(user: User = Depends(get_current_user)):
-    # Порог «группы риска» берётся из того же значения, что реально использует бэкенд.
-    return {"risk_attendance_percent": settings.risk_attendance_percent, "risk_min_days": settings.risk_min_days}
+    # Пороги «группы риска» и «Восполнить пропуски» берутся из тех же значений, что реально использует бэкенд.
+    return {
+        "risk_unexcused_percent": settings.risk_unexcused_percent, "risk_attendance_percent": settings.risk_attendance_percent,
+        "risk_min_days": settings.risk_min_days, "compensation_reopen_days": settings.compensation_reopen_days,
+    }
 
 
 @router.get("/mark-codes")
@@ -42,7 +48,8 @@ def mark_codes(user: User = Depends(get_current_user), db: Session = Depends(get
     return [
         {
             "id": r.id, "code": r.code, "name": r.name, "counts_as_present": r.counts_as_present,
-            "is_excused": r.is_excused, "requires_document": r.requires_document, "is_active": r.is_active,
+            "is_excused": r.is_excused, "requires_document": r.requires_document, "no_compensation": r.no_compensation,
+            "is_active": r.is_active,
         }
         for r in rows
     ]
@@ -54,13 +61,14 @@ def my_groups(user: User = Depends(get_current_user), db: Session = Depends(get_
     group_ids = get_curator_group_ids(db, user, today)
     result = []
     for group_id in group_ids:
-        roster = attendance_service.get_roster(db, group_id, today)
+        roster = attendance_service.get_roster(db, group_id, today, carry_over=False)
         assignment = next(a for a in user.curator_assignments if a.study_group_id == group_id and a.is_active_on(today))
         group = assignment.study_group
         result.append(
             GroupSummary(
                 id=group_id, code=group.code, course=group.course, is_submitted_today=roster["is_submitted"],
                 students_count=len(roster["entries"]), risk_count=sum(1 for e in roster["entries"] if e.get("is_risk")),
+                compensation_count=sum(1 for e in roster["entries"] if e.get("needs_compensation")),
                 role_type=assignment.role_type.value,
             )
         )
@@ -80,7 +88,7 @@ def get_day(
 
 def _roster_for(db: Session, user: User, study_group_id: int, date: datetime.date) -> dict:
     """Список дня плюс то, что нужно экрану: пойдёт ли правка на проверку и что с запросами."""
-    roster = attendance_service.get_roster(db, study_group_id, date)
+    roster = attendance_service.get_roster(db, study_group_id, date, carry_over=user.carry_over_marks)
     roster["edit_requires_review"] = attendance_service.edit_requires_review(db, user, study_group_id, date)
     roster["pending_change"], roster["last_change"] = attendance_change_service.for_day(db, study_group_id, date)
     return roster
@@ -190,6 +198,43 @@ def mark_all_present(
     except attendance_service.BackdateNotAllowed as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc))
     return _roster_for(db, user, study_group_id, date)
+
+
+@router.get("/groups/{study_group_id}/compensation", response_model=CompensationOverview)
+def group_compensation(study_group_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """«Восполнить пропуски»: кому в группе нужно догнать программу и что уже закрыто в этом семестре."""
+    today = today_local()
+    assert_can_view_group(db, user, study_group_id, today)
+    rows, closed = compensation_service.group_overview(db, study_group_id, today)
+    return {
+        "students": [
+            {**vars(r), "by_mark": [{"name": name, "count": count} for name, count in r.by_mark]} for r in rows
+        ],
+        "closed": [vars(c) for c in closed],
+    }
+
+
+@router.post("/groups/{study_group_id}/compensation/{student_id}", status_code=status.HTTP_204_NO_CONTENT)
+def close_compensation(
+    study_group_id: int,
+    student_id: int,
+    payload: CompensationClose,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Куратор закрывает «Восполнить пропуски» комментарием. Те же права, что на отметки в журнале группы."""
+    today = today_local()
+    assert_can_access_group(db, user, study_group_id, today)
+    student = db.get(Student, student_id)
+    if student is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Студент не найден")
+    try:
+        compensation_service.close(db, user, student, study_group_id, payload.comment, today)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+    except compensation_service.NothingToClose as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/groups/{study_group_id}/rhythm", response_model=list[RhythmDay])
@@ -308,16 +353,7 @@ def month_status(
     return result
 
 
-@router.post("/absence-periods", status_code=status.HTTP_201_CREATED)
-def create_absence_period(
-    payload: AbsencePeriodCreate,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    student = db.get(Student, payload.student_id)
-    if student is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Студент не найден")
-
+def _checked_period_input(db: Session, user: User, student: Student, payload: AbsencePeriodUpdate) -> MarkCode:
     # Раньше не проверялось совсем (см. TODO.md 3): период мог кончаться
     # раньше, чем начинался (даты просто менялись местами при расчёте, и
     # период создавался пустым — 201 без единой отметки), тянуться на годы
@@ -343,11 +379,58 @@ def create_absence_period(
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, "Для длительного периода нужен код с уважительной причиной"
         )
+    return mark_code
 
+
+def _period_or_404(db: Session, user: User, period_id: int) -> tuple[AbsencePeriod, Student]:
+    period = db.get(AbsencePeriod, period_id)
+    student = db.get(Student, period.student_id) if period else None
+    if period is None or student is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Период не найден")
+    # Правит тот, у кого есть доступ к группе студента, а не только автор периода.
+    assert_can_access_group(db, user, student.study_group_id, period.date_from)
+    return period, student
+
+
+@router.post("/absence-periods", status_code=status.HTTP_201_CREATED)
+def create_absence_period(
+    payload: AbsencePeriodCreate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    student = db.get(Student, payload.student_id)
+    if student is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Студент не найден")
+    mark_code = _checked_period_input(db, user, student, payload)
     period = attendance_service.create_absence_period(
         db, student.id, mark_code.id, payload.date_from, payload.date_to, payload.basis_reference, user
     )
     return {"id": period.id}
+
+
+@router.put("/absence-periods/{period_id}")
+def update_absence_period(
+    period_id: int,
+    payload: AbsencePeriodUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    period, student = _period_or_404(db, user, period_id)
+    mark_code = _checked_period_input(db, user, student, payload)
+    attendance_service.update_absence_period(
+        db, period, mark_code.id, payload.date_from, payload.date_to, payload.basis_reference, user
+    )
+    return {"id": period_id}
+
+
+@router.delete("/absence-periods/{period_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_absence_period(
+    period_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    period, _ = _period_or_404(db, user, period_id)
+    attendance_service.delete_absence_period(db, period, user)
 
 
 @router.get("/groups/{study_group_id}/cards", dependencies=[Depends(require_module("dossier"))])

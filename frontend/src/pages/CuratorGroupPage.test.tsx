@@ -2,11 +2,14 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "../api/client";
-import type { RosterEntry, RosterResponse } from "../api/types";
-import { RELEASE_MODULES } from "../constants/modules";
+import type { CompensationOverview, RosterEntry, RosterResponse } from "../api/types";
+import type { ModuleName } from "../constants/modules";
 import { renderPage } from "../test/utils";
 import { todayIso } from "../utils/date";
 import CuratorGroupPage from "./CuratorGroupPage";
+
+// Урезанный набор без досье и индивидуальной работы (режим настраиваемый; релизный набор их включает).
+const RELEASE_MODULES: readonly ModuleName[] = ["attendance", "tasks", "my_id", "meals"];
 
 vi.mock("../api/client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api/client")>();
@@ -17,8 +20,9 @@ const get = vi.mocked(api.get);
 const post = vi.mocked(api.post);
 
 const MARK_CODES = [
-  { id: 1, code: "н", name: "Неуважительная причина", counts_as_present: false, is_excused: false, requires_document: false, is_active: true },
-  { id: 2, code: "б", name: "Больничный лист", counts_as_present: false, is_excused: true, requires_document: true, is_active: true },
+  { id: 1, code: "н", name: "Неуважительная причина", counts_as_present: false, is_excused: false, requires_document: false, no_compensation: false, is_active: true },
+  { id: 2, code: "б", name: "Больничный лист", counts_as_present: false, is_excused: true, requires_document: true, no_compensation: false, is_active: true },
+  { id: 3, code: "о", name: "Опоздание", counts_as_present: true, is_excused: false, requires_document: false, no_compensation: false, is_active: true },
 ];
 
 function entry(id: number, name: string, over: Partial<RosterEntry> = {}): RosterEntry {
@@ -42,7 +46,8 @@ function mockApi(r: RosterResponse, dayType = "study_day") {
   get.mockImplementation(async (path: string) => {
     if (path === "/curator/groups") return [GROUP];
     if (path === "/curator/mark-codes") return MARK_CODES;
-    if (path === "/curator/settings") return { risk_threshold_consecutive_unexcused: 3 };
+    if (path === "/curator/settings") return { risk_unexcused_percent: 40, risk_attendance_percent: 85, risk_min_days: 5, compensation_reopen_days: 3 };
+    if (path === "/curator/groups/7/compensation") return compensation;
     if (path.includes("/month-status")) return [{ date: todayIso(), day_type: dayType, is_submitted: false, is_on_time: null }];
     if (path.includes("/day?")) return r;
     if (path.endsWith("/rhythm")) return RHYTHM;
@@ -50,6 +55,8 @@ function mockApi(r: RosterResponse, dayType = "study_day") {
     throw new Error(`неожиданный запрос ${path}`);
   });
 }
+
+let compensation: CompensationOverview = { students: [], closed: [] };
 
 const GROUP = { id: 7, code: "СА172", course: 1, is_submitted_today: false, students_count: 2, risk_count: 0, role_type: "curator" };
 
@@ -67,6 +74,7 @@ function open(tab?: string) {
 beforeEach(() => {
   get.mockReset();
   post.mockReset();
+  compensation = { students: [], closed: [] };
 });
 
 describe("CuratorGroupPage — журнал дня", () => {
@@ -75,7 +83,7 @@ describe("CuratorGroupPage — журнал дня", () => {
     open();
     expect(await screen.findByText("День ещё не сдан — можно заполнить")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Алексеев Пётр" })).toHaveAttribute("href", "/students/1");
-    expect(screen.getByText("Отсутствуют: 0")).toBeInTheDocument();
+    expect(screen.getByText("Отсутствуют: 0, опоздали: 0")).toBeInTheDocument();
   });
 
   it("«Список для печати» открывает окно выбора столбцов для текущей группы", async () => {
@@ -113,11 +121,19 @@ describe("CuratorGroupPage — журнал дня", () => {
   });
 
   it("подсвечивает группу риска: посещаемость с начала семестра ниже порога, процент в подписи", async () => {
-    mockApi(roster([entry(1, "Алексеев Пётр", { attendance_percent: 78.5, is_risk: true }), entry(2, "Андреева Елена", { attendance_percent: 91 })]));
+    mockApi(roster([entry(1, "Алексеев Пётр", { attendance_percent: 55, is_risk: true, unexcused_percent: 45 }), entry(2, "Андреева Елена", { attendance_percent: 91 })]));
     open();
     await screen.findByText("Алексеев Пётр");
-    expect(within(studentRow("Алексеев")).getByText(/риск: посещаемость 78,5 %/)).toBeInTheDocument();
+    expect(within(studentRow("Алексеев")).getByText(/риск: без уважительной причины 45 %/)).toBeInTheDocument();
     expect(within(studentRow("Андреева")).queryByText(/риск/)).not.toBeInTheDocument();
+  });
+
+  it("«Восполнить пропуски» в журнале — отдельный спокойный бейдж, а не группа риска", async () => {
+    mockApi(roster([entry(1, "Алексеев Пётр", { attendance_percent: 70, needs_compensation: true }), entry(2, "Андреева Елена")]));
+    open();
+    await screen.findByText("Алексеев Пётр");
+    expect(within(studentRow("Алексеев")).getByText("восполнить пропуски")).toBeInTheDocument();
+    expect(within(studentRow("Алексеев")).queryByText(/риск/)).not.toBeInTheDocument();
   });
 
   it("отметка студента увеличивает счётчик отсутствующих и уходит в «Сдать день»", async () => {
@@ -126,7 +142,7 @@ describe("CuratorGroupPage — журнал дня", () => {
     open();
     await screen.findByText("Алексеев Пётр");
     await user.click(within(studentRow("Алексеев")).getByRole("button", { name: "Н" }));
-    expect(screen.getByText("Отсутствуют: 1")).toBeInTheDocument();
+    expect(screen.getByText("Отсутствуют: 1, опоздали: 0")).toBeInTheDocument();
 
     post.mockResolvedValue(roster([entry(1, "Алексеев Пётр", { mark_code: "н" })], { is_submitted: true }));
     await user.click(screen.getByRole("button", { name: "Сдать день" }));
@@ -137,6 +153,33 @@ describe("CuratorGroupPage — журнал дня", () => {
     expect(await screen.findByRole("region", { name: "Итоги дня" })).toBeInTheDocument();
   });
 
+  it("у отметки из периода есть «Редактировать»: окно с данными периода и сохранение через PUT", async () => {
+    const user = userEvent.setup();
+    const period = { id: 5, mark_code: "б", date_from: "2026-10-01", date_to: "2026-10-10", basis_reference: "справка 1" };
+    mockApi(roster([entry(1, "Алексеев Пётр", { mark_code: "б", mark_name: "Больничный лист", is_locked: true, absence_period: period })]));
+    open();
+    await screen.findByText("Алексеев Пётр");
+    await user.click(within(studentRow("Алексеев")).getByRole("button", { name: "Редактировать" }));
+    const dialog = await screen.findByRole("dialog", { name: "Редактировать длительное отсутствие" });
+    expect(within(dialog).getByDisplayValue("справка 1")).toBeInTheDocument();
+    vi.mocked(api.put).mockResolvedValue({});
+    await user.click(within(dialog).getByRole("button", { name: "Сохранить" }));
+    expect(api.put).toHaveBeenCalledWith("/curator/absence-periods/5", {
+      mark_code: "б", date_from: "2026-10-01", date_to: "2026-10-10", basis_reference: "справка 1",
+    });
+  });
+
+  it("опоздавший считается отдельно от отсутствующих", async () => {
+    const user = userEvent.setup();
+    mockApi(roster([entry(1, "Алексеев Пётр"), entry(2, "Андреева Елена")]));
+    open();
+    await screen.findByText("Алексеев Пётр");
+    await user.click(within(studentRow("Алексеев")).getByRole("button", { name: "О" }));
+    expect(screen.getByText("Отсутствуют: 0, опоздали: 1")).toBeInTheDocument();
+    await user.click(within(studentRow("Андреева")).getByRole("button", { name: "Н" }));
+    expect(screen.getByText("Отсутствуют: 1, опоздали: 1")).toBeInTheDocument();
+  });
+
   it("снятая отметка («Я») убирает студента из отсутствующих", async () => {
     const user = userEvent.setup();
     mockApi(roster([entry(1, "Алексеев Пётр")]));
@@ -144,9 +187,9 @@ describe("CuratorGroupPage — журнал дня", () => {
     await screen.findByText("Алексеев Пётр");
     const row = studentRow("Алексеев");
     await user.click(within(row).getByRole("button", { name: "Б" }));
-    expect(screen.getByText("Отсутствуют: 1")).toBeInTheDocument();
+    expect(screen.getByText("Отсутствуют: 1, опоздали: 0")).toBeInTheDocument();
     await user.click(within(row).getByRole("button", { name: "Присутствует" }));
-    expect(screen.getByText("Отсутствуют: 0")).toBeInTheDocument();
+    expect(screen.getByText("Отсутствуют: 0, опоздали: 0")).toBeInTheDocument();
   });
 
   it("уже стоящие отметки подгружаются как отсутствующие, а заблокированные периодом — нет", async () => {
@@ -156,7 +199,7 @@ describe("CuratorGroupPage — журнал дня", () => {
     ]));
     open();
     await screen.findByText("Алексеев Пётр");
-    expect(screen.getByText("Отсутствуют: 1")).toBeInTheDocument();
+    expect(screen.getByText("Отсутствуют: 1, опоздали: 0")).toBeInTheDocument();
     expect(within(studentRow("Андреева")).getByText("Больничный лист")).toBeInTheDocument();
   });
 });
@@ -177,7 +220,7 @@ describe("CuratorGroupPage — «Все присутствуют» (защита
     await user.click(screen.getByRole("button", { name: "Все присутствуют" }));
     expect(confirm).toHaveBeenCalledWith(expect.stringContaining("(1)"));
     expect(post).not.toHaveBeenCalled();
-    expect(screen.getByText("Отсутствуют: 1")).toBeInTheDocument(); // отметка на месте
+    expect(screen.getByText("Отсутствуют: 1, опоздали: 0")).toBeInTheDocument(); // отметка на месте
   });
 
   it("после согласия отправляет «все присутствуют»", async () => {
@@ -263,7 +306,7 @@ describe("CuratorGroupPage — сданный день и правка прош�
     expect(screen.queryByRole("button", { name: "Сдать день" })).not.toBeInTheDocument();
 
     await user.click(within(summary).getByRole("button", { name: "Редактировать" }));
-    expect(screen.getByText("Отсутствуют: 1")).toBeInTheDocument();
+    expect(screen.getByText("Отсутствуют: 1, опоздали: 0")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Сохранить изменения" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Отменить" }));
     expect(screen.getByRole("region", { name: "Итоги дня" })).toBeInTheDocument();
@@ -339,7 +382,7 @@ describe("CuratorGroupPage — сданный день и правка прош�
   });
 
   it("вкладки группы: студенты — весь список со ссылками на карточки", async () => {
-    mockApi(roster([entry(1, "Алексеев Пётр", { attendance_percent: 78.5, is_risk: true }), entry(2, "Андреева Елена")]));
+    mockApi(roster([entry(1, "Алексеев Пётр", { attendance_percent: 55, is_risk: true, unexcused_percent: 45 }), entry(2, "Андреева Елена")]));
     open("students");
     expect(await screen.findByRole("link", { name: "Алексеев Пётр" })).toHaveAttribute("href", "/students/1");
     expect(within(studentRow("Алексеев")).getByText("группа риска")).toBeInTheDocument();
@@ -397,5 +440,42 @@ describe("CuratorGroupPage — релизный набор модулей (3.5.0
     await screen.findByRole("link", { name: "Алексеев Пётр" });
     expect(screen.queryByRole("button", { name: "Список для печати" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Личные карточки" })).not.toBeInTheDocument();
+  });
+});
+
+describe("CuratorGroupPage — «Восполнить пропуски»", () => {
+  const STUDENT = {
+    student_id: 1, full_name: "Алексеев Пётр", attendance_percent: 70, days: 20, absent_to_compensate: 6,
+    by_mark: [{ name: "Больничный лист", count: 5 }, { name: "Заявление", count: 1 }], last_closed_on: null,
+  };
+
+  it("показывает, кому и почему нужно восполнить пропуски; закрывается комментарием", async () => {
+    const user = userEvent.setup();
+    compensation = { students: [STUDENT], closed: [] };
+    mockApi(roster([entry(1, "Алексеев Пётр", { attendance_percent: 70, needs_compensation: true }), entry(2, "Андреева Елена")]));
+    post.mockResolvedValue(undefined);
+    open("students");
+    const panel = await screen.findByRole("region", { name: "Восполнить пропуски" });
+    expect(within(panel).getByText(/посещаемость 70 %; пропущено 6 из 20 дн.; больничный лист — 5, заявление — 1/)).toBeInTheDocument();
+
+    await user.click(within(panel).getByRole("button", { name: "Закрыть" }));
+    await user.click(within(panel).getAllByRole("button", { name: "Закрыть" })[0]); // пустой комментарий не уходит на сервер
+    expect(await within(panel).findByText("Напишите, как восполнены пропуски")).toBeInTheDocument();
+    expect(post).not.toHaveBeenCalled();
+
+    await user.type(within(panel).getByLabelText(/Как восполнены пропуски/), "Сдал тест по пропущенным темам");
+    compensation = { students: [], closed: [{ student_id: 1, full_name: "Алексеев Пётр", closed_on: "2026-10-21", comment: "Сдал тест по пропущенным темам", author_name: "Куратор К." }] };
+    await user.click(within(panel).getAllByRole("button", { name: "Закрыть" })[0]);
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/curator/groups/7/compensation/1", { comment: "Сдал тест по пропущенным темам" }));
+    expect(await screen.findByText("Сейчас никому в группе не нужно восполнять пропуски.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Закрыто в этом семестре: 1/ }));
+    expect(screen.getByText("Сдал тест по пропущенным темам")).toBeInTheDocument();
+  });
+
+  it("если восполнять некому и ничего не закрывали — панели нет", async () => {
+    mockApi(roster([entry(1, "Алексеев Пётр"), entry(2, "Андреева Елена")]));
+    open("students");
+    await screen.findByRole("link", { name: "Алексеев Пётр" });
+    expect(screen.queryByRole("region", { name: "Восполнить пропуски" })).not.toBeInTheDocument();
   });
 });

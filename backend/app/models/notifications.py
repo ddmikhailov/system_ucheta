@@ -27,3 +27,10 @@ class InAppNotification(Base):
     read_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
 
     user: Mapped["User"] = relationship()
+
+    @property
+    def category(self) -> str:
+        """Вкладка колокольчика: «work» — по основной деятельности, «manage» — по должности (см. in_app_notification_service)."""
+        from app.services.in_app_notification_service import category_of
+
+        return category_of(self.kind)

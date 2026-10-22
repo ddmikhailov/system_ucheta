@@ -5,13 +5,32 @@ import { useAuth } from "../auth/useAuth";
 import { MANAGEMENT_ROLES, inRoles } from "../constants/roles";
 import type { NotificationItem } from "../api/types";
 import { formatServerDateTime } from "../utils/date";
+import { TabBar } from "./Tabs";
 
-const POLL_MS = 60_000;
+type BellTab = "work" | "manage";
+export interface UnreadCounts {
+  unread: number;
+  unread_work?: number;
+  unread_manage?: number;
+}
 
-export default function NotificationBell() {
+/** Числа непрочитанных (всего и по вкладкам) приходят из общего опроса счётчиков меню (Layout → useNavCounters):
+ * колокольчик больше не опрашивает сервер сам — раньше это был ещё один запрос раз в минуту из каждой вкладки,
+ * даже скрытой. Отметки «прочитано» колокольчик пересчитывает сам и сообщает наверх. */
+export default function NotificationBell({
+  counts,
+  onCountsChange,
+}: {
+  counts: UnreadCounts;
+  onCountsChange: (counts: UnreadCounts) => void;
+}) {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [unread, setUnread] = useState(0);
+  const unread = counts.unread;
+  // Вкладки «Моя работа» / «Управление» нужны тем, у кого есть управленческая роль (или уже пришло управленческое).
+  const [tab, setTab] = useState<BellTab>("work");
+  const hasTabs = inRoles(user?.role, MANAGEMENT_ROLES) || (counts.unread_manage ?? 0) > 0;
+  const activeTab: BellTab = hasTabs ? tab : "work";
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>([]);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -25,34 +44,40 @@ export default function NotificationBell() {
     return () => document.removeEventListener("mousedown", onOutsideClick);
   }, [open]);
 
-  function refreshCount() {
-    api.get<{ unread: number }>("/notifications/unread-count").then((r) => setUnread(r.unread)).catch(() => {});
+  function loadItems(forTab: BellTab) {
+    const query = hasTabs ? `?category=${forTab}` : "";
+    api.get<NotificationItem[]>(`/notifications${query}`).then(setItems).catch(() => {});
   }
 
-  useEffect(() => {
-    refreshCount();
-    const id = setInterval(refreshCount, POLL_MS);
-    return () => clearInterval(id);
-  }, []);
+  // Список открыт на вкладке activeTab, поэтому прочитанное уменьшает её счётчик.
+  function countsAfterRead(read: number): UnreadCounts {
+    if (!hasTabs) return { ...counts, unread: Math.max(0, unread - read) };
+    const key = activeTab === "manage" ? "unread_manage" : "unread_work";
+    return { ...counts, unread: Math.max(0, unread - read), [key]: Math.max(0, (counts[key] ?? 0) - read) };
+  }
 
   function toggleOpen() {
     const next = !open;
     setOpen(next);
-    if (next) {
-      api.get<NotificationItem[]>("/notifications").then(setItems).catch(() => {});
-    }
+    if (next) loadItems(activeTab);
+  }
+
+  function switchTab(next: string) {
+    setTab(next as BellTab);
+    setItems([]);
+    loadItems(next as BellTab);
   }
 
   async function markAllRead() {
-    await api.post("/notifications/read-all");
+    await api.post(hasTabs ? `/notifications/read-all?category=${activeTab}` : "/notifications/read-all");
     setItems((prev) => prev.map((n) => ({ ...n, read_at: n.read_at ?? new Date().toISOString() })));
-    setUnread(0);
+    onCountsChange(countsAfterRead(hasTabs ? (activeTab === "manage" ? counts.unread_manage : counts.unread_work) ?? 0 : unread));
   }
 
   async function markRead(id: number) {
     await api.post(`/notifications/${id}/read`);
     setItems((prev) => prev.map((n) => (n.id === id ? { ...n, read_at: new Date().toISOString() } : n)));
-    refreshCount();
+    onCountsChange(countsAfterRead(1));
   }
 
   // Раньше клик по уведомлению никуда не вёл (см. TODO.md 4) — уведомление о
@@ -62,6 +87,18 @@ export default function NotificationBell() {
     if (!n.read_at) markRead(n.id);
     if (n.entity_type === "student" && n.entity_id) {
       navigate(`/students/${n.entity_id}`);
+      setOpen(false);
+      return;
+    }
+    if (n.entity_type === "password_reset" && n.entity_id) {
+      // Запрос «Восстановить пароль»: сразу на вкладку управления этим человеком, где выдаётся временный пароль.
+      navigate(`/admin/users/${n.entity_id}?tab=manage`);
+      setOpen(false);
+      return;
+    }
+    // «Сообщить о проблеме» несёт номер сообщившего: администратор открывает его учётную запись (роль, группы, контакты).
+    if (n.entity_type === "user" && n.entity_id && inRoles(user?.role, MANAGEMENT_ROLES)) {
+      navigate(`/admin/users/${n.entity_id}`);
       setOpen(false);
       return;
     }
@@ -91,12 +128,25 @@ export default function NotificationBell() {
         <div className="notification-bell__panel" role="dialog" aria-label="Уведомления">
           <div className="notification-bell__header">
             <b>Уведомления</b>
-            {unread > 0 && (
+            {(hasTabs ? (activeTab === "manage" ? counts.unread_manage : counts.unread_work) ?? 0 : unread) > 0 && (
               <button className="link-btn" onClick={markAllRead}>
                 Прочитать все
               </button>
             )}
           </div>
+          {hasTabs && (
+            <TabBar
+              variant="sub"
+              idPrefix="bell"
+              label="Раздел уведомлений"
+              active={activeTab}
+              onChange={switchTab}
+              tabs={[
+                { key: "work", label: "Моя работа", badge: counts.unread_work || undefined },
+                { key: "manage", label: "Управление", badge: counts.unread_manage || undefined },
+              ]}
+            />
+          )}
           {items.length === 0 && <p className="notification-bell__empty">Уведомлений нет.</p>}
           <ul className="notification-bell__list">
             {items.map((n) => (

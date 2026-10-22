@@ -30,15 +30,16 @@ ROLES = [
 ]
 
 # Флаги закреплены здесь один раз — дальше их можно менять из админки без правки кода.
+# Последний флаг — no_compensation: отсутствие, которое не нужно восполнять (практика, ИУП; решение 21.10.2026).
 MARK_CODES = [
-    ("о", "Опоздание", True, False, False),
-    ("и", "ИУП", False, True, True),
-    ("б", "Больничный лист", False, True, True),
-    ("з", "Заявление", False, True, True),
-    ("п", "По приказу", False, True, True),
-    ("р", "Производственная практика", False, True, True),
-    ("у", "Ушёл с занятий", False, False, False),
-    ("н", "Неуважительная причина", False, False, False),
+    ("о", "Опоздание", True, False, False, False),
+    ("и", "ИУП", False, True, True, True),
+    ("б", "Больничный лист", False, True, True, False),
+    ("з", "Заявление", False, True, True, False),
+    ("п", "По приказу", False, True, True, False),
+    ("р", "Производственная практика", False, True, True, True),
+    ("у", "Ушёл с занятий", False, False, False, False),
+    ("н", "Неуважительная причина", False, False, False, False),
 ]
 
 
@@ -55,13 +56,14 @@ def run() -> None:
                 print(f"+ роль {code.value}")
             roles_by_code[code] = role
 
-        for idx, (code, name, counts_as_present, is_excused, requires_document) in enumerate(MARK_CODES, start=1):
+        for idx, (code, name, counts_as_present, is_excused, requires_document, no_compensation) in enumerate(MARK_CODES, start=1):
             existing = db.query(MarkCode).filter(MarkCode.code == code).one_or_none()
             if existing is None:
                 db.add(
                     MarkCode(
                         code=code, name=name, counts_as_present=counts_as_present,
-                        is_excused=is_excused, requires_document=requires_document, sort_order=idx,
+                        is_excused=is_excused, requires_document=requires_document, no_compensation=no_compensation,
+                        sort_order=idx,
                     )
                 )
                 print(f"+ код отметки {code} — {name}")

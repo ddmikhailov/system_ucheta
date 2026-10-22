@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import assert_can_access_group, get_current_user, require_meal_viewer
-from app.core.roles import DEPARTMENT_SCOPED_ROLES
 from app.core.time import now_local, utc_to_local
 from app.core.xlsx import append_row
 from app.db.session import get_db

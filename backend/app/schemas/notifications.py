@@ -11,7 +11,10 @@ class NotificationRead(BaseModel):
     entity_id: str | None
     created_at: datetime.datetime
     read_at: datetime.datetime | None
+    category: str = "work"
 
 
 class UnreadCountResponse(BaseModel):
-    unread: int
+    unread: int  # всего
+    unread_work: int = 0
+    unread_manage: int = 0

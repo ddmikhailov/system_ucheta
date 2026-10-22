@@ -19,10 +19,10 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from app.core.roles import DEPARTMENT_SCOPED_ROLES
+from app.core import policies
 from app.core.time import now_local, today_local, utcnow
 from app.models import (
-    AttendanceMark, CuratorAssignment, DaySubmission, MarkCode, MealDayOverride, MealSubmission, RoleCode, Student, StudentMeal,
+    AttendanceMark, CuratorAssignment, DaySubmission, MarkCode, MealDayOverride, MealSubmission, Student, StudentMeal,
     StudentProfile, StudyGroup, Task, TaskAssignment, User,
 )
 from app.schemas.tasks import ScopeDef
@@ -437,10 +437,11 @@ def visible_groups(db: Session, user: User, department_id: int | None = None) ->
         joinedload(StudyGroup.department),
         selectinload(StudyGroup.curator_assignments).joinedload(CuratorAssignment.user),
     ).filter(StudyGroup.is_active.is_(True))
-    if RoleCode(user.role.code) in DEPARTMENT_SCOPED_ROLES:
-        if user.department_id is None:
+    scope = policies.scope_of(user)
+    if scope.is_department:
+        if scope.department_id is None:
             return []
-        query = query.filter(StudyGroup.department_id == user.department_id)
+        query = query.filter(StudyGroup.department_id == scope.department_id)
     elif department_id is not None:
         query = query.filter(StudyGroup.department_id == department_id)
     return [g for g in query.order_by(StudyGroup.course, StudyGroup.code).all()]

@@ -38,7 +38,8 @@ def attendance(monkeypatch):
 
 def svc_rate(percent):
     from app.services.attendance_service import AttendanceRate
-    return AttendanceRate(days=20, absent=round(20 * (100 - percent) / 100), percent=percent)
+    absent = round(20 * (100 - percent) / 100)
+    return AttendanceRate(days=20, absent=absent, percent=percent, absent_unexcused=absent)  # все пропуски — без причины
 
 
 
@@ -85,8 +86,8 @@ def test_follow_up_can_be_closed_and_reopened_by_anyone_with_access(client, cura
 
 def test_overview_lists_risk_students_and_those_with_work(client, curator_headers, curator_group, imported, db, attendance):
     st = _students(db, curator_group)
-    attendance[0] = 60.0  # посещаемость 60 % (риск), работы нет → нужна работа
-    attendance[1] = 70.0  # посещаемость 70 % (риск), беседа вчера → внимание не требуется
+    attendance[0] = 50.0  # посещаемость 50 %, все пропуски без причины (риск), работы нет → нужна работа
+    attendance[1] = 55.0  # посещаемость 55 % (риск), беседа вчера → внимание не требуется
     _note(client, curator_headers, st[1].id, occurred_on=_day(-1))
     _note(client, curator_headers, st[2].id, kind="call", occurred_on=_day(-40))  # давняя работа, без риска
     r = client.get(f"/individual-work/groups/{curator_group.id}", headers=curator_headers)
@@ -103,7 +104,7 @@ def test_overview_lists_risk_students_and_those_with_work(client, curator_header
 
 def test_old_work_does_not_count_as_recent(client, curator_headers, curator_group, imported, db, attendance):
     st = _students(db, curator_group)
-    attendance[0] = 70.0
+    attendance[0] = 55.0
     _note(client, curator_headers, st[0].id, occurred_on=_day(-30))
     row = client.get(f"/individual-work/groups/{curator_group.id}", headers=curator_headers).json()["rows"][0]
     assert row["needs_attention"] is True and row["work_count"] == 1
@@ -111,7 +112,7 @@ def test_old_work_does_not_count_as_recent(client, curator_headers, curator_grou
 
 def test_non_work_notes_do_not_count(client, curator_headers, curator_group, imported, db, attendance):
     st = _students(db, curator_group)
-    attendance[0] = 70.0
+    attendance[0] = 55.0
     _note(client, curator_headers, st[0].id, kind="incident")
     _note(client, curator_headers, st[0].id, kind="other")
     row = client.get(f"/individual-work/groups/{curator_group.id}", headers=curator_headers).json()["rows"][0]
@@ -150,7 +151,7 @@ def test_follow_up_reminder_goes_to_the_author_once(client, curator_headers, adm
 
     def poll(headers):
         task_service.reset_reminder_throttle()
-        client.get("/notifications/unread-count", headers=headers)
+        client.post("/notifications/check", headers=headers)
 
     poll(curator_headers)
     poll(curator_headers)
@@ -166,5 +167,5 @@ def test_done_follow_up_gives_no_reminder(client, curator_headers, curator_group
     note = _note(client, curator_headers, s.id, occurred_on=_day(-5), follow_up_on=_day(-1)).json()
     client.put(f"/students/{s.id}/dossier/notes/{note['id']}/follow-up", headers=curator_headers, json={"done": True})
     task_service.reset_reminder_throttle()
-    client.get("/notifications/unread-count", headers=curator_headers)
+    client.post("/notifications/check", headers=curator_headers)
     assert db.query(InAppNotification).filter(InAppNotification.kind == "work_followup").count() == 0

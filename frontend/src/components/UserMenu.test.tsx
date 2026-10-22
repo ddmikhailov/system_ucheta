@@ -2,12 +2,13 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
+import { APP_VERSION } from "../constants/release";
 import UserMenu from "./UserMenu";
 
-function renderMenu(onLogout = vi.fn()) {
+function renderMenu(onLogout = vi.fn(), onLogoutAll = vi.fn()) {
   render(
     <MemoryRouter>
-      <UserMenu name="Иванова Анна Ивановна" onLogout={onLogout} />
+      <UserMenu name="Иванова Анна Ивановна" onLogout={onLogout} onLogoutAll={onLogoutAll} />
       <button>снаружи</button>
     </MemoryRouter>
   );
@@ -33,6 +34,18 @@ describe("UserMenu", () => {
     await user.click(toggle());
     await user.click(screen.getByRole("menuitem", { name: "Выйти" }));
     expect(onLogout).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("«Выйти на всех устройствах» — отдельный пункт, не путается с «Выйти»", async () => {
+    const user = userEvent.setup();
+    const onLogout = vi.fn();
+    const onLogoutAll = vi.fn();
+    renderMenu(onLogout, onLogoutAll);
+    await user.click(toggle());
+    await user.click(screen.getByRole("menuitem", { name: "Выйти на всех устройствах" }));
+    expect(onLogoutAll).toHaveBeenCalledTimes(1);
+    expect(onLogout).not.toHaveBeenCalled();
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
@@ -72,5 +85,39 @@ describe("UserMenu", () => {
     await user.click(screen.getByRole("menuitemradio", { name: "Как в системе" }));
     expect(document.documentElement.dataset.theme).toBeUndefined();
     expect(localStorage.getItem("kait20_theme")).toBeNull();
+  });
+
+  it("пункт про перенос отметок прошлого дня: показывает состояние и переключает его", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <MemoryRouter>
+        <UserMenu name="Иванова Анна Ивановна" onLogout={vi.fn()} carryOver onCarryOverChange={onChange} />
+      </MemoryRouter>
+    );
+    await user.click(toggle());
+    const item = screen.getByRole("menuitemcheckbox", { name: /Подставлять отметки прошлого дня/ });
+    expect(item).toHaveAttribute("aria-checked", "true");
+    await user.click(item);
+    expect(onChange).toHaveBeenCalledWith(false);
+  });
+
+  it("без настройки (не куратор) пункта нет", async () => {
+    const user = userEvent.setup();
+    renderMenu();
+    await user.click(toggle());
+    expect(screen.queryByRole("menuitemcheckbox")).not.toBeInTheDocument();
+  });
+
+  it("«Сообщить о проблеме» закрывает меню и открывает окно сообщения; внизу меню — номер версии", async () => {
+    const user = userEvent.setup();
+    renderMenu();
+    await user.click(toggle());
+    expect(screen.getByText(`Версия ${APP_VERSION}`)).toBeInTheDocument();
+    await user.click(screen.getByRole("menuitem", { name: "Сообщить о проблеме" }));
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Сообщить о проблеме" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Отмена" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });

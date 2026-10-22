@@ -7,13 +7,15 @@ import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { StudentAdmin, StudyGroupAdmin } from "../../api/types";
 import { formatDateRu, todayIso } from "../../utils/date";
 import SearchSelect from "../../components/SearchSelect";
+import { useUrlFlag, useUrlNumber, useUrlParam } from "../../hooks/useUrlState";
 
 // Здесь только список, поиск и добавление. Всё управление конкретным
 // студентом (ФИО, перевод, статус, удаление) — на его личной карточке.
 export default function StudentsTab({ canCreate }: { canEdit?: boolean; canCreate: boolean }) {
   const location = useLocation();
   const [groups, setGroups] = useState<StudyGroupAdmin[]>([]);
-  const [groupId, setGroupId] = useState<number | null>(null);
+  // Выбранная группа, поиск и «архив» — в адресе: из карточки студента «Назад» возвращает в ту же группу.
+  const [urlGroupId, setGroupId] = useUrlNumber("group");
   const [students, setStudents] = useState<StudentAdmin[]>([]);
   const [error, setError] = useState<string | null>(null);
   // Сообщение приходит после удаления студента на его карточке.
@@ -29,19 +31,20 @@ export default function StudentsTab({ canCreate }: { canEdit?: boolean; canCreat
   const [enrolledAt, setEnrolledAt] = useState(todayIso());
 
   // Отчисленные/в академе не мешаются в основном списке группы.
-  const [showArchived, setShowArchived] = useState(false);
+  const [showArchived, setShowArchived] = useUrlFlag("archived");
 
   // Поиск по ФИО ищет сразу по всем группам (см. TODO.md 4) — раньше нужно
   // было вручную перебирать группы, чтобы найти студента.
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useUrlParam("q");
 
   useEffect(() => {
     api.get<StudyGroupAdmin[]>("/admin/groups").then((allGroups) => {
       const gs = allGroups.filter((g) => g.is_active);
       setGroups(gs);
-      if (gs.length > 0) setGroupId(gs[0].id);
     });
   }, []);
+  // Без выбора в адресе (или если группа из ссылки отключена) — первая группа списка.
+  const groupId = groups.some((g) => g.id === urlGroupId) ? urlGroupId : (groups[0]?.id ?? null);
 
   function loadStudents() {
     const isSearching = searchQuery.trim().length > 0;
@@ -130,6 +133,7 @@ export default function StudentsTab({ canCreate }: { canEdit?: boolean; canCreat
       <table className="dash-table">
         <thead>
           <tr>
+            <th>№</th>
             <th>ФИО</th>
             <th>Группа</th>
             <th>Статус</th>
@@ -138,8 +142,9 @@ export default function StudentsTab({ canCreate }: { canEdit?: boolean; canCreat
           </tr>
         </thead>
         <tbody>
-          {visibleStudents.map((s) => (
+          {visibleStudents.map((s, index) => (
             <tr key={s.id}>
+              <td data-label="№">{index + 1}</td>
               <td data-label="ФИО">
                 <Link to={`/students/${s.id}`} className="link-btn">
                   {s.full_name}
@@ -153,7 +158,7 @@ export default function StudentsTab({ canCreate }: { canEdit?: boolean; canCreat
           ))}
           {visibleStudents.length === 0 && (
             <tr>
-              <td colSpan={5}>{isSearching ? "Никого не найдено." : "В группе нет студентов."}</td>
+              <td colSpan={6}>{isSearching ? "Никого не найдено." : "В группе нет студентов."}</td>
             </tr>
           )}
         </tbody>
@@ -161,7 +166,7 @@ export default function StudentsTab({ canCreate }: { canEdit?: boolean; canCreat
 
       {archivedCount > 0 && (
         <p className="hint archive-toggle">
-          <button className="link-btn" onClick={() => setShowArchived((v) => !v)}>
+          <button className="link-btn" onClick={() => setShowArchived(!showArchived)}>
             {showArchived ? "Скрыть архив" : `Архив (${archivedCount})`}
           </button>
         </p>

@@ -48,6 +48,12 @@ beforeEach(() => {
 });
 
 describe("StudentsTab", () => {
+  it("группа из адреса (возврат из карточки студента) открывается сразу, а не первая по списку", async () => {
+    renderPage(<StudentsTab canCreate />, { route: "/admin?tab=students&group=8" });
+    expect(await screen.findByRole("link", { name: "Захаров Андрей" })).toBeInTheDocument();
+    expect(studentCalls()).toEqual(["/admin/students?study_group_id=8"]);
+  });
+
   it("грузит активные группы, показывает студентов первой; даты в формате ДД.ММ.ГГГГ", async () => {
     renderPage(<StudentsTab canCreate />);
     const link = await screen.findByRole("link", { name: "Алексеев Пётр" });

@@ -64,7 +64,7 @@ def _user(role: str):
 
 
 def test_assignable_roles_match_the_policies(ts):
-    """assignableRoles() из roles.ts: админ — любые, зав. отделением — рабочие + зав. отделением, тьютор — рабочие."""
+    """assignableRoles() из roles.ts: админ — любые, зав. отделением — рабочие + зав. отделением, тьютор и воспитательный отдел, тьютор — рабочие."""
 
     def can_assign(actor_role: str) -> set[str]:
         allowed = set()
@@ -78,7 +78,7 @@ def test_assignable_roles_match_the_policies(ts):
 
     working = ts["TEACHER_ROLES"] | ts["DOSSIER_STAFF_ROLES"]
     assert can_assign("admin") == ts["__roles__"]
-    assert can_assign("dept_head") == working | {"dept_head"}
+    assert can_assign("dept_head") == working | {"dept_head", "tutor", "edu_department"}
     assert can_assign("tutor") == working
     for other in ("curator", "deputy_curator", "edu_department", "social_pedagogue", "psychologist"):
         assert can_assign(other) == set()
@@ -110,9 +110,9 @@ def test_access_groups_follow_the_backend_dependencies(ts):
     assert allowed(attendance_changes.require_reviewer) == ts["JOURNAL_REVIEWER_ROLES"]
 
 
-def test_force_delete_group_roles_match_the_backend(ts):
-    """Кому интерфейс показывает «Удалить группу навсегда…» — те же, кого пускает бэкенд."""
-    assert ts["FORCE_DELETE_GROUP_ROLES"] == _values(policies.ELEVATED_ROLES)
+def test_force_delete_roles_match_the_backend(ts):
+    """Кому интерфейс показывает «Удалить навсегда…» (группа, студент) — те же, кого пускает бэкенд."""
+    assert ts["FORCE_DELETE_ROLES"] == _values(policies.FORCE_DELETE_ROLES)
 
 
 def test_min_password_length_matches_the_frontend():

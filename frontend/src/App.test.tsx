@@ -2,8 +2,11 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "./api/client";
 import App from "./App";
-import { RELEASE_MODULES } from "./constants/modules";
+import type { ModuleName } from "./constants/modules";
 import { makeUser } from "./test/utils";
+
+// Урезанный набор без досье и индивидуальной работы (режим настраиваемый; релизный набор их включает).
+const RELEASE_MODULES: readonly ModuleName[] = ["attendance", "tasks", "my_id", "meals"];
 
 vi.mock("./api/client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./api/client")>();
@@ -40,6 +43,8 @@ function visit(path: string, role: string | null, overrides = {}) {
 
 beforeEach(() => {
   get.mockReset();
+  // Layout при входе запускает проверку сроков задач (POST /notifications/check).
+  vi.mocked(api.post).mockResolvedValue({ unread: 0 });
 });
 
 describe("App — стартовая страница по роли", () => {

@@ -46,6 +46,7 @@ export default function CuratorCabinetPage() {
               {g.students_count} {plural(g.students_count, STUDENTS)}
             </span>
             {g.risk_count > 0 && <span className="group-card__risk">в группе риска: {g.risk_count}</span>}
+            {(g.compensation_count ?? 0) > 0 && <span className="group-card__compensate">восполнить пропуски: {g.compensation_count}</span>}
           </span>
           <span className={`group-card__today ${g.is_submitted_today ? "is-ok" : "is-pending"}`}>
             {g.is_submitted_today ? "Сегодня сдано" : "Сегодня не сдано"}

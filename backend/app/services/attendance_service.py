@@ -8,6 +8,7 @@ from app.core import policies
 from app.core.config import get_settings
 from app.core.time import today_local, utcnow
 from app.models import (
+    AbsenceCompensation,
     AbsencePeriod,
     AttendanceMark,
     BasisStatus,
@@ -221,16 +222,39 @@ def consecutive_unexcused_counts_bulk(
 
 @dataclass(frozen=True)
 class AttendanceRate:
-    """Посещаемость студента с начала семестра: сданные группой дни, пропущенные из них, процент."""
+    """Посещаемость студента с начала семестра: сданные группой дни, пропущенные из них, процент — и два статуса по ней
+    (решение 21.10.2026): «Группа риска» (много пропусков без уважительной причины) и «Восполнить пропуски»."""
     days: int
     absent: int
     percent: float | None  # None — сданных дней ещё нет
+    absent_unexcused: int = 0  # из пропусков — без уважительной причины («н», «у»)
+    absent_to_compensate: int = 0  # пропуски, которые нужно восполнить: все, кроме практики и ИУП (флаг no_compensation)
+    new_to_compensate: int = 0  # из них — после последнего закрытия «Восполнить пропуски» (не было закрытия — все)
+    compensation_closed_on: datetime.date | None = None  # последнее закрытие куратором в этом семестре
+
+    @property
+    def unexcused_percent(self) -> float | None:
+        """Доля пропусков без уважительной причины, % сданных дней."""
+        return round(self.absent_unexcused / self.days * 100, 1) if self.days else None
 
     @property
     def is_risk(self) -> bool:
-        """Группа риска: посещаемость ниже порога (и сданных дней уже достаточно, чтобы процент что-то значил)."""
+        """Группа риска: пропусков без уважительной причины больше `risk_unexcused_percent` % сданных дней (посещаемость
+        без учёта уважительных пропусков ниже 60 %) — и сданных дней уже достаточно, чтобы процент что-то значил."""
         settings = get_settings()
-        return self.percent is not None and self.days >= settings.risk_min_days and self.percent < settings.risk_attendance_percent
+        return self.days >= settings.risk_min_days and self.absent_unexcused * 100 > settings.risk_unexcused_percent * self.days
+
+    @property
+    def needs_compensation(self) -> bool:
+        """«Восполнить пропуски»: студент не в группе риска, но пропустил учебный процесс — без практики и ИУП
+        посещаемость ниже `risk_attendance_percent` %. После закрытия куратором — снова, только когда после закрытия
+        накопилось `compensation_reopen_days` новых таких пропусков."""
+        settings = get_settings()
+        if self.days < settings.risk_min_days or self.is_risk:
+            return False
+        if (self.days - self.absent_to_compensate) * 100 >= settings.risk_attendance_percent * self.days:
+            return False
+        return self.compensation_closed_on is None or self.new_to_compensate >= settings.compensation_reopen_days
 
 
 def semester_start(day: datetime.date) -> datetime.date:
@@ -245,11 +269,12 @@ def semester_start(day: datetime.date) -> datetime.date:
 def attendance_rates_bulk(db: Session, students: list[Student], as_of_date: datetime.date) -> dict[int, AttendanceRate]:
     """Посещаемость сразу для списка студентов — по сданным дням группы с начала семестра по `as_of_date` включительно.
     Пропуск — любая отметка, которая не считается присутствием (опоздание — присутствие); пропуски по уважительной
-    причине тоже считаются, как в «Витринах». Три запроса независимо от числа студентов и групп."""
+    причине тоже считаются, как в «Витринах». Четыре запроса независимо от числа студентов и групп."""
     if not students:
         return {}
     start = semester_start(as_of_date)
     group_ids = {s.study_group_id for s in students}
+    student_ids = [s.id for s in students]
     submitted: dict[int, set[datetime.date]] = {gid: set() for gid in group_ids}
     for row in db.execute(
         select(DaySubmission.study_group_id, DaySubmission.date)
@@ -257,24 +282,41 @@ def attendance_rates_bulk(db: Session, students: list[Student], as_of_date: date
     ).all():
         submitted[row.study_group_id].add(row.date)
 
-    absent: dict[int, set[datetime.date]] = {}
+    # дата пропуска → (уважительная ли причина, нужно ли восполнять)
+    absent: dict[int, dict[datetime.date, tuple[bool, bool]]] = {}
     for row in db.execute(
-        select(AttendanceMark.student_id, AttendanceMark.date)
+        select(AttendanceMark.student_id, AttendanceMark.date, MarkCode.is_excused, MarkCode.no_compensation)
         .join(MarkCode, MarkCode.id == AttendanceMark.mark_code_id)
         .where(
-            AttendanceMark.student_id.in_([s.id for s in students]),
+            AttendanceMark.student_id.in_(student_ids),
             AttendanceMark.date >= start, AttendanceMark.date <= as_of_date,
             MarkCode.counts_as_present.is_(False),
         )
     ).all():
-        absent.setdefault(row.student_id, set()).add(row.date)
+        absent.setdefault(row.student_id, {})[row.date] = (bool(row.is_excused), not row.no_compensation)
+
+    closed: dict[int, datetime.date] = dict(db.execute(
+        select(AbsenceCompensation.student_id, func.max(AbsenceCompensation.closed_on))
+        .where(
+            AbsenceCompensation.student_id.in_(student_ids),
+            AbsenceCompensation.closed_on >= start, AbsenceCompensation.closed_on <= as_of_date,
+        )
+        .group_by(AbsenceCompensation.student_id)
+    ).all())
 
     result: dict[int, AttendanceRate] = {}
     for student in students:
         days = {d for d in submitted[student.study_group_id] if d >= student.enrolled_at}
-        missed = len(absent.get(student.id, set()) & days)
+        missed = {d: flags for d, flags in absent.get(student.id, {}).items() if d in days}
+        to_compensate = [d for d, (_, compensate) in missed.items() if compensate]
+        closed_on = closed.get(student.id)
         result[student.id] = AttendanceRate(
-            days=len(days), absent=missed, percent=round((len(days) - missed) / len(days) * 100, 1) if days else None,
+            days=len(days), absent=len(missed),
+            percent=round((len(days) - len(missed)) / len(days) * 100, 1) if days else None,
+            absent_unexcused=sum(1 for excused, _ in missed.values() if not excused),
+            absent_to_compensate=len(to_compensate),
+            new_to_compensate=sum(1 for d in to_compensate if closed_on is None or d > closed_on),
+            compensation_closed_on=closed_on,
         )
     return result
 
@@ -298,7 +340,8 @@ def count_manual_exceptions(db: Session, study_group_id: int, date: datetime.dat
     ).scalar_one()
 
 
-def get_roster(db: Session, study_group_id: int, date: datetime.date) -> dict:
+def get_roster(db: Session, study_group_id: int, date: datetime.date, carry_over: bool = True) -> dict:
+    """`carry_over=False` — личная настройка куратора «не подставлять отметки прошлого дня»: журнал открывается пустым."""
     active_students = get_active_students(db, study_group_id, date)
     student_ids = [s.id for s in active_students]
 
@@ -312,7 +355,7 @@ def get_roster(db: Session, study_group_id: int, date: datetime.date) -> dict:
     if student_ids:
         rows = db.execute(
             select(AttendanceMark)
-            .options(joinedload(AttendanceMark.mark_code))
+            .options(joinedload(AttendanceMark.mark_code), joinedload(AttendanceMark.absence_period))
             .where(AttendanceMark.student_id.in_(student_ids), AttendanceMark.date == date)
         ).scalars().all()
         existing_marks = {row.student_id: row for row in rows}
@@ -320,7 +363,7 @@ def get_roster(db: Session, study_group_id: int, date: datetime.date) -> dict:
     draft_marks: dict[int, AttendanceMark] = {}
     # «Черновик со вчера» подставляется только для сегодняшнего и прошлых дней: на будущий день
     # вчерашние отметки ничего не говорят, там могут стоять лишь заранее внесённые.
-    is_draft = submission is None and date <= today_local()
+    is_draft = carry_over and submission is None and date <= today_local()
     if is_draft and student_ids:
         prev_day = calendar_service.previous_study_day(db, date, study_group_id=study_group_id)
         if prev_day is not None:
@@ -379,9 +422,22 @@ def get_roster(db: Session, study_group_id: int, date: datetime.date) -> dict:
                 "basis_reference": mark.basis_reference if mark else None,
                 "is_draft_suggestion": source_is_draft,
                 "is_locked": bool(mark and mark.source == MarkSource.PERIOD),
+                "absence_period": (
+                    {
+                        "id": mark.absence_period.id,
+                        "mark_code": mark.mark_code.code,
+                        "date_from": mark.absence_period.date_from,
+                        "date_to": mark.absence_period.date_to,
+                        "basis_reference": mark.absence_period.basis_reference,
+                    }
+                    if mark and mark.source == MarkSource.PERIOD and mark.absence_period
+                    else None
+                ),
                 "risk_streak": risk_streak,
                 "attendance_percent": rates[student.id].percent,
                 "is_risk": rates[student.id].is_risk,
+                "unexcused_percent": rates[student.id].unexcused_percent,
+                "needs_compensation": rates[student.id].needs_compensation,
                 "last_edited_by": last_edited_by,
                 "last_edited_at": last_edited_at,
             }
@@ -556,6 +612,62 @@ def submit_day(
     return submission
 
 
+def _apply_period_marks(db: Session, period: AbsencePeriod, mark_code: MarkCode, user: User) -> None:
+    """Расставить отметки периода по учебным дням студента: чужие ручные отметки на эти дни перезаписываются."""
+    student = db.get(Student, period.student_id)
+    study_days = calendar_service.study_days_between(
+        db, period.date_from, period.date_to, study_group_id=student.study_group_id if student else None
+    )
+    basis_status = _compute_basis(period.basis_reference)
+
+    for day in study_days:
+        existing = db.execute(
+            select(AttendanceMark).where(
+                AttendanceMark.student_id == period.student_id, AttendanceMark.date == day
+            )
+        ).scalar_one_or_none()
+
+        if existing is not None:
+            old_code = existing.mark_code.code
+            existing.mark_code_id = mark_code.id
+            existing.source = MarkSource.PERIOD
+            existing.absence_period_id = period.id
+            existing.basis_reference = period.basis_reference
+            existing.basis_status = basis_status
+            existing.updated_by_user_id = user.id
+            existing.updated_at = utcnow()
+            log_action(
+                db, user, "period.overwrite_mark", "attendance_mark", str(existing.id),
+                old_value=old_code, new_value=mark_code.code,
+            )
+        else:
+            db.add(
+                AttendanceMark(
+                    student_id=period.student_id,
+                    date=day,
+                    mark_code_id=mark_code.id,
+                    source=MarkSource.PERIOD,
+                    absence_period_id=period.id,
+                    basis_reference=period.basis_reference,
+                    basis_status=basis_status,
+                    created_by_user_id=user.id,
+                )
+            )
+
+
+def _drop_period_marks(db: Session, period: AbsencePeriod, user: User) -> None:
+    """Убрать отметки, которые поставил период (при правке или удалении периода)."""
+    marks = db.execute(
+        select(AttendanceMark)
+        .options(joinedload(AttendanceMark.mark_code))
+        .where(AttendanceMark.absence_period_id == period.id, AttendanceMark.source == MarkSource.PERIOD)
+    ).scalars().all()
+    for mark in marks:
+        log_action(db, user, "period.remove_mark", "attendance_mark", str(mark.id), old_value=mark.mark_code.code)
+        db.delete(mark)
+    db.flush()
+
+
 def create_absence_period(
     db: Session,
     student_id: int,
@@ -580,46 +692,46 @@ def create_absence_period(
     db.add(period)
     db.flush()
 
-    student = db.get(Student, student_id)
-    study_days = calendar_service.study_days_between(
-        db, date_from, date_to, study_group_id=student.study_group_id if student else None
-    )
-
-    basis_status = _compute_basis(basis_reference)
-
-    for day in study_days:
-        existing = db.execute(
-            select(AttendanceMark).where(
-                AttendanceMark.student_id == student_id, AttendanceMark.date == day
-            )
-        ).scalar_one_or_none()
-
-        if existing is not None:
-            old_code = existing.mark_code.code
-            existing.mark_code_id = mark_code_id
-            existing.source = MarkSource.PERIOD
-            existing.absence_period_id = period.id
-            existing.basis_reference = basis_reference
-            existing.basis_status = basis_status
-            existing.updated_by_user_id = user.id
-            existing.updated_at = utcnow()
-            log_action(
-                db, user, "period.overwrite_mark", "attendance_mark", str(existing.id),
-                old_value=old_code, new_value=mark_code.code,
-            )
-        else:
-            new_mark = AttendanceMark(
-                student_id=student_id,
-                date=day,
-                mark_code_id=mark_code_id,
-                source=MarkSource.PERIOD,
-                absence_period_id=period.id,
-                basis_reference=basis_reference,
-                basis_status=basis_status,
-                created_by_user_id=user.id,
-            )
-            db.add(new_mark)
+    _apply_period_marks(db, period, mark_code, user)
 
     log_action(db, user, "period.create", "absence_period", str(period.id), new_value=mark_code.code)
     db.commit()
     return period
+
+
+def update_absence_period(
+    db: Session,
+    period: AbsencePeriod,
+    mark_code_id: int,
+    date_from: datetime.date,
+    date_to: datetime.date,
+    basis_reference: str | None,
+    user: User,
+) -> AbsencePeriod:
+    """Правка периода: прежние отметки снимаются и ставятся заново по новым датам и коду.
+    Дни, выпавшие из периода, остаются без отметки (студент снова считается присутствующим)."""
+    mark_code = db.get(MarkCode, mark_code_id)
+    if mark_code is None:
+        raise ValueError("Неизвестный код отметки")
+    old_code = period.mark_code.code
+
+    _drop_period_marks(db, period, user)
+    period.mark_code_id = mark_code_id
+    period.date_from = date_from
+    period.date_to = date_to
+    period.basis_reference = basis_reference
+    db.flush()
+    db.refresh(period)
+
+    _apply_period_marks(db, period, mark_code, user)
+
+    log_action(db, user, "period.update", "absence_period", str(period.id), old_value=old_code, new_value=mark_code.code)
+    db.commit()
+    return period
+
+
+def delete_absence_period(db: Session, period: AbsencePeriod, user: User) -> None:
+    _drop_period_marks(db, period, user)
+    log_action(db, user, "period.delete", "absence_period", str(period.id), old_value=period.mark_code.code)
+    db.delete(period)
+    db.commit()

@@ -172,10 +172,22 @@ export interface MeResponse {
   groups: MeGroupInfo[];
   dept_head_name: string | null;
   must_change_password: boolean;
+  /** Подставлять ли в журнал дня отметки прошлого учебного дня («черновик»); личная настройка. */
+  carry_over_marks?: boolean;
   /** Включённые модули платформы (backend: ENABLED_MODULES); нет поля — считаем, что включено всё. */
   modules?: string[];
+  /** Версия, чью плашку «Что нового» пользователь уже закрыл. */
+  seen_release?: string | null;
   // Заполнено только в ответе POST /auth/change-password.
   access_token?: string | null;
+}
+
+export interface RosterAbsencePeriod {
+  id: number;
+  mark_code: string;
+  date_from: string;
+  date_to: string;
+  basis_reference: string | null;
 }
 
 export interface RosterEntry {
@@ -187,9 +199,15 @@ export interface RosterEntry {
   basis_reference: string | null;
   is_draft_suggestion: boolean;
   is_locked: boolean;
+  absence_period?: RosterAbsencePeriod | null;
   risk_streak: number;
   attendance_percent: number | null;
+  /** Группа риска: пропусков без уважительной причины больше 40 %. */
   is_risk: boolean;
+  /** Доля пропусков без уважительной причины, %. */
+  unexcused_percent?: number | null;
+  /** «Восполнить пропуски»: пропущен учебный процесс (без практики и ИУП посещаемость ниже 85 %). */
+  needs_compensation?: boolean;
   last_edited_by: string | null;
   last_edited_at: string | null;
 }
@@ -244,6 +262,7 @@ export interface GroupSummary {
   is_submitted_today: boolean;
   students_count: number;
   risk_count: number;
+  compensation_count?: number;
   role_type: "curator" | "deputy" | null;
 }
 
@@ -263,6 +282,7 @@ export interface MarkCodeOption {
   counts_as_present: boolean;
   is_excused: boolean;
   requires_document: boolean;
+  no_compensation?: boolean;
   is_active: boolean;
 }
 
@@ -293,10 +313,14 @@ export interface RiskStudentRow {
   full_name: string;
   study_group_id: number;
   group_code: string;
+  /** risk — группа риска, compensation — «Восполнить пропуски». */
+  category: "risk" | "compensation";
   streak: number;
   attendance_percent: number;
   days: number;
   absent: number;
+  absent_unexcused: number;
+  unexcused_percent: number;
 }
 
 export interface CuratorDisciplineRow {
@@ -331,6 +355,8 @@ export interface StudyGroupAdmin {
   curator_assignment_id: number | null;
   deputy_name: string | null;
   deputy_assignment_id: number | null;
+  /** Сколько студентов учится в группе сейчас (без академического отпуска и отчисленных). */
+  students_count?: number;
 }
 
 export interface DeleteResult {
@@ -358,6 +384,7 @@ export interface MarkCodeAdmin {
   counts_as_present: boolean;
   is_excused: boolean;
   requires_document: boolean;
+  no_compensation: boolean;
   is_active: boolean;
 }
 
@@ -398,6 +425,8 @@ export interface NotificationItem {
   entity_id: string | null;
   created_at: string;
   read_at: string | null;
+  /** Вкладка колокольчика: work — по основной деятельности, manage — по должности. */
+  category?: "work" | "manage";
 }
 
 export interface GroupDeletionPreview {
@@ -912,7 +941,6 @@ export interface UserProfile {
   user: UserAdmin;
   department_name: string | null;
   created_at: string;
-  last_activity_at: string | null;
   groups: UserGroupLink[];
   discipline: UserDiscipline;
   tasks: UserTaskStats;
@@ -921,7 +949,6 @@ export interface UserProfile {
   notes_written_30d: number;
   follow_ups_open: number;
   dossier_views_30d: number;
-  activity_30d: { date: string; count: number }[];
 }
 
 export interface UserActivityEntry {
@@ -935,6 +962,19 @@ export interface UserActivityEntry {
 export interface UserActivityPage {
   items: UserActivityEntry[];
   next_before_id: number | null;
+}
+
+/** Месяц помесячного архива журнала действий: «2026-09» и число записей. */
+export interface UserActivityMonth {
+  month: string;
+  count: number;
+}
+
+/** Шапка вкладки «Журнал» профиля: загружается только при её открытии. */
+export interface UserJournalOverview {
+  last_activity_at: string | null;
+  activity_30d: { date: string; count: number }[];
+  months: UserActivityMonth[];
 }
 
 export interface MyIdRow {
@@ -1036,4 +1076,60 @@ export interface MealOverview {
   dates: string[];
   rows: MealOverviewRow[];
   totals: Record<string, number>;
+}
+
+export interface StudentDeletionRequest {
+  id: number;
+  student_id: number;
+  student_name: string;
+  group_code: string;
+  reason: string;
+  status: "pending" | "approved" | "rejected" | "cancelled";
+  requested_by_name: string;
+  created_at: string;
+  review_comment: string | null;
+}
+
+/** «Восполнить пропуски» в группе: кому нужно и что уже закрыто куратором в этом семестре. */
+export interface CompensationStudent {
+  student_id: number;
+  full_name: string;
+  attendance_percent: number | null;
+  days: number;
+  absent_to_compensate: number;
+  by_mark: { name: string; count: number }[];
+  last_closed_on: string | null;
+}
+
+export interface CompensationClosed {
+  student_id: number;
+  full_name: string;
+  closed_on: string;
+  comment: string;
+  author_name: string | null;
+}
+
+export interface CompensationOverview {
+  students: CompensationStudent[];
+  closed: CompensationClosed[];
+}
+
+/** Строка полного журнала действий (админка → «Отладка»): с «было/стало», только администратору. */
+export interface AuditEntry {
+  id: number;
+  created_at: string;
+  user_id: number | null;
+  user_name: string | null;
+  user_role: string | null;
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  old_value: string | null;
+  new_value: string | null;
+  ip_address: string | null;
+}
+
+export interface AuditPage {
+  items: AuditEntry[];
+  next_before_id: number | null;
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useEntryState } from "../hooks/useEntryState";
 import { Link } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import StatusMark from "../components/StatusMark";
@@ -84,7 +85,7 @@ function TaskRow({ r, today }: { r: MyAssignmentRow; today: string }) {
 export default function MyTasksPage() {
   const [rows, setRows] = useState<MyAssignmentRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<"active" | "done">("active");
+  const [view, setView] = useEntryState<"active" | "done">("view", "active");
 
   useEffect(() => {
     api

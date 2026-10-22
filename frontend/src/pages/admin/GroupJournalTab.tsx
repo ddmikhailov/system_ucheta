@@ -1,5 +1,6 @@
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../auth/useAuth";
+import DeletionReviewList from "../../components/DeletionReviewList";
 import ChangeReviewList from "../../components/journal/ChangeReviewList";
 import { JOURNAL_REVIEWER_ROLES, inRoles } from "../../constants/roles";
 import { api } from "../../api/client";
@@ -35,6 +36,7 @@ export default function GroupJournalTab() {
   const canReview = inRoles(user?.role, JOURNAL_REVIEWER_ROLES);
   return (
     <>
+      {canReview && <DeletionReviewList />}
       {canReview && (
         <ChangeReviewList
           onOpenDay={(groupId, date) => {
@@ -46,8 +48,7 @@ export default function GroupJournalTab() {
         />
       )}
       <DayJournal
-        // Переход к дню из списка исправлений меняет адрес — журнал открывается заново на этом дне.
-        key={`${searchParams.get("group") ?? ""}:${searchParams.get("date") ?? ""}`}
+        // Переход к дню из списка исправлений меняет адрес — журнал сам переходит на этот день.
         fetchGroups={fetchGroups}
         emptyText="Нет ни одной группы в зоне видимости."
         notSubmittedText="День не активирован куратором — можно заполнить самостоятельно"

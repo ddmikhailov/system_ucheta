@@ -40,10 +40,19 @@ MANAGE_USER_CASES = [
     (DEPT_HEAD, DEPT_A, CURATOR, DEPT_A, True),
     (DEPT_HEAD, DEPT_A, DEPUTY_CURATOR, DEPT_A, True),
     (DEPT_HEAD, DEPT_A, CURATOR, DEPT_B, False),  # чужое отделение
-    (DEPT_HEAD, DEPT_A, DEPT_HEAD, DEPT_A, False),  # не может управлять другим зав. отделением
+    (DEPT_HEAD, DEPT_A, DEPT_HEAD, DEPT_A, True),  # как админ в своём отделении: и другим зав. отделением
+    (DEPT_HEAD, DEPT_A, TUTOR, DEPT_A, True),
+    (DEPT_HEAD, DEPT_A, DEPT_HEAD, DEPT_B, False),
     (DEPT_HEAD, DEPT_A, ADMIN, None, False),
+    (DEPT_HEAD, DEPT_A, EDU_DEPARTMENT, DEPT_A, True),  # воспитательный отдел теперь закреплён за отделением
+    (DEPT_HEAD, DEPT_A, EDU_DEPARTMENT, DEPT_B, False),
     (DEPT_HEAD, None, CURATOR, DEPT_A, False),  # у самого нет отделения
-    (EDU_DEPARTMENT, None, CURATOR, DEPT_A, False),  # не управляет учётками вообще
+    (EDU_DEPARTMENT, None, CURATOR, DEPT_A, False),  # у самого нет отделения
+    (EDU_DEPARTMENT, DEPT_A, CURATOR, DEPT_A, True),  # воспитательный отдел выдаёт пароли в своём отделении
+    (EDU_DEPARTMENT, DEPT_A, CURATOR, DEPT_B, False),
+    (EDU_DEPARTMENT, DEPT_A, DEPT_HEAD, DEPT_A, False),
+    (EDU_DEPARTMENT, DEPT_A, TUTOR, DEPT_A, False),
+    (EDU_DEPARTMENT, DEPT_A, ADMIN, None, False),
     ("meal_manager", None, CURATOR, DEPT_A, False),  # ответственная по питанию — только вкладка «Питание»
     (ADMIN, None, "meal_manager", None, True),
     (DEPT_HEAD, DEPT_A, "meal_manager", None, False),  # учётку ответственной заводит только администратор
@@ -68,6 +77,34 @@ def test_assert_can_manage_user_self_always_allowed_regardless_of_role():
         policies.assert_can_manage_user(user, user)
 
 
+# --- assert_can_edit_user: правка и удаление учётки (воспитательному отделу — только пароли) ---
+
+EDIT_USER_CASES = [
+    (ADMIN, None, CURATOR, DEPT_A, True),
+    (DEPT_HEAD, DEPT_A, CURATOR, DEPT_A, True),
+    (DEPT_HEAD, DEPT_A, EDU_DEPARTMENT, DEPT_A, True),
+    (TUTOR, DEPT_A, CURATOR, DEPT_A, True),
+    (EDU_DEPARTMENT, DEPT_A, CURATOR, DEPT_A, False),  # пароль выдать может (assert_can_manage_user), править — нет
+    (EDU_DEPARTMENT, DEPT_A, CURATOR, DEPT_B, False),
+]
+
+
+@pytest.mark.parametrize("actor_role,actor_dept,target_role,target_dept,allowed", EDIT_USER_CASES)
+def test_assert_can_edit_user_matrix(actor_role, actor_dept, target_role, target_dept, allowed):
+    actor = _user(actor_role, actor_dept, user_id=1)
+    target = _user(target_role, target_dept, user_id=2)
+    if allowed:
+        policies.assert_can_edit_user(actor, target)
+    else:
+        with pytest.raises(Exception):
+            policies.assert_can_edit_user(actor, target)
+
+
+def test_assert_can_edit_user_self_allowed_for_edu_department():
+    user = _user(EDU_DEPARTMENT, DEPT_A, user_id=42)
+    policies.assert_can_edit_user(user, user)
+
+
 # --- assert_can_assign_role ---
 
 ASSIGN_ROLE_CASES = [
@@ -77,8 +114,8 @@ ASSIGN_ROLE_CASES = [
     (DEPT_HEAD, DEPUTY_CURATOR, True),
     (DEPT_HEAD, DEPT_HEAD, True),
     (DEPT_HEAD, ADMIN, False),
-    (DEPT_HEAD, TUTOR, False),
-    (DEPT_HEAD, EDU_DEPARTMENT, False),
+    (DEPT_HEAD, TUTOR, True),
+    (DEPT_HEAD, EDU_DEPARTMENT, True),
     (TUTOR, CURATOR, True),
     (TUTOR, DEPT_HEAD, False),
     (TUTOR, ADMIN, False),
@@ -102,7 +139,7 @@ RESOLVE_DEPARTMENT_CASES = [
     (ADMIN, None, None),
     (ADMIN, DEPT_A, None),  # роль запрещает отделение — молча обнуляется
     (TUTOR, DEPT_A, DEPT_A),
-    (EDU_DEPARTMENT, DEPT_A, None),
+    (EDU_DEPARTMENT, DEPT_A, DEPT_A),  # закреплён за отделением
     (DEPT_HEAD, DEPT_A, DEPT_A),
     (CURATOR, DEPT_A, DEPT_A),
     (DEPUTY_CURATOR, DEPT_A, DEPT_A),
@@ -126,7 +163,8 @@ MANAGE_GROUP_CASES = [
     (ADMIN, None, DEPT_A, True),
     (TUTOR, DEPT_A, DEPT_A, True),
     (TUTOR, DEPT_A, DEPT_B, False),
-    (EDU_DEPARTMENT, None, DEPT_A, True),
+    (EDU_DEPARTMENT, DEPT_A, DEPT_A, True),
+    (EDU_DEPARTMENT, DEPT_A, DEPT_B, False),
     (DEPT_HEAD, DEPT_A, DEPT_A, True),
     (DEPT_HEAD, DEPT_A, DEPT_B, False),
 ]
@@ -158,7 +196,8 @@ MANAGE_STUDENT_CASES = [
     (ADMIN, None, DEPT_A, True),
     (TUTOR, DEPT_A, DEPT_A, True),
     (TUTOR, DEPT_A, DEPT_B, False),
-    (EDU_DEPARTMENT, None, DEPT_A, True),
+    (EDU_DEPARTMENT, DEPT_A, DEPT_A, True),
+    (EDU_DEPARTMENT, DEPT_A, DEPT_B, False),
     (DEPT_HEAD, DEPT_A, DEPT_A, True),
     (DEPT_HEAD, DEPT_A, DEPT_B, False),
 ]
@@ -182,7 +221,8 @@ def test_assert_can_manage_student_matrix(actor_role, actor_dept, student_group_
 MANAGER_SEES_CASES = [
     # (роль, отделение пользователя, отделение группы, пользователь — автор задачи, видит ли)
     (ADMIN, None, DEPT_A, False, True),
-    (EDU_DEPARTMENT, None, DEPT_B, False, True),
+    (EDU_DEPARTMENT, DEPT_A, DEPT_A, False, True),
+    (EDU_DEPARTMENT, DEPT_A, DEPT_B, False, False),
     (DEPT_HEAD, DEPT_A, DEPT_A, False, True),
     (DEPT_HEAD, DEPT_A, DEPT_B, False, False),
     (DEPT_HEAD, DEPT_A, DEPT_B, True, True),  # автор видит всю свою задачу
@@ -210,8 +250,9 @@ VIEW_USER_CASES = [
     # (роль актёра, отделение актёра, роль цели, отделение цели, можно ли)
     (ADMIN, None, CURATOR, DEPT_A, True),
     (ADMIN, None, TUTOR, DEPT_B, True),
-    (EDU_DEPARTMENT, None, CURATOR, DEPT_A, True),  # смотрит, но не управляет
-    (EDU_DEPARTMENT, None, ADMIN, None, True),
+    (EDU_DEPARTMENT, DEPT_A, CURATOR, DEPT_A, True),
+    (EDU_DEPARTMENT, DEPT_A, CURATOR, DEPT_B, False),
+    (EDU_DEPARTMENT, DEPT_A, ADMIN, None, False),
     (DEPT_HEAD, DEPT_A, CURATOR, DEPT_A, True),
     (DEPT_HEAD, DEPT_A, DEPT_HEAD, DEPT_A, True),  # коллега своего отделения — только просмотр
     (DEPT_HEAD, DEPT_A, CURATOR, DEPT_B, False),

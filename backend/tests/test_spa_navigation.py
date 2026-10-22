@@ -123,6 +123,8 @@ def test_hidden_api_patterns_follow_enabled_modules():
 
     release = hidden_api_patterns(parse_modules(""))
     assert any(p.match("/passport/summary") for p in release)
-    assert any(p.match("/students/7/dossier") for p in release)
+    assert not any(p.match("/students/7/dossier") for p in release)
+    minimal = hidden_api_patterns(parse_modules("attendance,tasks,my_id,meals"))
+    assert any(p.match("/students/7/dossier") for p in minimal)
     assert not any(p.match("/students/7") or p.match("/meals/overview") or p.match("/tasks/my") for p in release)
     assert hidden_api_patterns(parse_modules("all")) == ()

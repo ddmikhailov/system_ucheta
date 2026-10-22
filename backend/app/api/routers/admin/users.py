@@ -18,12 +18,13 @@ from app.schemas.admin import (
     SetPasswordResponse,
     UserActivityPage,
     UserCreate,
+    UserJournalOverview,
     UserProfile,
     UserRead,
     UserUpdate,
 )
 from app.services.audit_service import log_action, redact_audit_history
-from app.services import user_profile_service
+from app.services import password_reset_service, user_profile_service
 from app.services.password_service import generate_temporary_password
 
 router = APIRouter()
@@ -44,9 +45,9 @@ def _user_read(u: User) -> UserRead:
 @router.get("/users", response_model=list[UserRead])
 def list_users(user: User = Depends(require_management), db: Session = Depends(get_db)):
     q = db.query(User)
-    if is_department_scoped(user):
-        scope = scope_department_id(user, None)
-        q = q.filter(User.department_id == scope)
+    department_id = scope_department_id(user, None)
+    if department_id is not None:
+        q = q.filter(User.department_id == department_id)
     users = q.all()
     return [_user_read(u) for u in users]
 
@@ -72,12 +73,22 @@ def user_activity(
     before_id: int | None = None,
     limit: int = 50,
     area: str | None = Query(default=None, pattern=r"^[a-z_]{1,32}$"),
+    month: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
     viewer: User = Depends(require_management),
     db: Session = Depends(get_db),
 ):
-    """Журнал действий пользователя (что и когда), новые сверху; `area` — «mark», «day», «task»…"""
+    """Журнал действий пользователя (что и когда), новые сверху; `area` — «mark», «day», «task»…;
+    `month` — «2026-10»: один месяц помесячного архива."""
     target = _viewable_user_or_404(db, viewer, user_id)
-    return user_profile_service.activity_page(db, target, before_id=before_id, limit=limit, prefix=area)
+    return user_profile_service.activity_page(db, target, before_id=before_id, limit=limit, prefix=area, month=month)
+
+
+@router.get("/users/{user_id}/activity/overview", response_model=UserJournalOverview)
+def user_activity_overview(user_id: int, viewer: User = Depends(require_management), db: Session = Depends(get_db)):
+    """Вкладка «Журнал»: последнее действие, ритм за 30 дней и месяцы архива (не старше срока хранения).
+    Интерфейс запрашивает её только при открытии вкладки — профиль журнал не читает."""
+    target = _viewable_user_or_404(db, viewer, user_id)
+    return user_profile_service.journal_overview(db, target)
 
 
 @router.post("/users", response_model=UserRead, status_code=status.HTTP_201_CREATED)
@@ -85,7 +96,8 @@ def create_user(payload: UserCreate, admin: User = Depends(require_dept_editor),
     role = db.query(Role).filter(Role.code == payload.role).one_or_none()
     if role is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Неизвестная роль")
-    if payload.role in policies.ELEVATED_ROLES and RoleCode(admin.role.code) != RoleCode.ADMIN:
+    dept_head_makes_tutor = RoleCode(admin.role.code) == RoleCode.DEPT_HEAD and payload.role == RoleCode.TUTOR.value
+    if payload.role in policies.ELEVATED_ROLES and RoleCode(admin.role.code) != RoleCode.ADMIN and not dept_head_makes_tutor:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, "Только администратор может создавать учётки администратора/тьютора"
         )
@@ -118,7 +130,7 @@ def update_user(
     target = db.get(User, user_id)
     if target is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Пользователь не найден")
-    policies.assert_can_manage_user(admin, target)
+    policies.assert_can_edit_user(admin, target)
 
     if payload.role is not None and payload.role != target.role.code:
         if target.id == admin.id:
@@ -198,7 +210,7 @@ def delete_user(
     target = db.get(User, user_id)
     if target is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Пользователь не найден")
-    policies.assert_can_manage_user(admin, target)
+    policies.assert_can_edit_user(admin, target)
     if target.id == admin.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Нельзя удалить самого себя")
     if target.is_active:
@@ -257,6 +269,8 @@ def set_password(
     target.token_version += 1
 
     log_action(db, admin, "user.password_set", "user", str(target.id))
+    if password_reset_service.close_requests(db, target, admin):
+        log_action(db, admin, "password.reset_issued", "user", str(target.id))
     db.commit()
 
     return SetPasswordResponse(username=target.username, password=password)

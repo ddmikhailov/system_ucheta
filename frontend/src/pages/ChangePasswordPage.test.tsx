@@ -18,7 +18,7 @@ function open(forced: boolean) {
   const refresh = vi.fn().mockResolvedValue(undefined);
   render(
     <AuthContext.Provider
-      value={{ user: makeUser("curator", { must_change_password: forced, full_name: "Иванова Анна" }), loading: false, login: vi.fn(), logout: vi.fn(), refresh }}
+      value={{ user: makeUser("curator", { must_change_password: forced, full_name: "Иванова Анна" }), loading: false, login: vi.fn(), logout: vi.fn(), logoutAll: vi.fn(), refresh }}
     >
       <MemoryRouter initialEntries={["/prev", "/change-password"]} initialIndex={1}>
         <Routes>
@@ -41,6 +41,19 @@ const fields = () => ({
 beforeEach(() => post.mockReset());
 
 describe("ChangePasswordPage — обычная смена", () => {
+  it("«Показать» раскрывает каждое из трёх полей отдельно", async () => {
+    const user = userEvent.setup();
+    open(false);
+    const f = fields();
+    expect([f.current!.type, f.next.type, f.repeat.type]).toEqual(["password", "password", "password"]);
+    await user.click(screen.getByRole("button", { name: "Показать: новый пароль" }));
+    expect(f.next.type).toBe("text");
+    expect(f.current!.type).toBe("password");
+    expect(f.repeat.type).toBe("password");
+    await user.click(screen.getByRole("button", { name: "Скрыть: новый пароль" }));
+    expect(f.next.type).toBe("password");
+  });
+
   it("нужен текущий пароль; запрос уходит с обоими, пользователь обновляется", async () => {
     const user = userEvent.setup();
     post.mockResolvedValue(makeUser("curator"));

@@ -42,7 +42,8 @@ def attendance(monkeypatch):
 
 def svc_rate(percent):
     from app.services.attendance_service import AttendanceRate
-    return AttendanceRate(days=20, absent=round(20 * (100 - percent) / 100), percent=percent)
+    absent = round(20 * (100 - percent) / 100)
+    return AttendanceRate(days=20, absent=absent, percent=percent, absent_unexcused=absent)  # все пропуски — без причины
 
 
 
@@ -158,7 +159,7 @@ def _note(client, headers, sid, **body):
 
 def test_attention_lists_no_work_overdue_and_due_today_follow_ups(client, curator_headers, curator_user, curator_group, imported, db, attendance):
     st = _students(db, curator_group)
-    attendance[0] = 60.0  # посещаемость 60 %, работы нет → нужна работа
+    attendance[0] = 50.0  # посещаемость 50 %, все пропуски без причины, работы нет → нужна работа
     _note(client, curator_headers, st[1].id, occurred_on=_day(-10), follow_up_on=_day(-1))  # просрочено
     _note(client, curator_headers, st[2].id, follow_up_on=_day(0))                           # сегодня
     _note(client, curator_headers, st[3].id, follow_up_on=_day(4))                           # потом
@@ -171,7 +172,7 @@ def test_attention_lists_no_work_overdue_and_due_today_follow_ups(client, curato
         (st[2].id, False, False, True),
     ]
     assert day.attention_total == 3
-    assert day.attention[0].attendance_percent == 60.0 and day.attention[0].group_code == curator_group.code
+    assert day.attention[0].attendance_percent == 50.0 and day.attention[0].group_code == curator_group.code
 
 
 def test_closed_follow_up_leaves_the_list(client, curator_headers, curator_user, curator_group, imported, db, attendance):
@@ -186,7 +187,7 @@ def test_closed_follow_up_leaves_the_list(client, curator_headers, curator_user,
 def test_attention_list_is_capped_but_total_is_honest(client, curator_headers, curator_user, curator_group, imported, db, attendance, monkeypatch):
     monkeypatch.setattr(my_day_service, "MAX_ATTENTION", 2)
     for i in range(4):
-        attendance[i] = 70.0
+        attendance[i] = 55.0
     day = _build(db, curator_user, today_local())
     assert len(day.attention) == 2 and day.attention_total == 4
 
@@ -389,8 +390,24 @@ def test_nav_counters_for_reviewer_and_login(client, admin_headers, curator_head
     client.put(f"/tasks/assignments/{aid}/answers", headers=curator_headers, json={"group_values": {"f1": True}})
     client.post(f"/tasks/assignments/{aid}/submit", headers=curator_headers)
     counters = client.get("/my-day/counters", headers=admin_headers).json()
-    assert counters == {"my_day": 0, "my_tasks": 0, "review": 1, "journal_changes": 0}
+    unread = client.get("/notifications/unread-count", headers=admin_headers).json()
+    assert counters == {
+        "my_day": 0, "my_tasks": 0, "review": 1, "journal_changes": 0, "notifications": unread["unread"],
+        "notifications_work": unread["unread_work"], "notifications_manage": unread["unread_manage"],
+    }
     assert client.get("/my-day/counters").status_code == 401
+
+
+def test_nav_counters_carry_unread_notifications(client, admin_headers, curator_headers, curator_group, imported):
+    """Меню и колокольчик обновляются одним запросом: число непрочитанных — в тех же счётчиках."""
+    before = client.get("/my-day/counters", headers=curator_headers).json()["notifications"]
+    client.post("/tasks", headers=admin_headers, json={
+        "title": "Видео", "collect_mode": "group", "due_date": _day(5),
+        "fields": [{"label": "Сдано", "type": "bool"}], "scope": {"all_groups": True}})
+    after = client.get("/my-day/counters", headers=curator_headers).json()["notifications"]
+    assert after == before + 1 == client.get("/notifications/unread-count", headers=curator_headers).json()["unread"]
+    client.post("/notifications/read-all", headers=curator_headers)
+    assert client.get("/my-day/counters", headers=curator_headers).json()["notifications"] == 0
 
 
 def test_group_rhythm_endpoint_matches_my_day_and_respects_access(

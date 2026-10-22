@@ -180,6 +180,39 @@ def compute_period_stats(
     return stats
 
 
+def absent_totals_by_student(
+    db: Session, students: list[Student], date_from: datetime.date, date_to: datetime.date,
+) -> dict[int, int]:
+    """Дни отсутствия за период по каждому студенту — то же, что
+    `compute_period_stats(db, date_from, date_to, student_id=s.id).absent_total`, но несколькими запросами на
+    всех сразу, а не несколькими на каждого (PDF-табель группы на 30 человек делал сотни запросов к удалённой
+    базе). Учебные дни, как и там, берутся по текущей группе студента; отметки — все за эти дни."""
+    if not students:
+        return {}
+    days_by_group = {
+        gid: set(calendar_service.study_days_between(db, date_from, date_to, study_group_id=gid))
+        for gid in {s.study_group_id for s in students}
+    }
+    all_days = set().union(*days_by_group.values())
+    totals = {s.id: 0 for s in students}
+    if not all_days:
+        return totals
+    group_of = {s.id: s.study_group_id for s in students}
+    rows = db.execute(
+        select(AttendanceMark.student_id, AttendanceMark.date)
+        .join(MarkCode, MarkCode.id == AttendanceMark.mark_code_id)
+        .where(
+            AttendanceMark.student_id.in_(list(totals)),
+            AttendanceMark.date.in_(sorted(all_days)),
+            MarkCode.counts_as_present.is_(False),
+        )
+    ).all()
+    for row in rows:
+        if row.date in days_by_group[group_of[row.student_id]]:
+            totals[row.student_id] += 1
+    return totals
+
+
 def _current_responsible_name(group: StudyGroup, as_of: datetime.date) -> str | None:
     """Замещающий, если он сейчас активен, иначе куратор — тот же приоритет,
     что и в уведомлениях, но без
@@ -567,29 +600,28 @@ def curator_discipline_days(
 def risk_students(
     db: Session,
     as_of_date: datetime.date,
-    threshold: float | None = None,
     department_id: int | None = None,
 ) -> list[dict]:
-    """Группа риска: посещаемость с начала семестра ниже порога (`threshold`, %; по умолчанию —
-    `risk_attendance_percent`), по сданным дням группы; сначала те, у кого посещаемость хуже. Пока в группе сдано
-    меньше `risk_min_days` дней, процент ещё случаен — такие студенты в список не попадают."""
-    from app.core.config import get_settings
+    """Внимание по посещаемости с начала семестра (решение 21.10.2026), по сданным дням группы:
+    `category` = "risk" — группа риска (пропусков без уважительной причины больше `risk_unexcused_percent` %),
+    "compensation" — «Восполнить пропуски» (без практики и ИУП посещаемость ниже `risk_attendance_percent` %, куратор
+    ещё не закрыл). Сначала группа риска, внутри — у кого посещаемость хуже. Пока в группе сдано меньше
+    `risk_min_days` дней, процент ещё случаен — такие студенты в список не попадают."""
     from app.services.attendance_service import attendance_rates_bulk, consecutive_unexcused_counts_bulk
 
-    settings = get_settings()
-    limit = settings.risk_attendance_percent if threshold is None else threshold
     students = _students_in_scope(db, department_id=department_id)
     rates = attendance_rates_bulk(db, students, as_of_date)
-    risky = [s for s in students if rates[s.id].percent is not None and rates[s.id].days >= settings.risk_min_days
-             and rates[s.id].percent < limit]
-    streaks = consecutive_unexcused_counts_bulk(db, risky, as_of_date + datetime.timedelta(days=1)) if risky else {}
+    listed = [s for s in students if rates[s.id].is_risk or rates[s.id].needs_compensation]
+    streaks = consecutive_unexcused_counts_bulk(db, listed, as_of_date + datetime.timedelta(days=1)) if listed else {}
     rows = [
         {
             "student_id": s.id, "full_name": s.full_name, "study_group_id": s.study_group_id, "group_code": s.study_group.code,
+            "category": "risk" if rates[s.id].is_risk else "compensation",
             "streak": streaks.get(s.id, 0), "attendance_percent": rates[s.id].percent,
             "days": rates[s.id].days, "absent": rates[s.id].absent,
+            "absent_unexcused": rates[s.id].absent_unexcused, "unexcused_percent": rates[s.id].unexcused_percent,
         }
-        for s in risky
+        for s in listed
     ]
-    rows.sort(key=lambda r: (r["attendance_percent"], r["full_name"]))
+    rows.sort(key=lambda r: (r["category"] != "risk", r["attendance_percent"], r["full_name"]))
     return rows

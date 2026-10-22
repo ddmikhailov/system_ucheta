@@ -17,6 +17,13 @@ const CSRF_HEADERS = { "X-Requested-With": "kait20" };
 // В разработке frontend и backend на разных портах — cookie нужно передавать явно.
 const CREDENTIALS: RequestCredentials = import.meta.env.DEV ? "include" : "same-origin";
 
+/** Событие после любого успешного изменения (POST/PUT/PATCH/DELETE): счётчики меню (useNavCounters) могли устареть. */
+export const API_CHANGED_EVENT = "api:changed";
+
+function notifyChanged() {
+  window.dispatchEvent(new Event(API_CHANGED_EVENT));
+}
+
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -52,6 +59,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw new ApiError(res.status, message);
   }
 
+  if (options.method && options.method !== "GET") notifyChanged();
   if (res.status === 204) return undefined as T;
 
   // Раньше не-JSON ответ молча превращался в Blob и приводился к типу T
@@ -65,8 +73,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return res.json();
 }
 
+/** Запрос отменён (AbortController): ответ больше никому не нужен, показывать ошибку не надо. */
+export function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === "AbortError";
+}
+
 export const api = {
-  get: <T,>(path: string) => request<T>(path),
+  // signal — чтобы отменить запрос, ответ на который уже не нужен (переключили группу, ушли со страницы).
+  get: <T,>(path: string, signal?: AbortSignal) => request<T>(path, { signal }),
   post: <T,>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: body !== undefined ? JSON.stringify(body) : undefined }),
   put: <T,>(path: string, body?: unknown) =>
@@ -116,5 +130,6 @@ export async function uploadFile<T>(path: string, file: File): Promise<T> {
     }
     throw new ApiError(res.status, message);
   }
+  notifyChanged();
   return res.json();
 }

@@ -1,10 +1,13 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useState } from "react";
 import type { ReactElement } from "react";
-import { Navigate, Route, BrowserRouter as Router, Routes, useLocation } from "react-router-dom";
+import { Navigate, Outlet, RouterProvider, createBrowserRouter, useLocation } from "react-router-dom";
+import type { RouteObject } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthContext";
 import { useAuth } from "./auth/useAuth";
+import ErrorBoundary from "./components/ErrorBoundary";
 import FeedbackHost from "./components/FeedbackHost";
 import Layout from "./components/Layout";
+import NavMemory from "./components/NavMemory";
 import LoginPage from "./pages/LoginPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 import CuratorCabinetPage from "./pages/CuratorCabinetPage";
@@ -14,14 +17,10 @@ import type { ModuleName } from "./constants/modules";
 import { isModuleOn } from "./utils/modules";
 import { DOSSIER_STAFF_ROLES, MANAGEMENT_ROLES, MEAL_VIEW_ROLES, ROLE, TASK_MANAGER_ROLES, VIEWER_ROLES, inRoles } from "./constants/roles";
 import MyDayPage from "./pages/MyDayPage";
-import MyIdPanel from "./components/MyIdPanel";
-import PlanPage from "./pages/PlanPage";
-import ReportPage from "./pages/ReportPage";
-import MyTasksPage from "./pages/MyTasksPage";
-import TaskAssignmentPage from "./pages/TaskAssignmentPage";
 
 // Разделы управления и справочные страницы грузятся по требованию: куратору на телефоне не нужно
-// скачивать витрины и админку, чтобы открыть «Мой день».
+// скачивать витрины и админку, чтобы открыть «Мой день». Сразу приходят только вход, «Мой день»,
+// «Мои группы» и журнал группы; вкладки группы (паспорт, работа, план…) тоже ленивые — см. CuratorGroupPage.
 const DashboardsPage = lazy(() => import("./pages/DashboardsPage"));
 const AdminPage = lazy(() => import("./pages/AdminPage"));
 const UserProfilePage = lazy(() => import("./pages/UserProfilePage"));
@@ -31,6 +30,11 @@ const IndividualWorkPage = lazy(() => import("./pages/IndividualWorkPage"));
 const PassportPage = lazy(() => import("./pages/PassportPage"));
 const TasksPage = lazy(() => import("./pages/TasksPage"));
 const MealsPage = lazy(() => import("./pages/MealsPage"));
+const MyTasksPage = lazy(() => import("./pages/MyTasksPage"));
+const TaskAssignmentPage = lazy(() => import("./pages/TaskAssignmentPage"));
+const PlanPage = lazy(() => import("./pages/PlanPage"));
+const ReportPage = lazy(() => import("./pages/ReportPage"));
+const MyIdPanel = lazy(() => import("./components/MyIdPanel"));
 
 function RequireAuth({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
@@ -114,226 +118,118 @@ function NotFoundPage() {
   );
 }
 
+// Один родительский маршрут с общей рамкой (меню, шапка) вместо обёртки RequireAuth + Layout у каждой страницы;
+// проверки роли и модуля — у самих разделов. Роутер с данными (createBrowserRouter) нужен для useBlocker: журнал
+// спрашивает, прежде чем уйти по меню с несданными отметками.
+const pages: RouteObject[] = [
+  { path: "/login", element: <LoginPage /> },
+  {
+    path: "/change-password",
+    element: (
+      <RequireAuthOnly>
+        <ChangePasswordPage />
+      </RequireAuthOnly>
+    ),
+  },
+  {
+    element: (
+      <RequireAuth>
+        <Layout />
+      </RequireAuth>
+    ),
+    children: [
+      { path: "/my-day", element: <MyDayPage /> },
+      { path: "/cabinet", element: <CuratorCabinetPage /> },
+      { path: "/cabinet/groups/:groupId", element: <CuratorGroupPage /> },
+      {
+        path: "/dashboards",
+        element: (
+          <RequireViewer>
+            <DashboardsPage />
+          </RequireViewer>
+        ),
+      },
+      {
+        path: "/meals",
+        element: (
+          <RequireModule name={MODULE.MEALS}>
+            <RequireMealViewer>
+              <MealsPage />
+            </RequireMealViewer>
+          </RequireModule>
+        ),
+      },
+      {
+        path: "/admin",
+        element: (
+          <RequireAdminAccess>
+            <AdminPage />
+          </RequireAdminAccess>
+        ),
+      },
+      {
+        path: "/admin/users/:userId",
+        element: (
+          <RequireAdminAccess>
+            <UserProfilePage />
+          </RequireAdminAccess>
+        ),
+      },
+      {
+        path: "/tasks",
+        element: (
+          <RequireModule name={MODULE.TASKS}>
+            <RequireTaskManager>
+              <TasksPage />
+            </RequireTaskManager>
+          </RequireModule>
+        ),
+      },
+      { path: "/my-tasks", element: <RequireModule name={MODULE.TASKS}><MyTasksPage /></RequireModule> },
+      { path: "/tasks/assignment/:assignmentId", element: <RequireModule name={MODULE.TASKS}><TaskAssignmentPage /></RequireModule> },
+      { path: "/passport", element: <RequireModule name={MODULE.PASSPORT}><PassportPage /></RequireModule> },
+      { path: "/individual-work", element: <RequireModule name={MODULE.INDIVIDUAL_WORK}><IndividualWorkPage /></RequireModule> },
+      { path: "/plan", element: <RequireModule name={MODULE.PLAN}><PlanPage /></RequireModule> },
+      { path: "/report", element: <RequireModule name={MODULE.REPORTS}><ReportPage /></RequireModule> },
+      { path: "/my-id", element: <RequireModule name={MODULE.MY_ID}><MyIdPanel /></RequireModule> },
+      {
+        path: "/students",
+        element: (
+          <RequireViewer>
+            <StudentsSearchPage />
+          </RequireViewer>
+        ),
+      },
+      { path: "/students/:studentId", element: <StudentCardPage /> },
+    ],
+  },
+  { path: "/", element: <HomeRedirect /> },
+  { path: "*", element: <NotFoundPage /> },
+];
+
+// Корень над всеми страницами: память пути вкладки (NavMemory) видит любой переход, в том числе на вход.
+function Root() {
+  return (
+    <>
+      <NavMemory />
+      <Outlet />
+    </>
+  );
+}
+
+const routes: RouteObject[] = [{ element: <Root />, children: pages }];
+
 export default function App() {
+  // Роутер создаётся при первой отрисовке, а не при импорте модуля: он читает адрес страницы в момент создания.
+  const [router] = useState(() => createBrowserRouter(routes));
   return (
     <AuthProvider>
-      <Router>
+      {/* Внешняя страховка от белого экрана: разделы внутри Layout ловят свои сбои сами, сюда доходит остальное. */}
+      <ErrorBoundary>
         <Suspense fallback={<div className="loading-screen">Загрузка…</div>}>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route
-              path="/change-password"
-              element={
-                <RequireAuthOnly>
-                  <ChangePasswordPage />
-                </RequireAuthOnly>
-              }
-            />
-            <Route
-              path="/my-day"
-              element={
-                <RequireAuth>
-                  <Layout>
-                    <MyDayPage />
-                  </Layout>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/cabinet"
-              element={
-                <RequireAuth>
-                  <Layout>
-                    <CuratorCabinetPage />
-                  </Layout>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/cabinet/groups/:groupId"
-              element={
-                <RequireAuth>
-                  <Layout>
-                    <CuratorGroupPage />
-                  </Layout>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/dashboards"
-              element={
-                <RequireAuth>
-                  <RequireViewer>
-                    <Layout>
-                      <DashboardsPage />
-                    </Layout>
-                  </RequireViewer>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/meals"
-              element={
-                <RequireAuth>
-                  <RequireModule name={MODULE.MEALS}>
-                    <RequireMealViewer>
-                      <Layout>
-                        <MealsPage />
-                      </Layout>
-                    </RequireMealViewer>
-                  </RequireModule>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/admin"
-              element={
-                <RequireAuth>
-                  <RequireAdminAccess>
-                    <Layout>
-                      <AdminPage />
-                    </Layout>
-                  </RequireAdminAccess>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/admin/users/:userId"
-              element={
-                <RequireAuth>
-                  <RequireAdminAccess>
-                    <Layout>
-                      <UserProfilePage />
-                    </Layout>
-                  </RequireAdminAccess>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/tasks"
-              element={
-                <RequireAuth>
-                  <RequireModule name={MODULE.TASKS}>
-                    <RequireTaskManager>
-                      <Layout>
-                        <TasksPage />
-                      </Layout>
-                    </RequireTaskManager>
-                  </RequireModule>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/my-tasks"
-              element={
-                <RequireAuth>
-                  <RequireModule name={MODULE.TASKS}>
-                    <Layout>
-                      <MyTasksPage />
-                    </Layout>
-                  </RequireModule>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/tasks/assignment/:assignmentId"
-              element={
-                <RequireAuth>
-                  <RequireModule name={MODULE.TASKS}>
-                    <Layout>
-                      <TaskAssignmentPage />
-                    </Layout>
-                  </RequireModule>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/passport"
-              element={
-                <RequireAuth>
-                  <RequireModule name={MODULE.PASSPORT}>
-                    <Layout>
-                      <PassportPage />
-                    </Layout>
-                  </RequireModule>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/individual-work"
-              element={
-                <RequireAuth>
-                  <RequireModule name={MODULE.INDIVIDUAL_WORK}>
-                    <Layout>
-                      <IndividualWorkPage />
-                    </Layout>
-                  </RequireModule>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/plan"
-              element={
-                <RequireAuth>
-                  <RequireModule name={MODULE.PLAN}>
-                    <Layout>
-                      <PlanPage />
-                    </Layout>
-                  </RequireModule>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/report"
-              element={
-                <RequireAuth>
-                  <RequireModule name={MODULE.REPORTS}>
-                    <Layout>
-                      <ReportPage />
-                    </Layout>
-                  </RequireModule>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/my-id"
-              element={
-                <RequireAuth>
-                  <RequireModule name={MODULE.MY_ID}>
-                    <Layout>
-                      <MyIdPanel />
-                    </Layout>
-                  </RequireModule>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/students"
-              element={
-                <RequireAuth>
-                  <RequireViewer>
-                    <Layout>
-                      <StudentsSearchPage />
-                    </Layout>
-                  </RequireViewer>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/students/:studentId"
-              element={
-                <RequireAuth>
-                  <Layout>
-                    <StudentCardPage />
-                  </Layout>
-                </RequireAuth>
-              }
-            />
-            <Route path="/" element={<HomeRedirect />} />
-            <Route path="*" element={<NotFoundPage />} />
-          </Routes>
+          <RouterProvider router={router} />
         </Suspense>
-      </Router>
+      </ErrorBoundary>
       <FeedbackHost />
     </AuthProvider>
   );

@@ -35,6 +35,7 @@ class StudyGroupRead(BaseModel):
     curator_assignment_id: int | None = None
     deputy_name: str | None = None
     deputy_assignment_id: int | None = None
+    students_count: int = 0  # учатся сейчас (без академического отпуска и отчисленных)
 
 
 class StudyGroupCreate(BaseModel):
@@ -116,6 +117,7 @@ class MarkCodeRead(BaseModel):
     counts_as_present: bool
     is_excused: bool
     requires_document: bool
+    no_compensation: bool = False
     is_active: bool
 
 
@@ -123,6 +125,7 @@ class MarkCodeUpdate(BaseModel):
     counts_as_present: bool | None = None
     is_excused: bool | None = None
     requires_document: bool | None = None
+    no_compensation: bool | None = None
     is_active: bool | None = None
 
 
@@ -241,7 +244,6 @@ class UserProfile(BaseModel):
     user: UserRead
     department_name: str | None
     created_at: datetime.datetime
-    last_activity_at: datetime.datetime | None
     groups: list[UserGroupLink]
     discipline: UserDiscipline
     tasks: UserTaskStats
@@ -250,7 +252,6 @@ class UserProfile(BaseModel):
     notes_written_30d: int
     follow_ups_open: int
     dossier_views_30d: int
-    activity_30d: list[UserActivityDay]
 
 
 class UserActivityEntry(BaseModel):
@@ -267,3 +268,19 @@ class UserActivityEntry(BaseModel):
 class UserActivityPage(BaseModel):
     items: list[UserActivityEntry]
     next_before_id: int | None
+
+
+class UserActivityMonth(BaseModel):
+    """Месяц помесячного архива журнала действий: «2026-09» и сколько в нём записей."""
+
+    month: str
+    count: int
+
+
+class UserJournalOverview(BaseModel):
+    """Шапка вкладки «Журнал»: последнее действие, ритм за 30 дней и месяцы архива. Журнал читается только
+    при открытии этой вкладки — профиль пользователя его не трогает."""
+
+    last_activity_at: datetime.datetime | None
+    activity_30d: list[UserActivityDay]
+    months: list[UserActivityMonth]

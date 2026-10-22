@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { useEntryState } from "../hooks/useEntryState";
 import { api, ApiError } from "../api/client";
 import DossierImport from "../components/DossierImport";
 import { useAuth } from "../auth/useAuth";
@@ -22,7 +23,7 @@ export default function StudentsSearchPage() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const groupId = searchParams.get("group") ?? "";
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useEntryState("query", "");
   const [groups, setGroups] = useState<StudyGroupAdmin[]>([]);
   const [rows, setRows] = useState<StudentRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);

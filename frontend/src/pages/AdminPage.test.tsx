@@ -1,5 +1,6 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api/client";
 import { renderPage } from "../test/utils";
@@ -27,7 +28,7 @@ const tabs = () => screen.getAllByRole("button").map((b) => b.textContent);
 describe("AdminPage — вкладки по ролям", () => {
   it("admin видит полный набор вкладок, включая «Импорт», начинает с «Группы»", () => {
     renderPage(<AdminPage />, { role: "admin" });
-    expect(tabs()).toEqual(["Отделения", "Группы", "Студенты", "Коды отметок", "Пользователи", "Календарь", "Журнал группы", "Импорт"]);
+    expect(tabs()).toEqual(["Отделения", "Группы", "Студенты", "Коды отметок", "Пользователи", "Календарь", "Журнал группы", "Импорт", "Отладка"]);
     expect(screen.getByText(/вкладка групп/)).toBeInTheDocument();
   });
 
@@ -108,5 +109,29 @@ describe("AdminPage — адрес и переключение", () => {
     await user.click(screen.getByRole("button", { name: "Коды отметок" }));
     expect(screen.getByText("вкладка кодов, правка=true")).toBeInTheDocument();
     expect(screen.queryByText(/вкладка студентов/)).not.toBeInTheDocument();
+  });
+});
+
+function Where() {
+  const { search } = useLocation();
+  return <output aria-label="адрес">{search}</output>;
+}
+
+describe("AdminPage — память вкладок", () => {
+  it("у каждой вкладки свои параметры: вернувшись на «Студенты», админ видит ту же группу", async () => {
+    const user = userEvent.setup();
+    renderPage(
+      <>
+        <AdminPage />
+        <Where />
+      </>,
+      { role: "admin", route: "/admin?tab=students&group=8&q=ив", path: "/admin" }
+    );
+    const address = () => screen.getByRole("status", { name: "адрес" }).textContent;
+    await user.click(screen.getByRole("button", { name: "Пользователи" }));
+    expect(address()).toBe("?tab=users");
+    await user.click(screen.getByRole("button", { name: "Студенты" }));
+    expect(new URLSearchParams(address() ?? "").get("group")).toBe("8");
+    expect(new URLSearchParams(address() ?? "").get("q")).toBe("ив");
   });
 });

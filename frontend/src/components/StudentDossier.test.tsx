@@ -62,7 +62,7 @@ describe("StudentDossier — профиль", () => {
     expect(screen.getByRole("link", { name: "st@example.ru" })).toHaveAttribute("href", "mailto:st@example.ru");
     expect(screen.queryByLabelText("Телефон")).not.toBeInTheDocument(); // не поле ввода
     expect(screen.getAllByText("не указано").length).toBeGreaterThan(0); // мессенджер пуст
-    expect(get).toHaveBeenCalledWith("/students/10/dossier");
+    expect(get).toHaveBeenCalledWith("/students/10/dossier", expect.any(AbortSignal));
 
     await user.click(screen.getByRole("button", { name: "Редактировать: Контакты студента" }));
     expect(screen.getByLabelText("Телефон")).toHaveValue("+7 900 000-00-00");

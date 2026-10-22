@@ -2,6 +2,7 @@
 import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -29,6 +30,7 @@ from app.models import (
     ParentMeetingAttendee,
     Student,
     StudentGroupMembership,
+    StudentStatus,
     StudyGroup,
     TaskAssignment,
     User,
@@ -47,7 +49,18 @@ from app.services.audit_service import log_action, redact_audit_history
 router = APIRouter()
 
 
-def _group_read(g: StudyGroup, today: datetime.date | None = None) -> StudyGroupRead:
+def _students_counts(db: Session, group_ids: list[int]) -> dict[int, int]:
+    """Сколько студентов учится в каждой группе (без отпускников и отчисленных) — одним запросом."""
+    if not group_ids:
+        return {}
+    return dict(
+        db.query(Student.study_group_id, func.count(Student.id))
+        .filter(Student.study_group_id.in_(group_ids), Student.status == StudentStatus.STUDYING)
+        .group_by(Student.study_group_id).all()
+    )
+
+
+def _group_read(g: StudyGroup, today: datetime.date | None = None, students_count: int = 0) -> StudyGroupRead:
     today = today or today_local()
     # Архивный куратор не должен продолжать числиться куратором группы (см.
     # TODO.md 3) — иначе группа не попадает в «Вакантные», хотя ей на самом
@@ -76,6 +89,7 @@ def _group_read(g: StudyGroup, today: datetime.date | None = None) -> StudyGroup
         curator_assignment_id=curator_assignment.id if curator_assignment else None,
         deputy_name=deputy_assignment.user.full_name if deputy_assignment else None,
         deputy_assignment_id=deputy_assignment.id if deputy_assignment else None,
+        students_count=students_count,
     )
 
 
@@ -96,14 +110,15 @@ def list_groups(
     if scope is not None:
         q = q.filter(StudyGroup.department_id == scope)
     groups = q.order_by(StudyGroup.course, StudyGroup.code).all()
-    return [_group_read(g, today) for g in groups]
+    counts = _students_counts(db, [g.id for g in groups])
+    return [_group_read(g, today, counts.get(g.id, 0)) for g in groups]
 
 
 @router.post("/groups", response_model=StudyGroupRead, status_code=status.HTTP_201_CREATED)
 def create_group(
     payload: StudyGroupCreate, user: User = Depends(require_dept_editor), db: Session = Depends(get_db),
 ):
-    if is_department_scoped(user) and payload.department_id != user.department_id:
+    if not policies.scope_of(user).within(payload.department_id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Группу можно создать только в своём отделении")
     group = StudyGroup(**payload.model_dump())
     db.add(group)
@@ -264,9 +279,9 @@ def delete_group(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Группа не найдена")
     policies.assert_can_manage_group(user, group)
     if force:
-        if user.role.code not in policies.ELEVATED_ROLES:
+        if user.role.code not in policies.FORCE_DELETE_ROLES:
             raise HTTPException(
-                status.HTTP_403_FORBIDDEN, "Полное удаление группы с историей доступно только администратору/тьютору"
+                status.HTTP_403_FORBIDDEN, "Полное удаление группы с историей доступно администратору, тьютору и зав. отделением"
             )
         if confirm_code != group.code:
             raise HTTPException(

@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { api, ApiError } from "../../api/client";
 import { useAuth } from "../../auth/useAuth";
 import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
+import { useUrlFlag, useUrlNumber, useUrlParam } from "../../hooks/useUrlState";
 import { Link, useLocation } from "react-router-dom";
 import type { DepartmentAdmin, SetPasswordResult, UserAdmin } from "../../api/types";
 import { DEPARTMENT_REQUIRED_ROLES, DEPARTMENT_SCOPED_ROLES, ROLE, ROLE_LABELS, assignableRoles, inRoles, type RoleCode } from "../../constants/roles";
@@ -21,7 +22,11 @@ export default function UsersTab({ canCreate }: { canCreate: boolean }) {
   const [departments, setDepartments] = useState<DepartmentAdmin[]>([]);
   const [error, setError] = useState<string | null>(null);
   useScrollToTopOnChange(error);
-  const [page, setPage] = useState(0);
+  // Страница списка, поиск и фильтры — в адресе: из профиля пользователя «Назад» возвращает на ту же
+  // страницу с теми же фильтрами. В адресе страница с единицы, как её видит человек.
+  const [urlPage, setUrlPage] = useUrlNumber("page");
+  const page = urlPage !== null && urlPage > 1 ? urlPage - 1 : 0;
+  const setPage = (p: number) => setUrlPage(p > 0 ? p + 1 : null);
 
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
@@ -31,13 +36,15 @@ export default function UsersTab({ canCreate }: { canCreate: boolean }) {
 
   // Архивные (удалённые/заблокированные насовсем оставленные в архиве)
   // пользователи не мешаются в основном списке — их можно найти отдельно.
-  const [showArchived, setShowArchived] = useState(false);
+  const [showArchived, setShowArchived] = useUrlFlag("archived");
 
   // Поиск/фильтр по роли и отделению — раньше список из полусотни
   // пользователей приходилось листать вручную (см. TODO.md 4).
-  const [searchQuery, setSearchQuery] = useState("");
-  const [roleFilter, setRoleFilter] = useState<string | "all">("all");
-  const [departmentFilter, setDepartmentFilter] = useState<number | "all">("all");
+  const [searchQuery, setSearchQuery] = useUrlParam("q");
+  const [roleFilter, setRoleFilter] = useUrlParam("role", "all");
+  const [urlDepartment, setUrlDepartment] = useUrlNumber("department");
+  const departmentFilter: number | "all" = urlDepartment ?? "all";
+  const setDepartmentFilter = (v: number | "all") => setUrlDepartment(v === "all" ? null : v);
 
   const [justCreated, setJustCreated] = useState<SetPasswordResult | null>(null);
   // Итог удаления из профиля (например, «пользователь обезличен») приходит сюда через состояние перехода.
@@ -165,8 +172,14 @@ export default function UsersTab({ canCreate }: { canCreate: boolean }) {
       )}
 
       <div className="toolbar">
-        <input placeholder="Поиск по ФИО" aria-label="Поиск по ФИО" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-        <select aria-label="Фильтр по роли" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+        <input placeholder="Поиск по ФИО" aria-label="Поиск по ФИО" value={searchQuery} onChange={(e) => {
+          setSearchQuery(e.target.value);
+          setPage(0);
+        }} />
+        <select aria-label="Фильтр по роли" value={roleFilter} onChange={(e) => {
+          setRoleFilter(e.target.value);
+          setPage(0);
+        }}>
           <option value="all">Все роли</option>
           {(Object.entries(ROLE_LABELS) as [RoleCode, string][]).map(([value, label]) => (
             <option key={value} value={value}>
@@ -177,7 +190,10 @@ export default function UsersTab({ canCreate }: { canCreate: boolean }) {
         <select
           aria-label="Фильтр по отделению"
           value={departmentFilter}
-          onChange={(e) => setDepartmentFilter(e.target.value === "all" ? "all" : Number(e.target.value))}
+          onChange={(e) => {
+            setDepartmentFilter(e.target.value === "all" ? "all" : Number(e.target.value));
+            setPage(0);
+          }}
         >
           <option value="all">Все отделения</option>
           {departments.map((d) => (

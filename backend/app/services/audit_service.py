@@ -1,7 +1,14 @@
+import datetime
+
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.request_context import get_client_ip
-from app.models import AuditLog, User
+from app.core.time import today_local, utcnow
+from app.models import AuditLog, DossierAccessLog, User
+
+# День последней очистки по сроку хранения: удаление идёт не чаще раза в сутки на процесс (процесс один).
+_last_purge_day: datetime.date | None = None
 
 
 def log_action(
@@ -38,3 +45,29 @@ def redact_audit_history(db: Session, entity_type: str, entity_id: str) -> None:
     db.query(AuditLog).filter(
         AuditLog.entity_type == entity_type, AuditLog.entity_id == entity_id
     ).update({"old_value": "[обезличено]", "new_value": "[обезличено]"}, synchronize_session=False)
+
+
+def purge_expired(db: Session) -> int:
+    """Удаляет записи журнала действий и журнала просмотров досье старше срока хранения (`AUDIT_RETENTION_DAYS`).
+    Возвращает, сколько строк удалено; коммит — за вызывающим."""
+    cutoff = utcnow() - datetime.timedelta(days=get_settings().audit_retention_days)
+    removed = db.query(AuditLog).filter(AuditLog.created_at < cutoff).delete(synchronize_session=False)
+    removed += db.query(DossierAccessLog).filter(DossierAccessLog.created_at < cutoff).delete(synchronize_session=False)
+    return removed
+
+
+def purge_expired_daily(db: Session) -> None:
+    """Очистка по сроку хранения раз в сутки — при открытии платформы, как и остальные периодические задачи."""
+    global _last_purge_day
+    today = today_local()
+    if _last_purge_day == today:
+        return
+    _last_purge_day = today
+    if purge_expired(db):
+        db.commit()
+
+
+def reset_purge_throttle() -> None:
+    """Только для тестов."""
+    global _last_purge_day
+    _last_purge_day = None

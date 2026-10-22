@@ -1,5 +1,4 @@
 """Студенты: список, создание, статус, правка, удаление/обезличивание."""
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -11,13 +10,12 @@ from app.api.deps import (
     scope_department_id,
 )
 from app.core import policies
-from app.core.roles import is_department_scoped
 from app.core.time import today_local
 from app.db.session import get_db
 from app.models import AttendanceMark, Student, StudentGroupMembership, StudentStatus, StudyGroup, User
 from app.schemas.admin import DeleteResult, StudentCreate, StudentRead, StudentUpdate, StudentUpdateStatus
 from app.services import group_membership_service
-from app.services.erasure_service import erase_student_personal_data
+from app.services.erasure_service import delete_student_completely, erase_student_personal_data
 from app.services.audit_service import log_action, redact_audit_history
 
 router = APIRouter()
@@ -32,10 +30,9 @@ def list_students(
     q = db.query(Student)
     if study_group_id is not None:
         q = q.filter(Student.study_group_id == study_group_id)
-    if is_department_scoped(user):
-        q = q.join(StudyGroup, StudyGroup.id == Student.study_group_id).filter(
-            StudyGroup.department_id == scope_department_id(user, None)
-        )
+    department_id = scope_department_id(user, None)
+    if department_id is not None:
+        q = q.join(StudyGroup, StudyGroup.id == Student.study_group_id).filter(StudyGroup.department_id == department_id)
     students = q.order_by(Student.last_name, Student.first_name).all()
     return [_student_read(s) for s in students]
 
@@ -136,6 +133,7 @@ def update_student(
 @router.delete("/students/{student_id}", response_model=DeleteResult)
 def delete_student(
     student_id: int,
+    force: bool = False,
     user: User = Depends(require_structure_editor), db: Session = Depends(get_db),
 ):
     student = db.get(Student, student_id)
@@ -147,6 +145,12 @@ def delete_student(
             status.HTTP_400_BAD_REQUEST,
             "Сначала переведите студента в академ. отпуск или отчислите — удалить можно только архивного",
         )
+    if force:
+        if user.role.code not in policies.FORCE_DELETE_ROLES:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Полное удаление студента с историей доступно администратору, тьютору и зав. отделением (своего отделения)"
+            )
+        return DeleteResult(deleted=True, anonymized=False, detail=delete_student_completely(db, user, student))
 
     # Членство в группе само по себе не «история» в смысле этой проверки —
     # это просто учётная запись "кто где состоял", у неё нет собственной

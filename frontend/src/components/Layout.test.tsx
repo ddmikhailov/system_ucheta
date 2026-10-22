@@ -2,9 +2,15 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api/client";
-import { RELEASE_MODULES } from "../constants/modules";
+import type { ModuleName } from "../constants/modules";
 import { renderPage } from "../test/utils";
+import { dialogs } from "../utils/feedback";
+import { journalDraftKey, readJournalDraft, saveJournalDraft } from "../utils/journalDraft";
 import Layout from "./Layout";
+import { resetNavCounters } from "../hooks/useNavCounters";
+
+// Урезанный набор без досье и индивидуальной работы (режим настраиваемый; релизный набор их включает).
+const RELEASE_MODULES: readonly ModuleName[] = ["attendance", "tasks", "my_id", "meals"];
 
 vi.mock("../api/client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api/client")>();
@@ -14,8 +20,11 @@ vi.mock("../api/client", async (importOriginal) => {
 const get = vi.mocked(api.get);
 
 beforeEach(() => {
+  resetNavCounters();
   get.mockReset();
-  get.mockImplementation(async (path: string) => (path === "/notifications/unread-count" ? { unread: 0 } : []));
+  get.mockImplementation(async (path: string) => (path === "/my-day/counters" ? { notifications: 0 } : []));
+  vi.mocked(api.post).mockReset();
+  vi.mocked(api.post).mockResolvedValue({ unread: 0 });
 });
 
 /** Названия пунктов основного меню в порядке показа. */
@@ -65,6 +74,56 @@ describe("Layout — меню по ролям", () => {
     expect(screen.getByText("содержимое")).toBeInTheDocument();
   });
 
+  it("«Выйти» с несданными отметками журнала переспрашивает и стирает черновики вкладки", async () => {
+    const user = userEvent.setup();
+    const logout = vi.fn();
+    const key = journalDraftKey(1, 7, "2026-10-21");
+    saveJournalDraft(key, { pending: {}, firstPeriod: "", baseline: "{}", submitted: false });
+    renderPage(<Layout><div /></Layout>, { role: "curator", user: { full_name: "Иванова Анна" }, auth: { logout } });
+    const confirm = vi.spyOn(dialogs, "confirm").mockResolvedValue(false);
+
+    await user.click(screen.getByRole("button", { name: /Иванова Анна/ }));
+    await user.click(screen.getByRole("menuitem", { name: "Выйти" }));
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+    expect(logout).not.toHaveBeenCalled();
+    expect(readJournalDraft(key)).not.toBeNull();
+
+    confirm.mockResolvedValue(true);
+    await user.click(screen.getByRole("button", { name: /Иванова Анна/ }));
+    await user.click(screen.getByRole("menuitem", { name: "Выйти" }));
+    await waitFor(() => expect(logout).toHaveBeenCalledTimes(1));
+    expect(readJournalDraft(key)).toBeNull();
+  });
+
+  it("«Выйти» без черновиков выходит сразу", async () => {
+    const user = userEvent.setup();
+    const logout = vi.fn();
+    renderPage(<Layout><div /></Layout>, { role: "curator", user: { full_name: "Иванова Анна" }, auth: { logout } });
+    const confirm = vi.spyOn(dialogs, "confirm");
+    await user.click(screen.getByRole("button", { name: /Иванова Анна/ }));
+    await user.click(screen.getByRole("menuitem", { name: "Выйти" }));
+    await waitFor(() => expect(logout).toHaveBeenCalledTimes(1));
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it("«Выйти на всех устройствах» — после подтверждения; отказ сервера показывается", async () => {
+    const user = userEvent.setup();
+    const logoutAll = vi.fn().mockRejectedValueOnce(new TypeError("Failed to fetch")).mockResolvedValue(undefined);
+    const confirm = vi.spyOn(dialogs, "confirm").mockResolvedValue(false);
+    renderPage(<Layout><div /></Layout>, { role: "curator", user: { full_name: "Иванова Анна" }, auth: { logoutAll } });
+
+    await user.click(screen.getByRole("button", { name: /Иванова Анна/ }));
+    await user.click(screen.getByRole("menuitem", { name: "Выйти на всех устройствах" }));
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+    expect(confirm.mock.calls[0][0]).toMatch(/Пароль не меняется/);
+    expect(logoutAll).not.toHaveBeenCalled();
+
+    confirm.mockResolvedValue(true);
+    await user.click(screen.getByRole("button", { name: /Иванова Анна/ }));
+    await user.click(screen.getByRole("menuitem", { name: "Выйти на всех устройствах" }));
+    await waitFor(() => expect(logoutAll).toHaveBeenCalledTimes(1));
+  });
+
   it("основное меню подписано для скринридеров и не содержит пунктов пользователя", () => {
     renderPage(<Layout><div /></Layout>, { role: "admin" });
     const nav = screen.getByRole("navigation", { name: "Разделы" });
@@ -105,8 +164,7 @@ describe("Layout — нижняя панель и счётчики", () => {
 
   it("счётчики на пунктах: дела на сегодня, задачи, проверка", async () => {
     get.mockImplementation(async (path: string) => {
-      if (path === "/my-day/counters") return { my_day: 3, my_tasks: 2, review: 0 };
-      if (path === "/notifications/unread-count") return { unread: 0 };
+      if (path === "/my-day/counters") return { my_day: 3, my_tasks: 2, review: 0, notifications: 0 };
       return [];
     });
     renderPage(<Layout><div /></Layout>, { role: "curator" });
@@ -119,9 +177,46 @@ describe("Layout — нижняя панель и счётчики", () => {
 
 describe("Уведомления (колокольчик)", () => {
   it("показывает число непрочитанных", async () => {
-    get.mockImplementation(async (path: string) => (path === "/notifications/unread-count" ? { unread: 3 } : []));
+    get.mockImplementation(async (path: string) => (path === "/my-day/counters" ? { notifications: 3 } : []));
+    vi.mocked(api.post).mockResolvedValue({ unread: 3 });
     renderPage(<Layout><div /></Layout>, { role: "curator" });
     expect(await screen.findByText("3")).toBeInTheDocument();
+    // Колокольчик сам сервер не опрашивает: число приходит вместе со счётчиками меню.
+    expect(get).not.toHaveBeenCalledWith("/notifications/unread-count");
+  });
+
+  it("управленец: две вкладки со своими счётчиками; «Управление» запрашивает только свою категорию", async () => {
+    const user = userEvent.setup();
+    get.mockImplementation(async (path: string) => {
+      if (path === "/my-day/counters") return { notifications: 3, notifications_work: 2, notifications_manage: 1 };
+      if (path === "/notifications?category=manage") {
+        return [{ id: 9, kind: "password_reset", message: "Иванов просит восстановить пароль", entity_type: "password_reset", entity_id: "5", created_at: "2026-10-01T09:00:00", read_at: null, category: "manage" }];
+      }
+      if (path === "/notifications?category=work") {
+        return [{ id: 8, kind: "task_assigned", message: "Новая задача", entity_type: "task_assignment", entity_id: "1", created_at: "2026-10-01T09:00:00", read_at: null, category: "work" }];
+      }
+      return [];
+    });
+    vi.mocked(api.post).mockResolvedValue({ unread: 3, unread_work: 2, unread_manage: 1 });
+    renderPage(<Layout><div /></Layout>, { role: "dept_head" });
+    await user.click(await screen.findByRole("button", { name: "Уведомления" }));
+    expect(await screen.findByText("Новая задача")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /Управление/ }));
+    expect(await screen.findByText("Иванов просит восстановить пароль")).toBeInTheDocument();
+    expect(screen.queryByText("Новая задача")).not.toBeInTheDocument();
+    // Счётчики вкладок приходят вместе со счётчиками меню, отдельного опроса колокольчика нет.
+    const tabs = screen.getByRole("tablist");
+    expect(within(tabs).getByRole("tab", { name: /Моя работа/ })).toHaveTextContent("2");
+    expect(within(tabs).getByRole("tab", { name: /Управление/ })).toHaveTextContent("1");
+    expect(get).not.toHaveBeenCalledWith("/notifications/unread-count");
+  });
+
+  it("куратору вкладок нет: один список", async () => {
+    const user = userEvent.setup();
+    get.mockImplementation(async (path: string) => (path === "/my-day/counters" ? { notifications: 1, notifications_work: 1, notifications_manage: 0 } : []));
+    renderPage(<Layout><div /></Layout>, { role: "curator" });
+    await user.click(await screen.findByRole("button", { name: "Уведомления" }));
+    expect(screen.queryByRole("tab", { name: /Управление/ })).not.toBeInTheDocument();
   });
 
   it("клик по уведомлению о задаче открывает назначение и помечает прочитанным", async () => {
@@ -130,7 +225,7 @@ describe("Уведомления (колокольчик)", () => {
     post.mockReset();
     post.mockResolvedValue({});
     get.mockImplementation(async (path: string) => {
-      if (path === "/notifications/unread-count") return { unread: 1 };
+      if (path === "/my-day/counters") return { notifications: 1 };
       return [{ id: 7, kind: "task_assigned", message: "Новая задача «Кружки»", entity_type: "task_assignment", entity_id: "12", created_at: "2026-10-01T09:00:00", read_at: null }];
     });
     renderPage(<Layout><div /></Layout>, { role: "curator" });
@@ -145,9 +240,13 @@ describe("Уведомления (колокольчик)", () => {
     const user = userEvent.setup();
     const post = vi.mocked(api.post);
     post.mockReset();
-    post.mockResolvedValue({ ok: true });
+    let readAll = false;
+    post.mockImplementation(async () => {
+      readAll = true;
+      return { ok: true };
+    });
     get.mockImplementation(async (path: string) => {
-      if (path === "/notifications/unread-count") return { unread: 2 };
+      if (path === "/my-day/counters") return { notifications: readAll ? 0 : 2, notifications_work: readAll ? 0 : 2, notifications_manage: 0 };
       return [
         { id: 1, kind: "task_due_soon", message: "Скоро срок", entity_type: "task_assignment", entity_id: "1", created_at: "2026-10-01T09:00:00", read_at: null },
         { id: 2, kind: "task_overdue", message: "Просрочена", entity_type: "task_assignment", entity_id: "2", created_at: "2026-10-01T10:00:00", read_at: null },
@@ -158,6 +257,44 @@ describe("Уведомления (колокольчик)", () => {
     await user.click(await screen.findByRole("button", { name: "Прочитать все" }));
     expect(post).toHaveBeenCalledWith("/notifications/read-all");
     await waitFor(() => expect(screen.queryByRole("button", { name: "Прочитать все" })).not.toBeInTheDocument());
+  });
+});
+
+describe("Счётчики меню: один запрос и пауза в скрытой вкладке", () => {
+  function counterCalls() {
+    return get.mock.calls.filter(([path]) => path === "/my-day/counters").length;
+  }
+
+  it("при входе — один запрос счётчиков и одна проверка сроков задач", async () => {
+    renderPage(<Layout><div /></Layout>, { role: "curator" });
+    await waitFor(() => expect(counterCalls()).toBe(1));
+    expect(vi.mocked(api.post)).toHaveBeenCalledWith("/notifications/check");
+    expect(vi.mocked(api.post)).toHaveBeenCalledTimes(1);
+  });
+
+  it("повторный показ в пределах 30 с не спрашивает сервер, а после сохранения — спрашивает", async () => {
+    const first = renderPage(<Layout><div /></Layout>, { role: "curator" });
+    await waitFor(() => expect(counterCalls()).toBe(1));
+    first.unmount();
+    renderPage(<Layout><div /></Layout>, { role: "curator" });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(counterCalls()).toBe(1);
+    window.dispatchEvent(new Event("api:changed"));
+    const third = renderPage(<Layout><div /></Layout>, { role: "curator" });
+    await waitFor(() => expect(counterCalls()).toBe(2));
+    third.unmount();
+  });
+
+  it("скрытая вкладка не опрашивает сервер, при возвращении — обновляет", async () => {
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    renderPage(<Layout><div /></Layout>, { role: "curator" });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(counterCalls()).toBe(0);
+    expect(vi.mocked(api.post)).not.toHaveBeenCalled();
+    hidden.mockReturnValue(false);
+    document.dispatchEvent(new Event("visibilitychange"));
+    await waitFor(() => expect(counterCalls()).toBe(1));
+    expect(vi.mocked(api.post)).toHaveBeenCalledWith("/notifications/check");
   });
 });
 

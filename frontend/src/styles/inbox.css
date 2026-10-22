@@ -32,7 +32,7 @@
   border-radius: 999px;
   background: var(--primary-light);
   color: var(--primary);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -149,7 +149,7 @@ a.inbox-row__title:focus-visible::after {
   align-items: center;
   gap: 4px 10px;
   margin-top: 3px;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--muted);
 }
 
@@ -163,7 +163,7 @@ a.inbox-row__title:focus-visible::after {
 .inbox-row__progress {
   display: grid;
   gap: 4px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
@@ -180,7 +180,7 @@ a.inbox-row__title:focus-visible::after {
 
 .inbox-row__due span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .inbox-row__due.is-hot b {

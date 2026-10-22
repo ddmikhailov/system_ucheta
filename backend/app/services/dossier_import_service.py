@@ -21,8 +21,7 @@ from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 from sqlalchemy.orm import Session
 
-from app.core import field_crypto
-from app.core.roles import is_department_scoped
+from app.core import field_crypto, policies
 from app.core.xlsx import UnsafeArchiveError, append_row, check_zip_safety
 from app.models import Student, StudentGuardian, StudentProfile, StudyGroup, User
 from app.schemas.dossier import ProfileFields, SpecialData
@@ -112,8 +111,9 @@ class RowResult:
 
 def _students_in_scope(db: Session, user: User) -> list[Student]:
     q = db.query(Student).join(StudyGroup, StudyGroup.id == Student.study_group_id).filter(StudyGroup.is_active.is_(True))
-    if is_department_scoped(user):
-        q = q.filter(StudyGroup.department_id == user.department_id)
+    scope = policies.scope_of(user)
+    if scope.is_department:
+        q = q.filter(StudyGroup.department_id == scope.department_id)
     return q.order_by(StudyGroup.code, Student.last_name, Student.first_name).all()
 
 
@@ -235,7 +235,7 @@ def parse_workbook(db: Session, user: User, content: bytes) -> list[RowResult]:
         if group is None:
             result.errors.append("группа не найдена")
             continue
-        if is_department_scoped(user) and group.department_id != user.department_id:
+        if not policies.scope_of(user).within(group.department_id):
             result.errors.append("группа не из вашего отделения")
             continue
         if not last or not first:

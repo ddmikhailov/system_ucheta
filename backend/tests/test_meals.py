@@ -310,10 +310,15 @@ def test_only_admin_may_create_a_meal_manager(client, dept_head_headers, importe
 @pytest.mark.real_meal_task
 def test_polling_notifications_creates_the_weekly_task_once(client, admin_headers, curator_group, monkeypatch):
     monkeypatch.setattr(meal_service, "now_local", lambda: at(PREV_MON, 9, 5))
-    assert client.get("/notifications", headers=admin_headers).status_code == 200
-    assert client.get("/notifications/unread-count", headers=admin_headers).status_code == 200
     from app.db.base import SessionLocal
 
+    # Чтение колокольчика задачу не создаёт — только проверка при открытии платформы (POST /notifications/check).
+    assert client.get("/notifications", headers=admin_headers).status_code == 200
+    assert client.get("/notifications/unread-count", headers=admin_headers).status_code == 200
+    with SessionLocal() as session:
+        assert session.query(Task).filter(Task.kind == "meal").count() == 0
+    assert client.post("/notifications/check", headers=admin_headers).status_code == 200
+    assert client.post("/notifications/check", headers=admin_headers).status_code == 200
     with SessionLocal() as session:
         assert session.query(Task).filter(Task.kind == "meal").count() == 1
 

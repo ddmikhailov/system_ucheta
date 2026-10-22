@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { MODULE, RELEASE_MODULES } from "../constants/modules";
+import { MODULE } from "../constants/modules";
+import type { ModuleName } from "../constants/modules";
 import { makeUser } from "../test/utils";
 import { isModuleOn } from "./modules";
+
+// Урезанный набор без досье и индивидуальной работы (режим настраиваемый; релизный набор их включает).
+const RELEASE_MODULES: readonly ModuleName[] = ["attendance", "tasks", "my_id", "meals"];
 
 describe("isModuleOn", () => {
   it("включён, если есть в списке сервера", () => {

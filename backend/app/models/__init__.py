@@ -11,15 +11,18 @@ from app.models.enums import (
     RoleCode,
     StudentStatus,
 )
-from app.models.marks import AbsencePeriod, AttendanceChangeRequest, AttendanceMark, DaySubmission, MarkCode
+from app.models.marks import AbsenceCompensation, AbsencePeriod, AttendanceChangeRequest, AttendanceMark, DaySubmission, MarkCode
 from app.models.notifications import InAppNotification
+from app.models.password_reset import PasswordResetRequest
 from app.models.tasks import Task, TaskAssignment, TaskComment, TaskRow, TaskTemplate
 from app.models.meals import MealDayOverride, MealSubmission, StudentMeal
 from app.models.my_id import StudentMyId
 from app.models.org import Department, StudyGroup
+from app.models.student_deletion import StudentDeletionRequest
 from app.models.people import CuratorAssignment, Student, StudentGroupMembership
 
 __all__ = [
+    "AbsenceCompensation",
     "AbsencePeriod",
     "AcademicCalendarDay",
     "AssignmentRole",
@@ -37,6 +40,7 @@ __all__ = [
     "GroupEvent",
     "GroupEventAttendee",
     "InAppNotification",
+    "PasswordResetRequest",
     "MarkCode",
     "MarkSource",
     "ParentMeeting",
@@ -51,6 +55,7 @@ __all__ = [
     "StudentMyId",
     "StudentNote",
     "StudentProfile",
+    "StudentDeletionRequest",
     "StudentGroupMembership",
     "StudentStatus",
     "StudyGroup",

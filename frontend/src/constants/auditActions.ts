@@ -6,6 +6,9 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "mark.update": "Изменил(а) отметку",
   "mark.delete": "Удалил(а) отметку",
   "period.create": "Оформил(а) период отсутствия",
+  "period.update": "Изменил(а) период отсутствия",
+  "period.delete": "Удалил(а) период отсутствия",
+  "period.remove_mark": "Снял(а) отметку периода отсутствия",
   "day.submit": "Сдал(а) день",
   "day.resubmit": "Пересдал(а) день",
   "task.create": "Создал(а) задачу",
@@ -55,6 +58,10 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "user.delete": "Удалил(а) пользователя",
   "user.anonymize": "Обезличил(а) пользователя",
   "password.change": "Сменил(а) свой пароль",
+  "password.reset_requested": "Запросил(а) восстановление пароля",
+  "password.reset_issued": "Выдан временный пароль по запросу",
+  "debug.audit_view": "Открыл(а) полный журнал действий («Отладка»)",
+  "dossier.key_rotate": "Особые поля досье перешифрованы новым ключом",
 };
 
 /** Области для фильтра ленты: значение уходит на сервер как `area` (начало кода действия). */

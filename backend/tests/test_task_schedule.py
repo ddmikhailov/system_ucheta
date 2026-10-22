@@ -168,7 +168,8 @@ def test_dept_head_template_keeps_the_department_scope_at_launch(client, dept_he
 
 
 def test_launch_happens_on_platform_open(client, admin_headers, curator_headers, curator_group, imported, db):
-    """Колокольчик при входе опрашивает /notifications/unread-count: там и запускается расписание."""
+    """Интерфейс при входе зовёт POST /notifications/check: там и запускается расписание. Чтение колокольчика
+    (GET) ничего не запускает — раньше каждый опрос раз в минуту писал в базу."""
     from app.services import task_service
 
     tpl = _template(client, admin_headers)
@@ -177,7 +178,12 @@ def test_launch_happens_on_platform_open(client, admin_headers, curator_headers,
     db.commit()
     task_service.reset_reminder_throttle()
     assert client.get("/notifications/unread-count", headers=curator_headers).status_code == 200
+    assert client.get("/my-day/counters", headers=curator_headers).status_code == 200
+    assert db.query(Task).filter(Task.template_id == tpl["id"]).count() == 0
+    r = client.post("/notifications/check", headers=curator_headers)
+    assert r.status_code == 200
     assert db.query(Task).filter(Task.template_id == tpl["id"]).count() == 1
+    assert r.json()["unread"] == client.get("/notifications/unread-count", headers=curator_headers).json()["unread"] > 0
     notes = [n["kind"] for n in client.get("/notifications", headers=curator_headers).json()]
     assert "task_assigned" in notes
 

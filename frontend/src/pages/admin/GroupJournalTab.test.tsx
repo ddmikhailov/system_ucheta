@@ -141,7 +141,7 @@ describe("GroupJournalTab — журнал администрации", () => {
 
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     await chooseOption(user, groupSelect(), "ИИ212 (курс 2) — нет куратора");
-    expect(confirm).toHaveBeenCalledWith("Несохранённые изменения будут потеряны. Сменить группу?");
+    expect(confirm).toHaveBeenCalledWith("Отметки этого дня ещё не сданы — черновик останется в этой вкладке. Сменить группу?");
     expect(get).not.toHaveBeenCalledWith(`/curator/groups/8/day?date=${todayIso()}`);
 
     confirm.mockReturnValue(true);

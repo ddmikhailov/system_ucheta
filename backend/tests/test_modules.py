@@ -7,7 +7,7 @@ from app.core.modules import ALL_MODULES, RELEASE_MODULES, enabled_modules, modu
 
 def test_empty_value_is_release_set():
     assert parse_modules("") == frozenset(RELEASE_MODULES)
-    assert RELEASE_MODULES == ("attendance", "tasks", "my_id", "meals")
+    assert RELEASE_MODULES == ("attendance", "tasks", "my_id", "meals", "dossier", "individual_work")
 
 
 def test_value_is_normalized_and_attendance_is_always_on():

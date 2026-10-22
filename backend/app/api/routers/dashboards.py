@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import require_management, require_roles, require_viewer, scope_department_id, validate_date_range
 from app.core import policies
-from app.core.roles import is_department_scoped
 from app.db.session import get_db
 from app.models import AttendanceMark, RoleCode, Student, StudyGroup, User
 from app.schemas.dashboards import (
@@ -105,13 +104,13 @@ def summary(
 @router.get("/risk-students", response_model=list[RiskStudentRow])
 def risk_students(
     as_of_date: datetime.date,
-    threshold: float | None = Query(None, ge=0, le=100, description="порог посещаемости, %; по умолчанию 85"),
     department_id: int | None = None,
     user: User = Depends(require_viewer),
     db: Session = Depends(get_db),
 ):
+    """Группа риска и «Восполнить пропуски» (поле `category`) — пороги в настройках, см. AttendanceRate."""
     scope = scope_department_id(user, department_id)
-    rows = stats_service.risk_students(db, as_of_date, threshold, scope)
+    rows = stats_service.risk_students(db, as_of_date, scope)
     return [RiskStudentRow(**r) for r in rows]
 
 
@@ -160,7 +159,7 @@ def student_card(
     if student is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Студент не найден")
 
-    if is_department_scoped(user) and student.study_group.department_id != user.department_id:
+    if not policies.scope_of(user).within(student.study_group.department_id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Студент не из вашего отделения")
 
     marks = (

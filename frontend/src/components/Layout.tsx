@@ -1,10 +1,11 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import BrandMark from "./BrandMark";
 import CommandPalette from "./CommandPalette";
+import ErrorBoundary from "./ErrorBoundary";
 import { PLATFORM_NAME } from "../constants/brand";
 import type { ReactNode } from "react";
-import { NavLink, useLocation } from "react-router-dom";
-import { api } from "../api/client";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { ApiError, api } from "../api/client";
 import { useAuth } from "../auth/useAuth";
 import { MODULE } from "../constants/modules";
 import type { ModuleName } from "../constants/modules";
@@ -16,10 +17,12 @@ import NavIcon from "./NavIcon";
 import type { NavIconName } from "./NavIcon";
 import NotificationBell from "./NotificationBell";
 import UserMenu from "./UserMenu";
+import WhatsNewBanner from "./WhatsNewBanner";
 import { pageTitle } from "../utils/pageTitle";
-
-type CounterKey = "my_day" | "my_tasks" | "review" | "journal_changes";
-type Counters = Partial<Record<CounterKey, number>>;
+import { dialogs, toast } from "../utils/feedback";
+import { clearJournalDrafts, hasJournalDrafts } from "../utils/journalDraft";
+import { useNavCounters } from "../hooks/useNavCounters";
+import type { CounterKey } from "../hooks/useNavCounters";
 
 interface NavItem {
   to: string;
@@ -77,10 +80,18 @@ const COUNTER_LABELS: Record<CounterKey, string> = {
   journal_changes: "исправлений журнала ждут решения",
 };
 
-export default function Layout({ children }: { children: ReactNode }) {
-  const { user, logout } = useAuth();
+/** Общая рамка страниц: родительский маршрут рисует раздел через <Outlet/>; children — для тестов и вложения вручную. */
+export default function Layout({ children }: { children?: ReactNode }) {
+  const { user, logout, logoutAll, refresh } = useAuth();
+  // Настройка про журнал дня нужна тем, кто ведёт группу.
+  const showCarryOver = (user?.groups.length ?? 0) > 0;
+  async function changeCarryOver(value: boolean) {
+    await api.patch("/auth/preferences", { carry_over_marks: value });
+    await refresh();
+  }
   const { pathname } = useLocation();
-  const [counters, setCounters] = useState<Counters>({});
+  // Счётчики меню и колокольчик — один запрос; при переходах не чаще раза в 30 с, в скрытой вкладке — пауза.
+  const { counters, setUnread } = useNavCounters(user?.id, pathname);
   const [moreOpen, setMoreOpen] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
@@ -90,21 +101,38 @@ export default function Layout({ children }: { children: ReactNode }) {
     document.title = title === PLATFORM_NAME ? `${PLATFORM_NAME} — КАИТ №20` : `${title} — ${PLATFORM_NAME}`;
   }, [title]);
 
-  // Счётчики на пунктах меню обновляем при каждом переходе: сдали день, отправили задачу — число уменьшилось.
-  useEffect(() => {
-    if (!user) return;
-    api
-      .get<Counters>("/my-day/counters")
-      .then((c) => setCounters(c && typeof c === "object" && !Array.isArray(c) ? c : {}))
-      .catch(() => setCounters({}));
-  }, [pathname, user]);
-
   const [closedOn, setClosedOn] = useState(pathname);
   if (closedOn !== pathname) {
     // Переход — закрываем лист «Ещё».
     setClosedOn(pathname);
     if (moreOpen) setMoreOpen(false);
   }
+  // Несданные отметки журнала после выхода пропадут: переспрашиваем, а на выходе стираем черновики вкладки.
+  async function confirmDrafts(): Promise<boolean> {
+    if (!hasJournalDrafts()) return true;
+    return dialogs.confirm("Отметки журнала не сданы и пропадут после выхода. Всё равно выйти?", { confirmLabel: "Выйти", danger: true });
+  }
+
+  async function handleLogout() {
+    if (!(await confirmDrafts())) return;
+    clearJournalDrafts();
+    logout();
+  }
+
+  async function handleLogoutAll() {
+    const ok = await dialogs.confirm(
+      "Выйти на всех устройствах? Вход завершится везде: на этом компьютере, телефоне и в других браузерах. Пароль не меняется.",
+      { confirmLabel: "Выйти везде" }
+    );
+    if (!ok || !(await confirmDrafts())) return;
+    try {
+      await logoutAll();
+      clearJournalDrafts();
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : "Не удалось выйти на всех устройствах — проверьте связь", "error");
+    }
+  }
+
   // Быстрый переход: Ctrl+K / ⌘K откуда угодно, «/» — если курсор не в поле ввода.
   const [paletteOpen, setPaletteOpen] = useState(false);
   useEffect(() => {
@@ -191,16 +219,33 @@ export default function Layout({ children }: { children: ReactNode }) {
           <div className="app-header__user">
             {user && (
               <>
-                <NotificationBell />
-                <UserMenu name={user.full_name} onLogout={logout} />
+                <NotificationBell
+                  counts={{
+                    unread: counters.notifications ?? 0,
+                    unread_work: counters.notifications_work,
+                    unread_manage: counters.notifications_manage,
+                  }}
+                  onCountsChange={setUnread}
+                />
+                <UserMenu
+                  name={user.full_name}
+                  onLogout={handleLogout}
+                  onLogoutAll={handleLogoutAll}
+                  carryOver={showCarryOver ? user.carry_over_marks ?? true : undefined}
+                  onCarryOverChange={changeCarryOver}
+                />
               </>
             )}
           </div>
         </header>
         <main className="app-main">
           <h1 className="visually-hidden">{title}</h1>
-          {/* Раздел, который грузится по требованию: меню остаётся на месте, пока он подгружается. */}
-          <Suspense fallback={<p className="hint">Загрузка…</p>}>{children}</Suspense>
+          <WhatsNewBanner />
+          {/* Раздел, который грузится по требованию: меню остаётся на месте, пока он подгружается. Сбой раздела
+              не роняет меню, а переход в другой раздел (key) снимает сообщение об ошибке. */}
+          <ErrorBoundary key={pathname}>
+            <Suspense fallback={<p className="hint">Загрузка…</p>}>{children ?? <Outlet />}</Suspense>
+          </ErrorBoundary>
         </main>
       </div>
 

@@ -15,12 +15,13 @@ const get = vi.mocked(api.get);
 const post = vi.mocked(api.post);
 
 function Probe() {
-  const { user, loading, login, logout } = useAuth();
+  const { user, loading, login, logout, logoutAll } = useAuth();
   return (
     <div>
-      <span data-testid="state">{loading ? "loading" : user ? `user:${user.role}` : "anonymous"}</span>
+      <span data-testid="state">{loading ? "loading" : user ? `user:${user.role}:${user.full_name}` : "anonymous"}</span>
       <button onClick={() => login("kurator", "pw").catch(() => undefined)}>login</button>
       <button onClick={logout}>logout</button>
+      <button onClick={() => logoutAll().catch(() => undefined)}>logout-all</button>
     </div>
   );
 }
@@ -37,7 +38,7 @@ describe("AuthProvider", () => {
     get.mockResolvedValue(makeUser("curator"));
     renderAuth();
     expect(screen.getByTestId("state")).toHaveTextContent("loading");
-    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("user:curator"));
+    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent(/^user:curator/));
     expect(get).toHaveBeenCalledWith("/auth/me");
   });
 
@@ -55,7 +56,7 @@ describe("AuthProvider", () => {
     post.mockResolvedValue({ access_token: "new-token" });
     get.mockResolvedValue(makeUser("admin"));
     await user.click(screen.getByRole("button", { name: "login" }));
-    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("user:admin"));
+    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent(/^user:admin/));
     expect(post).toHaveBeenCalledWith("/auth/login", { username: "kurator", password: "pw" });
     expect(JSON.stringify({ ...localStorage })).not.toContain("new-token");
   });
@@ -71,21 +72,37 @@ describe("AuthProvider", () => {
     expect(screen.getByTestId("state")).toHaveTextContent("anonymous");
   });
 
-  it("выход отзывает сессию на сервере и убирает пользователя", async () => {
+  it("выход (только этот браузер) просит сервер стереть cookie и убирает пользователя", async () => {
     const user = userEvent.setup();
     post.mockResolvedValue(undefined);
     get.mockResolvedValue(makeUser("curator"));
     renderAuth();
-    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("user:curator"));
+    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent(/^user:curator/));
     await user.click(screen.getByRole("button", { name: "logout" }));
     expect(screen.getByTestId("state")).toHaveTextContent("anonymous");
     expect(post).toHaveBeenCalledWith("/auth/logout");
   });
 
+  it("выход на всех устройствах: интерфейс выходит, когда сервер подтвердил", async () => {
+    const user = userEvent.setup();
+    get.mockResolvedValue(makeUser("curator"));
+    renderAuth();
+    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent(/^user:curator/));
+
+    post.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    await user.click(screen.getByRole("button", { name: "logout-all" }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/auth/logout-all"));
+    expect(screen.getByTestId("state")).toHaveTextContent(/^user:curator/);
+
+    post.mockResolvedValueOnce(undefined);
+    await user.click(screen.getByRole("button", { name: "logout-all" }));
+    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("anonymous"));
+  });
+
   it("401 на любом запросе (событие приложения) разлогинивает без перезагрузки страницы", async () => {
     get.mockResolvedValue(makeUser("curator"));
     renderAuth();
-    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("user:curator"));
+    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent(/^user:curator/));
     act(() => {
       window.dispatchEvent(new Event("auth:unauthorized"));
     });
@@ -98,5 +115,56 @@ describe("useAuth", () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     expect(() => render(<Probe />)).toThrow(/внутри AuthProvider/);
     spy.mockRestore();
+  });
+});
+
+describe("AuthProvider — продление сессии, пока вкладка открыта", () => {
+  function setVisibility(state: "visible" | "hidden") {
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }
+
+  it("каждые полчаса спрашивает /auth/me, в скрытой вкладке — нет", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      get.mockResolvedValue(makeUser("curator"));
+      renderAuth();
+      await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent(/^user:curator/));
+      expect(get).toHaveBeenCalledTimes(1);
+
+      setVisibility("visible");
+      await act(async () => vi.advanceTimersByTimeAsync(30 * 60_000));
+      expect(get).toHaveBeenCalledTimes(2);
+
+      setVisibility("hidden");
+      await act(async () => vi.advanceTimersByTimeAsync(30 * 60_000));
+      expect(get).toHaveBeenCalledTimes(2);
+
+      // Вернулись во вкладку спустя время — продлеваем сразу.
+      setVisibility("visible");
+      await waitFor(() => expect(get).toHaveBeenCalledTimes(3));
+    } finally {
+      vi.useRealTimers();
+      setVisibility("visible");
+    }
+  });
+
+  it("сетевая ошибка при продлении не разлогинивает, изменившиеся данные пользователя подхватываются", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      get.mockResolvedValueOnce(makeUser("curator", { full_name: "Иванова" }));
+      renderAuth();
+      await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("user:curator:Иванова"));
+
+      get.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+      await act(async () => vi.advanceTimersByTimeAsync(30 * 60_000));
+      expect(screen.getByTestId("state")).toHaveTextContent("user:curator:Иванова");
+
+      get.mockResolvedValueOnce(makeUser("curator", { full_name: "Петрова" }));
+      await act(async () => vi.advanceTimersByTimeAsync(30 * 60_000));
+      await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("user:curator:Петрова"));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

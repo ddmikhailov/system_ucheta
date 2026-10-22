@@ -6,6 +6,7 @@ import { ApiError, api } from "../api/client";
 import { AuthContext } from "../auth/authContextObject";
 import type { UserActivityEntry, UserAdmin, UserProfile } from "../api/types";
 import { makeUser } from "../test/utils";
+import { todayIso } from "../utils/date";
 import UserProfilePage from "./UserProfilePage";
 
 vi.mock("../api/client", async (importOriginal) => {
@@ -35,7 +36,6 @@ function profile(u: UserAdmin, over: Partial<UserProfile> = {}): UserProfile {
     user: u,
     department_name: "Диджитал",
     created_at: "2026-09-01T07:00:00",
-    last_activity_at: "2026-10-05T09:30:00",
     groups: [
       { group_id: 7, group_code: "СА172", course: 1, department_name: "Диджитал", role_type: "curator", start_date: "2026-09-01", end_date: null, is_current: true, students_count: 24 },
       { group_id: 5, group_code: "ИИ111", course: 2, department_name: "Диджитал", role_type: "deputy", start_date: "2025-09-01", end_date: "2026-06-30", is_current: false, students_count: 0 },
@@ -47,7 +47,6 @@ function profile(u: UserAdmin, over: Partial<UserProfile> = {}): UserProfile {
     notes_written_30d: 4,
     follow_ups_open: 2,
     dossier_views_30d: 9,
-    activity_30d: Array.from({ length: 30 }, (_, i) => ({ date: `2026-09-${String(i + 1).padStart(2, "0")}`, count: i % 3 })),
     ...over,
   };
 }
@@ -60,6 +59,15 @@ const ACTIVITY: UserActivityEntry[] = [
 
 let current: UserAdmin;
 
+// Месяцы считаются от сегодняшнего: текущий и один архивный (август 2026 — заведомо в прошлом).
+const THIS_MONTH = todayIso().slice(0, 7);
+const MONTHS = [{ month: THIS_MONTH, count: 3 }, { month: "2026-08", count: 1 }];
+const JOURNAL = {
+  last_activity_at: "2026-10-05T09:30:00",
+  activity_30d: Array.from({ length: 30 }, (_, i) => ({ date: `2026-09-${String(i + 1).padStart(2, "0")}`, count: i % 3 })),
+  months: MONTHS,
+};
+
 function Where() {
   const l = useLocation();
   return <div data-testid="where">{l.pathname + l.search + JSON.stringify(l.state ?? null)}</div>;
@@ -70,7 +78,9 @@ function open({ role = "admin", me = {}, tab, target }: { role?: string; me?: ob
   get.mockImplementation(async (path: string) => {
     if (path === `/admin/users/${current.id}/profile`) return profile(current);
     if (path === "/admin/departments") return DEPARTMENTS;
+    if (path === `/admin/users/${current.id}/activity/overview`) return JOURNAL;
     if (path.startsWith(`/admin/users/${current.id}/activity`)) {
+      if (path.includes("month=2026-08")) return { items: [ACTIVITY[2]], next_before_id: null };
       if (path.includes("before_id=20")) return { items: [], next_before_id: null };
       if (path.includes("area=day")) return { items: [ACTIVITY[0]], next_before_id: null };
       if (path.includes("before_id=29")) return { items: [ACTIVITY[2]], next_before_id: null };
@@ -79,7 +89,7 @@ function open({ role = "admin", me = {}, tab, target }: { role?: string; me?: ob
     throw new Error(`неожиданный запрос ${path}`);
   });
   render(
-    <AuthContext.Provider value={{ user: makeUser(role, { id: 1, ...me }), loading: false, login: vi.fn(), logout: vi.fn(), refresh: vi.fn() }}>
+    <AuthContext.Provider value={{ user: makeUser(role, { id: 1, ...me }), loading: false, login: vi.fn(), logout: vi.fn(), logoutAll: vi.fn(), refresh: vi.fn() }}>
       <MemoryRouter initialEntries={[`/admin/users/${current.id}${tab ? `?tab=${tab}` : ""}`]}>
         <Routes>
           <Route path="/admin/users/:userId" element={<UserProfilePage />} />
@@ -108,7 +118,7 @@ describe("UserProfilePage — обзор", () => {
     expect(within(screen.getByText("Задачи просрочены").closest(".kpi") as HTMLElement).getByText("из 5 за 90 дней")).toBeInTheDocument();
   });
 
-  it("обзор: дисциплина, задачи, работа за 30 дней и активность", async () => {
+  it("обзор: дисциплина, задачи, работа за 30 дней", async () => {
     open();
     await screen.findByRole("heading", { name: "Иванова Анна" });
     expect(screen.getByText(/06\.09\.2026 — 05\.10\.2026/)).toBeInTheDocument();
@@ -116,7 +126,6 @@ describe("UserProfilePage — обзор", () => {
     const work = screen.getByRole("heading", { name: "Работа за 30 дней" }).closest("section") as HTMLElement;
     expect(within(work).getByText("Отметок поставлено").nextSibling).toHaveTextContent("31");
     expect(within(work).getByText("Просмотров досье").nextSibling).toHaveTextContent("9");
-    expect(screen.getByText(/за 30 дней, активных/)).toHaveTextContent("30 действий за 30 дней, активных — 20 дней.");
   });
 
   it("группы: текущие и прошлые закрепления со ссылкой на журнал группы", async () => {
@@ -136,7 +145,7 @@ describe("UserProfilePage — обзор", () => {
   it("ошибка (чужое отделение) — сообщение сервера и ссылка назад", async () => {
     get.mockRejectedValue(new ApiError(403, "Пользователь не относится к вашему отделению"));
     render(
-      <AuthContext.Provider value={{ user: makeUser("dept_head"), loading: false, login: vi.fn(), logout: vi.fn(), refresh: vi.fn() }}>
+      <AuthContext.Provider value={{ user: makeUser("dept_head"), loading: false, login: vi.fn(), logout: vi.fn(), logoutAll: vi.fn(), refresh: vi.fn() }}>
         <MemoryRouter initialEntries={["/admin/users/5"]}>
           <Routes><Route path="/admin/users/:userId" element={<UserProfilePage />} /></Routes>
         </MemoryRouter>
@@ -146,10 +155,10 @@ describe("UserProfilePage — обзор", () => {
     expect(screen.getByRole("link", { name: "← К пользователям" })).toHaveAttribute("href", "/admin?tab=users");
   });
 
-  it("воспитательный отдел смотрит, но вкладки «Управление» нет", async () => {
+  it("воспитательный отдел: вкладка «Управление» есть ради выдачи пароля, без правки учётной записи", async () => {
     open({ role: "edu_department" });
     await screen.findByRole("heading", { name: "Иванова Анна" });
-    expect(screen.queryByRole("tab", { name: "Управление" })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Управление" })).toBeInTheDocument();
     expect(get).not.toHaveBeenCalledWith("/admin/departments");
   });
 });
@@ -158,14 +167,14 @@ describe("UserProfilePage — действия", () => {
   it("лента по дням со временем и подписями; «Показать ещё» догружает старые", async () => {
     const u = open({ tab: "activity" });
     expect(await screen.findByText("Сдал(а) день")).toBeInTheDocument();
-    expect(get).toHaveBeenCalledWith("/admin/users/2/activity?limit=50");
+    expect(get).toHaveBeenCalledWith(`/admin/users/2/activity?limit=50&month=${THIS_MONTH}`);
     const note = screen.getByText(/Удалил\(а\) запись индивидуальной работы/).closest("li") as HTMLElement;
     expect(within(note).getByRole("link", { name: "открыть" })).toHaveAttribute("href", "/students/42");
     expect(note.querySelector("time")).toHaveAttribute("dateTime", "2026-10-05T08:10:00");
 
     await u.click(screen.getByRole("button", { name: "Показать ещё" }));
     expect(await screen.findByText("something.new")).toBeInTheDocument(); // неизвестное действие — кодом
-    expect(get).toHaveBeenCalledWith("/admin/users/2/activity?limit=50&before_id=29");
+    expect(get).toHaveBeenCalledWith(`/admin/users/2/activity?limit=50&month=${THIS_MONTH}&before_id=29`);
     expect(screen.queryByRole("button", { name: "Показать ещё" })).not.toBeInTheDocument();
   });
 
@@ -173,8 +182,50 @@ describe("UserProfilePage — действия", () => {
     const u = open({ tab: "activity" });
     await screen.findByText("Сдал(а) день");
     await u.selectOptions(screen.getByLabelText("Что показать"), "day");
-    await waitFor(() => expect(get).toHaveBeenCalledWith("/admin/users/2/activity?limit=50&area=day"));
+    await waitFor(() => expect(get).toHaveBeenCalledWith(`/admin/users/2/activity?limit=50&month=${THIS_MONTH}&area=day`));
     await waitFor(() => expect(screen.queryByText(/Удалил\(а\) запись/)).not.toBeInTheDocument());
+  });
+});
+
+describe("UserProfilePage — журнал только по запросу", () => {
+  it("профиль не запрашивает журнал; вкладка «Журнал» грузит ритм, последнее действие и ленту", async () => {
+    const u = open();
+    await screen.findByRole("heading", { name: "Иванова Анна" });
+    expect(get.mock.calls.some(([path]) => String(path).includes("/activity"))).toBe(false);
+    expect(screen.queryByText(/последнее действие/i)).not.toBeInTheDocument();
+
+    await u.click(screen.getByRole("tab", { name: "Журнал" }));
+    expect(await screen.findByText(/Последнее действие — /)).toBeInTheDocument();
+    expect(screen.getByText(/за 30 дней, активных/)).toHaveTextContent("30 действий за 30 дней, активных — 20 дней.");
+    expect(get).toHaveBeenCalledWith("/admin/users/2/activity/overview");
+    expect(await screen.findByText("Сдал(а) день")).toBeInTheDocument();
+  });
+});
+
+describe("UserProfilePage — помесячный архив действий", () => {
+  it("по умолчанию текущий месяц, прошлые — в «Архиве»; выбранный месяц уходит на сервер", async () => {
+    const u = open({ tab: "activity" });
+    await screen.findByText("Сдал(а) день");
+    const select = screen.getByLabelText("Месяц");
+    expect(select).toHaveValue(THIS_MONTH);
+    const archived = await within(select).findByRole("option", { name: "Август 2026 · 1" });
+    expect(archived.closest("optgroup")).toHaveAttribute("label", "Архив");
+    await u.selectOptions(select, "2026-08");
+    await waitFor(() => expect(get).toHaveBeenCalledWith("/admin/users/2/activity?limit=50&month=2026-08"));
+    expect(await screen.findByText("something.new")).toBeInTheDocument();
+  });
+
+  it("«Скачать месяц» собирает все страницы месяца в файл для Excel", async () => {
+    const createObjectURL = vi.fn(() => "blob:журнал");
+    Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    const u = open({ tab: "activity" });
+    await screen.findByText("Сдал(а) день");
+    await u.click(screen.getByRole("button", { name: "Скачать месяц (Excel)" }));
+    await waitFor(() => expect(click).toHaveBeenCalled());
+    expect(get).toHaveBeenCalledWith(`/admin/users/2/activity?limit=100&month=${THIS_MONTH}`);
+    expect(get).toHaveBeenCalledWith(`/admin/users/2/activity?limit=100&month=${THIS_MONTH}&before_id=29`);
+    expect(click.mock.contexts[0]).toHaveProperty("download", `zhurnal_deystviy_2_${THIS_MONTH}.csv`);
   });
 });
 

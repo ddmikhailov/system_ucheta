@@ -8,6 +8,14 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class ForgotPasswordRequest(BaseModel):
+    username: str = Field(max_length=150)
+
+
+class ForgotPasswordResponse(BaseModel):
+    detail: str
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -28,8 +36,12 @@ class MeResponse(BaseModel):
     groups: list[MeGroupInfo] = []
     dept_head_name: str | None = None
     must_change_password: bool = False
+    # Подставлять ли в журнал дня отметки прошлого учебного дня (личная настройка, см. User.carry_over_marks).
+    carry_over_marks: bool = True
     # Включённые модули платформы (core/modules.py): по ним интерфейс прячет выключенные разделы.
     modules: list[str] = []
+    # Версия, чью плашку «Что нового» пользователь уже закрыл (интерфейс сравнивает со своей).
+    seen_release: str | None = None
     # Заполняется только ответом /auth/change-password (см. TODO.md 2 —
     # смена пароля отзывает все ранее выданные токены, включая тот, которым
     # выполнен сам этот запрос, поэтому новый нужно вернуть тут же).
@@ -41,3 +53,7 @@ class ChangePasswordRequest(BaseModel):
     # Длина и сложность — в validate_password_strength (понятные сообщения вместо 422).
     new_password: str = Field(max_length=MAX_PASSWORD_LENGTH)
 
+
+
+class PreferencesUpdate(BaseModel):
+    carry_over_marks: bool | None = None

@@ -119,7 +119,7 @@ def test_admin_can_promote_to_tutor(client, admin_headers, imported, db):
     assert r.json()["role"] == "tutor"
 
 
-def test_dept_head_cannot_promote_to_admin_or_tutor(client, dept_head_headers, imported, db):
+def test_dept_head_cannot_promote_to_admin(client, dept_head_headers, imported, db):
     from app.models import Role, User
 
     curator_role = db.query(Role).filter(Role.code == "curator").one()
@@ -128,8 +128,21 @@ def test_dept_head_cannot_promote_to_admin_or_tutor(client, dept_head_headers, i
     r = client.patch(f"/admin/users/{curator.id}", headers=dept_head_headers, json={"role": "admin"})
     assert r.status_code == 403
 
-    r = client.patch(f"/admin/users/{curator.id}", headers=dept_head_headers, json={"role": "tutor"})
-    assert r.status_code == 403
+
+
+def test_dept_head_can_make_edu_department_in_own_department(client, dept_head_headers, imported, db):
+    """Воспитательный отдел закреплён за отделением, поэтому зав. отделением назначает и эту роль (как админ в отделении)."""
+    from app.models import Role, User
+
+    curator_role = db.query(Role).filter(Role.code == "curator").one()
+    curator = db.query(User).filter(User.role_id == curator_role.id).first()
+    department_id = curator.department_id
+
+    r = client.patch(f"/admin/users/{curator.id}", headers=dept_head_headers, json={"role": "edu_department"})
+    assert r.status_code == 200
+    assert r.json()["role"] == "edu_department"
+    db.refresh(curator)
+    assert curator.department_id == department_id
 
 
 def test_dept_head_can_promote_curator_to_dept_head_in_own_department(client, dept_head_headers, imported, db):

@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
-import { ApiError } from "../api/client";
+import { api, ApiError } from "../api/client";
 import { CollegeLogo } from "../components/BrandMark";
 
 export default function LoginPage() {
@@ -11,6 +11,8 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // «Забыли пароль?»: человек вводит логин в форму и нажимает ссылку, администрация получает уведомление и выдаёт временный пароль.
+  const [forgotNotice, setForgotNotice] = useState<string | null>(null);
   const { login, user, loading } = useAuth();
   const navigate = useNavigate();
 
@@ -23,6 +25,24 @@ export default function LoginPage() {
       navigate("/");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Не удалось войти");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleForgot() {
+    setError(null);
+    setForgotNotice(null);
+    if (!username.trim()) {
+      setError("Введите логин в поле выше, затем снова нажмите «Забыли пароль?»");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await api.post<{ detail: string }>("/auth/forgot-password", { username: username.trim() });
+      setForgotNotice(res.detail);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не удалось отправить запрос");
     } finally {
       setBusy(false);
     }
@@ -84,9 +104,14 @@ export default function LoginPage() {
           </label>
 
           {error && <div className="error-text">{error}</div>}
+          {forgotNotice && <div className="day-status submitted">{forgotNotice}</div>}
 
           <button type="submit" disabled={busy}>
             {busy ? "Входим…" : "Войти"}
+          </button>
+
+          <button type="button" className="link-btn" onClick={handleForgot} disabled={busy}>
+            Забыли пароль?
           </button>
         </form>
       </div>

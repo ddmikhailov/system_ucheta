@@ -38,13 +38,14 @@ describe("leadsGroups", () => {
 });
 
 describe("assignableRoles", () => {
-  it("админ — любые; зав. отделением — рабочие роли и зав. отделением; тьютор — без зав. отделением; остальные — никакие", () => {
+  it("админ — любые; зав. отделением — рабочие роли, зав. отделением, тьютор и воспитательный отдел; тьютор — без зав. отделением; остальные — никакие", () => {
     expect(assignableRoles("admin").sort()).toEqual(Object.values(ROLE).sort());
     expect(assignableRoles("dept_head")).toEqual(
-      expect.arrayContaining(["curator", "deputy_curator", "social_pedagogue", "psychologist", "dept_head"])
+      expect.arrayContaining([
+        "curator", "deputy_curator", "social_pedagogue", "psychologist", "dept_head", "tutor", "edu_department",
+      ])
     );
     expect(assignableRoles("dept_head")).not.toContain("admin");
-    expect(assignableRoles("dept_head")).not.toContain("tutor");
     expect(assignableRoles("tutor")).not.toContain("dept_head");
     expect(assignableRoles("tutor")).toContain("psychologist");
     for (const role of ["curator", "edu_department", "social_pedagogue", undefined]) {
@@ -74,6 +75,9 @@ describe("состав групп ролей", () => {
     expect(DEPARTMENT_SCOPED_ROLES).toContain("tutor");
     expect(COLLEGE_WIDE_ROLES).not.toContain("tutor");
     expect(DEPARTMENT_REQUIRED_ROLES).not.toContain("admin");
-    expect(DEPARTMENT_REQUIRED_ROLES).not.toContain("edu_department");
+    // воспитательный отдел закреплён за отделением и видит только его
+    expect(DEPARTMENT_REQUIRED_ROLES).toContain("edu_department");
+    expect(DEPARTMENT_SCOPED_ROLES).toContain("edu_department");
+    expect(COLLEGE_WIDE_ROLES).not.toContain("edu_department");
   });
 });

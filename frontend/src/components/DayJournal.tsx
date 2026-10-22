@@ -1,33 +1,30 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useBlocker, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/useAuth";
 import { MODULE } from "../constants/modules";
 import { isModuleOn } from "../utils/modules";
 import AbsencePeriodModal from "./AbsencePeriodModal";
 import DayActionsBar from "./DayActionsBar";
-import MarkCodeButtons from "./MarkCodeButtons";
 import MarkCommentModal from "./MarkCommentModal";
 import { scrollToTop } from "../utils/scroll";
-import type { MarkCodeOption, MonthDayStatus, MyDayRhythmDay, RosterResponse } from "../api/types";
+import { usePatchSearch } from "../hooks/useUrlState";
+import type { MarkCodeOption, MonthDayStatus, MyDayRhythmDay, RosterAbsencePeriod, RosterResponse } from "../api/types";
 import { formatServerDateTime, todayIso } from "../utils/date";
 import SearchSelect from "./SearchSelect";
 import { dialogs, toast } from "../utils/feedback";
+import { useUnsavedWarning } from "../hooks/useUnsavedWarning";
+import { clearJournalDraft, journalDraftKey, readJournalDraft, saveJournalDraft } from "../utils/journalDraft";
 import GroupListModal from "./GroupListModal";
 import StudentCardModal from "./StudentCardModal";
 import GroupRhythm from "./GroupRhythm";
-import { formatPercent } from "../utils/percent";
 import DayNavigator from "./journal/DayNavigator";
 import DaySummary from "./journal/DaySummary";
 import ChangeCard from "./journal/ChangeCard";
+import RosterTable from "./journal/RosterTable";
+import type { PendingMark } from "./journal/RosterTable";
 
 const NON_WORKING = ["weekend", "holiday", "vacation"];
-
-interface PendingMark {
-  mark_code: string;
-  comment: string;
-  basis_reference: string;
-}
 
 /** Группа в выпадающем списке журнала: подпись формирует вызывающая сторона. */
 export interface JournalGroup {
@@ -67,6 +64,8 @@ function pendingFrom(r: RosterResponse): Record<number, PendingMark> {
   return result;
 }
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 /** Общий журнал дня: выбор группы и дня, календарь месяца, итоги сданного дня или форма отметок.
  * Сданный день показывается итогами; «Редактировать» открывает форму. Правка куратором уже сданного
  * прошлого дня уходит на проверку зав. отделением (запрос с причиной), а не сразу в журнал. */
@@ -83,6 +82,7 @@ export default function DayJournal({
   onSubmitted,
 }: DayJournalProps) {
   const { user } = useAuth();
+  const userId = user?.id;
   const [searchParams] = useSearchParams();
   const deepLinkGroupId = searchParams.get("group");
   const deepLinkDate = searchParams.get("date");
@@ -92,7 +92,7 @@ export default function DayJournal({
   const [groupId, setGroupId] = useState<number | null>(fixedGroupId ?? (deepLinkGroupId ? Number(deepLinkGroupId) : null));
   const [listOpen, setListOpen] = useState(false);
   const [cardsOpen, setCardsOpen] = useState(false);
-  const [date, setDate] = useState(deepLinkDate && deepLinkDate <= today ? deepLinkDate : today);
+  const [date, setDate] = useState(deepLinkDate && ISO_DATE.test(deepLinkDate) ? deepLinkDate : today);
   const [roster, setRoster] = useState<RosterResponse | null>(null);
   const [markCodes, setMarkCodes] = useState<MarkCodeOption[]>([]);
   const [pending, setPending] = useState<Record<number, PendingMark>>({});
@@ -102,13 +102,36 @@ export default function DayJournal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPeriodForm, setShowPeriodForm] = useState<number | null>(null);
+  const [editPeriod, setEditPeriod] = useState<RosterAbsencePeriod | null>(null);
   const [showCommentFor, setShowCommentFor] = useState<number | null>(null);
   const [groupsLoaded, setGroupsLoaded] = useState(false);
   const [groupsError, setGroupsError] = useState<string | null>(null);
-  const [riskPercent, setRiskPercent] = useState(85);
+  const [thresholds, setThresholds] = useState({ risk_unexcused_percent: 40, risk_attendance_percent: 85 });
   const [firstPeriod, setFirstPeriod] = useState("");
   // Выбранное отделение; пока не выбирали — отделение текущей группы.
   const [departmentChoice, setDepartmentChoice] = useState<number | null>(null);
+  // Черновик в sessionStorage — для того дня, что сейчас загружен в форму (а не выбран: новый ещё грузится).
+  const draftKey = useRef<string | null>(null);
+  const restoredKey = useRef<string | null>(null);
+
+  // Группа и день — в адресе (сегодняшний день не пишем): из карточки студента и после обновления страницы
+  // журнал открывается там же. Будущий день (план отсутствий) тоже в адресе: иначе адрес без даты тут же
+  // возвращал журнал на сегодня, и «Сохранить план» сдавал сегодняшний день. Браузерная «Назад» и ссылка из списка
+  // исправлений меняют адрес — журнал переходит к этой группе и дню.
+  const patchSearch = usePatchSearch();
+  useEffect(() => {
+    patchSearch({
+      ...(fixedGroupId ? {} : { group: groupId === null ? null : String(groupId) }),
+      date: date === today ? null : date,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupId, date]);
+  useEffect(() => {
+    if (!fixedGroupId && deepLinkGroupId && Number(deepLinkGroupId) !== groupId) setGroupId(Number(deepLinkGroupId));
+    const urlDate = deepLinkDate && ISO_DATE.test(deepLinkDate) ? deepLinkDate : today;
+    if (urlDate !== date) setDate(urlDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinkGroupId, deepLinkDate]);
 
   function loadGroups() {
     fetchGroups()
@@ -126,11 +149,15 @@ export default function DayJournal({
 
   useEffect(() => {
     loadGroups();
-    api.get<MarkCodeOption[]>("/curator/mark-codes").then(setMarkCodes);
     api
-      .get<{ risk_attendance_percent: number }>("/curator/settings")
-      .then((s) => setRiskPercent(s.risk_attendance_percent))
-      .catch(() => {});
+      .get<MarkCodeOption[]>("/curator/mark-codes")
+      .then(setMarkCodes)
+      .catch(() => toast("Не удалось загрузить коды отметок — обновите страницу", "error"));
+    api
+      .get<{ risk_unexcused_percent: number; risk_attendance_percent: number }>("/curator/settings")
+      .then((s) => setThresholds({ risk_unexcused_percent: s.risk_unexcused_percent, risk_attendance_percent: s.risk_attendance_percent }))
+      // Без настроек подсветка риска идёт по порогам по умолчанию — журнал работает.
+      .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -141,15 +168,38 @@ export default function DayJournal({
     setEditing(false);
   }, []);
 
+  // Несданные отметки этого дня из черновика вкладки: сессия истекла, страницу перезагрузили или ушли с неё.
+  // Только если день на сервере не менялся с начала правки — иначе черновик устарел и стирается.
+  const restoreDraft = useCallback((r: RosterResponse, key: string) => {
+    const draft = readJournalDraft(key);
+    if (!draft) return;
+    if (draft.baseline !== JSON.stringify(pendingFrom(r)) || draft.submitted !== r.is_submitted) {
+      clearJournalDraft(key);
+      return;
+    }
+    const editable = new Set(r.entries.filter((e) => !e.is_locked).map((e) => e.student_id));
+    setPending(Object.fromEntries(Object.entries(draft.pending).filter(([id]) => editable.has(Number(id)))));
+    setFirstPeriod(draft.firstPeriod);
+    if (r.is_submitted) setEditing(true);
+    // День перечитывается и после действий на странице (период отсутствия, решение по исправлению) — сообщаем один раз.
+    if (restoredKey.current !== key) toast("Восстановлены несданные отметки этого дня", "info");
+    restoredKey.current = key;
+  }, []);
+
   const loadRoster = useCallback(async () => {
     if (!groupId) return;
     setError(null);
     try {
-      applyRoster(await api.get<RosterResponse>(`/curator/groups/${groupId}/day?date=${date}`));
+      const r = await api.get<RosterResponse>(`/curator/groups/${groupId}/day?date=${date}`);
+      applyRoster(r);
+      draftKey.current = userId != null ? journalDraftKey(userId, groupId, date) : null;
+      if (draftKey.current) restoreDraft(r, draftKey.current);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Не удалось загрузить день");
     }
-  }, [groupId, date, applyRoster]);
+    // carryOver: смена настройки «подставлять отметки прошлого дня» в меню пользователя перечитывает журнал.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupId, date, userId, applyRoster, restoreDraft, user?.carry_over_marks]);
 
   useEffect(() => {
     loadRoster();
@@ -187,9 +237,37 @@ export default function DayJournal({
   const markCodeByCode = useMemo(() => new Map(markCodes.map((m) => [m.code, m])), [markCodes]);
   const selectedDayType = monthStatus.find((d) => d.date === date)?.day_type;
   const isNonWorkingDay = selectedDayType != null && NON_WORKING.includes(selectedDayType);
-  const absentCount = Object.values(pending).length;
+  // Опоздание — присутствие: в счётчике оно отдельно от отсутствующих.
+  const markedCount = Object.values(pending).length;
+  const lateCount = Object.values(pending).filter((p) => markCodeByCode.get(p.mark_code)?.counts_as_present).length;
+  const absentCount = markedCount - lateCount;
   // Есть несохранённые правки: форма открыта и отличается от загруженного дня.
   const dirty = !!roster && (editing || !roster.is_submitted) && JSON.stringify(pending) !== JSON.stringify(pendingFrom(roster));
+
+  // Каждая правка сразу ложится в черновик вкладки; сдали день или отменили правку — черновик стирается.
+  useEffect(() => {
+    const key = draftKey.current;
+    if (!key || !roster) return;
+    if (dirty) {
+      saveJournalDraft(key, { pending, firstPeriod, baseline: JSON.stringify(pendingFrom(roster)), submitted: roster.is_submitted });
+    } else {
+      clearJournalDraft(key);
+    }
+  }, [dirty, pending, firstPeriod, roster]);
+
+  // Закрытие вкладки, F5, внешняя ссылка — браузер переспросит.
+  useUnsavedWarning(dirty);
+  // Переход по меню и «Назад» — спросим сами (смена группы, дня и отделения спрашивает через confirmLeave).
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => dirty && currentLocation.pathname !== nextLocation.pathname);
+  useEffect(() => {
+    if (blocker.state !== "blocked") return;
+    dialogs
+      .confirm("Отметки этого дня ещё не сданы. Уйти со страницы? Черновик останется в этой вкладке до сдачи дня.", {
+        confirmLabel: "Уйти",
+        cancelLabel: "Остаться",
+      })
+      .then((ok) => (ok ? blocker.proceed() : blocker.reset()));
+  }, [blocker]);
 
   // Групп много (весь колледж) — список режется по отделению: сначала отделение, потом группа.
   const departments = useMemo(() => {
@@ -208,9 +286,13 @@ export default function DayJournal({
     showDepartments && activeDepartment != null ? groups.filter((g) => g.departmentId === activeDepartment) : groups;
   const groupCode = (groups.find((g) => g.id === groupId)?.label ?? "").split(" ")[0];
 
-  async function confirmLeave(what: string): Promise<boolean> {
+  // Уход на другой день или группу черновик не теряет; «Отменить правку» — стирает.
+  async function confirmLeave(what: string, discards = false): Promise<boolean> {
     if (!dirty) return true;
-    return dialogs.confirm(`Несохранённые изменения будут потеряны. ${what}?`, { confirmLabel: what });
+    const message = discards
+      ? `Несохранённые изменения будут потеряны. ${what}?`
+      : `Отметки этого дня ещё не сданы — черновик останется в этой вкладке. ${what}?`;
+    return dialogs.confirm(message, { confirmLabel: what });
   }
 
   async function changeDate(next: string) {
@@ -456,7 +538,7 @@ export default function DayJournal({
                     type="button"
                     className="link-btn day-status__action"
                     onClick={async () => {
-                      if (!(await confirmLeave("Отменить правку"))) return;
+                      if (!(await confirmLeave("Отменить правку", true))) return;
                       setPending(pendingFrom(roster));
                       setFirstPeriod(roster.first_period != null ? String(roster.first_period) : "");
                       setEditing(false);
@@ -469,6 +551,7 @@ export default function DayJournal({
 
               <DayActionsBar
                 absentCount={absentCount}
+                lateCount={lateCount}
                 busy={busy}
                 firstPeriod={firstPeriod}
                 onFirstPeriodChange={setFirstPeriod}
@@ -476,8 +559,8 @@ export default function DayJournal({
                 submitLabel={isFuture ? "Сохранить план" : reviewMode ? "Отправить на проверку" : roster.is_submitted ? "Сохранить изменения" : submitLabel}
                 onAllPresent={async () => {
                   if (
-                    absentCount > 0 &&
-                    !(await dialogs.confirm(`Отметки отсутствующих (${absentCount}) будут сброшены. Отметить всех присутствующими?`, {
+                    markedCount > 0 &&
+                    !(await dialogs.confirm(`Отметки (${markedCount}) будут сброшены. Отметить всех присутствующими?`, {
                       confirmLabel: "Отметить всех",
                     }))
                   )
@@ -495,62 +578,19 @@ export default function DayJournal({
                 ))}
               </p>
 
-              <table className="roster-table compact-cards journal-roster">
-                <thead>
-                  <tr>
-                    <th>ФИО</th>
-                    <th>Статус</th>
-                    <th>Комментарий</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {roster.entries.map((entry) => {
-                    const current = pending[entry.student_id];
-                    const code = current?.mark_code ?? null;
-                    const risky = entry.is_risk;
-                    const hasComment = Boolean(current?.comment || current?.basis_reference);
-                    return (
-                      <tr key={entry.student_id} className={risky ? "risk-row" : ""}>
-                        <td data-label="ФИО">
-                          <Link to={`/students/${entry.student_id}`} className="link-btn">
-                            {entry.full_name}
-                          </Link>
-                        </td>
-                        <td data-label="Статус">
-                          {entry.is_locked ? (
-                            <span className="locked-badge" title={entry.basis_reference ?? ""}>
-                              {entry.mark_name}
-                            </span>
-                          ) : (
-                            <MarkCodeButtons value={code} markCodes={markCodes} onChange={(c) => setStudentMark(entry.student_id, c)} />
-                          )}
-                          {entry.is_draft_suggestion && !entry.is_locked && <span className="draft-badge">черновик со вчера</span>}
-                          {risky && (
-                            <span className="risk-badge" title={`Группа риска: посещаемость с начала семестра ниже ${riskPercent} %`}>
-                              риск: посещаемость {formatPercent(entry.attendance_percent)}
-                            </span>
-                          )}
-                        </td>
-                        <td data-label="Комментарий">
-                          {!entry.is_locked && code && (
-                            <button className="comment-btn" onClick={() => setShowCommentFor(entry.student_id)}>
-                              {hasComment ? "Комментарий добавлен" : "Добавить комментарий"}
-                            </button>
-                          )}
-                        </td>
-                        <td>
-                          {!entry.is_locked && !reviewMode && (
-                            <button className="link-btn" onClick={() => setShowPeriodForm(entry.student_id)}>
-                              Период
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <RosterTable
+                roster={roster}
+                pending={pending}
+                markCodes={markCodes}
+                thresholds={thresholds}
+                reviewMode={reviewMode}
+                onMark={setStudentMark}
+                onComment={setShowCommentFor}
+                onPeriod={(studentId, period) => {
+                  setEditPeriod(period);
+                  setShowPeriodForm(studentId);
+                }}
+              />
             </>
           )}
         </div>
@@ -569,12 +609,18 @@ export default function DayJournal({
 
       {showPeriodForm !== null && (
         <AbsencePeriodModal
+          period={editPeriod}
           studentId={showPeriodForm}
           studentName={roster?.entries.find((e) => e.student_id === showPeriodForm)?.full_name ?? ""}
           markCodes={markCodes}
-          onClose={() => setShowPeriodForm(null)}
+          onClose={() => {
+            setShowPeriodForm(null);
+            setEditPeriod(null);
+          }}
           onSaved={() => {
             setShowPeriodForm(null);
+            setEditPeriod(null);
+            loadMonthStatus();
             loadRoster();
             loadRhythm();
             scrollToTop();

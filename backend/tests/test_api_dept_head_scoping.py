@@ -116,7 +116,7 @@ def test_dept_head_cannot_assign_curator_from_other_department(client, dept_head
     assert r.status_code == 403
 
 
-def test_edu_department_can_assign_across_departments(client, edu_department_headers, other_department_setup):
+def test_edu_department_cannot_assign_across_departments(client, edu_department_headers, other_department_setup):
     other_group = other_department_setup["group"]
     other_curator = other_department_setup["curator"]
 
@@ -127,4 +127,4 @@ def test_edu_department_can_assign_across_departments(client, edu_department_hea
             "role_type": "curator", "start_date": "2026-09-01",
         },
     )
-    assert r.status_code == 201
+    assert r.status_code == 403
