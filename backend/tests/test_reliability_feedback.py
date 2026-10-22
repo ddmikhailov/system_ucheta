@@ -253,7 +253,7 @@ def test_purge_removes_audit_and_dossier_views_older_than_retention(db, seeded):
     db.add(student)
     db.flush()
     viewer = db.query(User).filter(User.username == "admin").one()
-    now = utcnow()
+    now = utcnow().replace(microsecond=0)  # DATETIME в MySQL без долей секунды: сравниваем ровно то, что сохранится
     old, fresh = now - datetime.timedelta(days=366), now - datetime.timedelta(days=364)
     for created in (old, fresh):
         db.add(AuditLog(action="mark.create", entity_type="student", entity_id=str(student.id), created_at=created))
