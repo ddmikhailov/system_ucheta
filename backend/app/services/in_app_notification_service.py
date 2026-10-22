@@ -31,6 +31,19 @@ def notify(
     return entry
 
 
+def in_category(category: str):
+    """Условие на вид уведомления: вкладка «Управление» или «Моя работа»."""
+    manage = InAppNotification.kind.in_(MANAGE_KINDS)
+    return manage if category == "manage" else ~manage
+
+
+def unread_counts(db: Session, user: User) -> tuple[int, int]:
+    """Непрочитанные уведомления пользователя: всего и из них во вкладке «Управление» — для колокольчика и общего
+    опроса счётчиков меню."""
+    unread = db.query(InAppNotification).filter(InAppNotification.user_id == user.id, InAppNotification.read_at.is_(None))
+    return unread.count(), unread.filter(in_category("manage")).count()
+
+
 def dept_head_for(db: Session, department_id: int | None) -> User | None:
     if department_id is None:
         return None

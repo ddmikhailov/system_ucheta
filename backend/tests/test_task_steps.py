@@ -141,7 +141,7 @@ def test_locked_step_has_no_reminders_and_is_not_overdue(client, admin_headers, 
     db.query(Task).filter(Task.id == two["id"]).update({"due_date": datetime.date.today() - datetime.timedelta(days=2)})
     db.commit()
     task_service.reset_reminder_throttle()
-    client.get("/notifications/unread-count", headers=curator_headers)
+    client.post("/notifications/check", headers=curator_headers)
     kinds = [n["kind"] for n in client.get("/notifications", headers=curator_headers).json()]
     assert "task_overdue" not in kinds
     assert _mine(client, curator_headers, two["id"])["is_overdue"] is False

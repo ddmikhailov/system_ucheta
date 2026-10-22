@@ -43,6 +43,8 @@ function visit(path: string, role: string | null, overrides = {}) {
 
 beforeEach(() => {
   get.mockReset();
+  // Layout при входе запускает проверку сроков задач (POST /notifications/check).
+  vi.mocked(api.post).mockResolvedValue({ unread: 0 });
 });
 
 describe("App — стартовая страница по роли", () => {

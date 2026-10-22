@@ -19,5 +19,6 @@ def my_day(user: User = Depends(get_current_user), db: Session = Depends(get_db)
 
 @router.get("/counters")
 def nav_counters(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, int]:
-    """Числа на пунктах меню — запрашиваются при каждом переходе, поэтому только подсчёт без списков."""
+    """Числа на пунктах меню и непрочитанные уведомления — интерфейс спрашивает их при переходе (не чаще раза
+    в 30 с) и по таймеру в видимой вкладке, поэтому только подсчёт без списков."""
     return my_day_service.nav_counters(db, user)

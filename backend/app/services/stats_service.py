@@ -180,6 +180,39 @@ def compute_period_stats(
     return stats
 
 
+def absent_totals_by_student(
+    db: Session, students: list[Student], date_from: datetime.date, date_to: datetime.date,
+) -> dict[int, int]:
+    """Дни отсутствия за период по каждому студенту — то же, что
+    `compute_period_stats(db, date_from, date_to, student_id=s.id).absent_total`, но несколькими запросами на
+    всех сразу, а не несколькими на каждого (PDF-табель группы на 30 человек делал сотни запросов к удалённой
+    базе). Учебные дни, как и там, берутся по текущей группе студента; отметки — все за эти дни."""
+    if not students:
+        return {}
+    days_by_group = {
+        gid: set(calendar_service.study_days_between(db, date_from, date_to, study_group_id=gid))
+        for gid in {s.study_group_id for s in students}
+    }
+    all_days = set().union(*days_by_group.values())
+    totals = {s.id: 0 for s in students}
+    if not all_days:
+        return totals
+    group_of = {s.id: s.study_group_id for s in students}
+    rows = db.execute(
+        select(AttendanceMark.student_id, AttendanceMark.date)
+        .join(MarkCode, MarkCode.id == AttendanceMark.mark_code_id)
+        .where(
+            AttendanceMark.student_id.in_(list(totals)),
+            AttendanceMark.date.in_(sorted(all_days)),
+            MarkCode.counts_as_present.is_(False),
+        )
+    ).all()
+    for row in rows:
+        if row.date in days_by_group[group_of[row.student_id]]:
+            totals[row.student_id] += 1
+    return totals
+
+
 def _current_responsible_name(group: StudyGroup, as_of: datetime.date) -> str | None:
     """Замещающий, если он сейчас активен, иначе куратор — тот же приоритет,
     что и в уведомлениях, но без

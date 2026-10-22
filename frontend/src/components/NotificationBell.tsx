@@ -8,18 +8,24 @@ import { formatServerDateTime } from "../utils/date";
 import { TabBar } from "./Tabs";
 
 type BellTab = "work" | "manage";
-interface UnreadCounts {
+export interface UnreadCounts {
   unread: number;
   unread_work?: number;
   unread_manage?: number;
 }
 
-const POLL_MS = 60_000;
-
-export default function NotificationBell() {
+/** Числа непрочитанных (всего и по вкладкам) приходят из общего опроса счётчиков меню (Layout → useNavCounters):
+ * колокольчик больше не опрашивает сервер сам — раньше это был ещё один запрос раз в минуту из каждой вкладки,
+ * даже скрытой. Отметки «прочитано» колокольчик пересчитывает сам и сообщает наверх. */
+export default function NotificationBell({
+  counts,
+  onCountsChange,
+}: {
+  counts: UnreadCounts;
+  onCountsChange: (counts: UnreadCounts) => void;
+}) {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [counts, setCounts] = useState<UnreadCounts>({ unread: 0 });
   const unread = counts.unread;
   // Вкладки «Моя работа» / «Управление» нужны тем, у кого есть управленческая роль (или уже пришло управленческое).
   const [tab, setTab] = useState<BellTab>("work");
@@ -38,19 +44,16 @@ export default function NotificationBell() {
     return () => document.removeEventListener("mousedown", onOutsideClick);
   }, [open]);
 
-  function refreshCount() {
-    api.get<UnreadCounts>("/notifications/unread-count").then(setCounts).catch(() => {});
-  }
-
-  useEffect(() => {
-    refreshCount();
-    const id = setInterval(refreshCount, POLL_MS);
-    return () => clearInterval(id);
-  }, []);
-
   function loadItems(forTab: BellTab) {
     const query = hasTabs ? `?category=${forTab}` : "";
     api.get<NotificationItem[]>(`/notifications${query}`).then(setItems).catch(() => {});
+  }
+
+  // Список открыт на вкладке activeTab, поэтому прочитанное уменьшает её счётчик.
+  function countsAfterRead(read: number): UnreadCounts {
+    if (!hasTabs) return { ...counts, unread: Math.max(0, unread - read) };
+    const key = activeTab === "manage" ? "unread_manage" : "unread_work";
+    return { ...counts, unread: Math.max(0, unread - read), [key]: Math.max(0, (counts[key] ?? 0) - read) };
   }
 
   function toggleOpen() {
@@ -68,13 +71,13 @@ export default function NotificationBell() {
   async function markAllRead() {
     await api.post(hasTabs ? `/notifications/read-all?category=${activeTab}` : "/notifications/read-all");
     setItems((prev) => prev.map((n) => ({ ...n, read_at: n.read_at ?? new Date().toISOString() })));
-    refreshCount();
+    onCountsChange(countsAfterRead(hasTabs ? (activeTab === "manage" ? counts.unread_manage : counts.unread_work) ?? 0 : unread));
   }
 
   async function markRead(id: number) {
     await api.post(`/notifications/${id}/read`);
     setItems((prev) => prev.map((n) => (n.id === id ? { ...n, read_at: new Date().toISOString() } : n)));
-    refreshCount();
+    onCountsChange(countsAfterRead(1));
   }
 
   // Раньше клик по уведомлению никуда не вёл (см. TODO.md 4) — уведомление о

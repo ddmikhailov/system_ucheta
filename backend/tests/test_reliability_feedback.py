@@ -279,7 +279,8 @@ def test_purge_runs_when_platform_is_opened(client, db, seeded):
     db.add(AuditLog(user_id=user.id, action="mark.create", entity_type="student", entity_id="1",
                     created_at=utcnow() - datetime.timedelta(days=400)))
     db.commit()
-    assert client.get("/notifications/unread-count", headers=_headers(client, "reporter")).status_code == 200
+    # Периодические задачи (и чистка журнала) запускает проверка при открытии платформы, а не чтение счётчика.
+    assert client.post("/notifications/check", headers=_headers(client, "reporter")).status_code == 200
     db.expire_all()
     assert db.query(AuditLog).filter(AuditLog.action == "mark.create").count() == 0
 

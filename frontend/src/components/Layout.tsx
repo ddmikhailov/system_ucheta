@@ -21,9 +21,8 @@ import WhatsNewBanner from "./WhatsNewBanner";
 import { pageTitle } from "../utils/pageTitle";
 import { dialogs, toast } from "../utils/feedback";
 import { clearJournalDrafts, hasJournalDrafts } from "../utils/journalDraft";
-
-type CounterKey = "my_day" | "my_tasks" | "review" | "journal_changes";
-type Counters = Partial<Record<CounterKey, number>>;
+import { useNavCounters } from "../hooks/useNavCounters";
+import type { CounterKey } from "../hooks/useNavCounters";
 
 interface NavItem {
   to: string;
@@ -91,7 +90,8 @@ export default function Layout({ children }: { children?: ReactNode }) {
     await refresh();
   }
   const { pathname } = useLocation();
-  const [counters, setCounters] = useState<Counters>({});
+  // Счётчики меню и колокольчик — один запрос; при переходах не чаще раза в 30 с, в скрытой вкладке — пауза.
+  const { counters, setUnread } = useNavCounters(user?.id, pathname);
   const [moreOpen, setMoreOpen] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
@@ -100,15 +100,6 @@ export default function Layout({ children }: { children?: ReactNode }) {
   useEffect(() => {
     document.title = title === PLATFORM_NAME ? `${PLATFORM_NAME} — КАИТ №20` : `${title} — ${PLATFORM_NAME}`;
   }, [title]);
-
-  // Счётчики на пунктах меню обновляем при каждом переходе: сдали день, отправили задачу — число уменьшилось.
-  useEffect(() => {
-    if (!user) return;
-    api
-      .get<Counters>("/my-day/counters")
-      .then((c) => setCounters(c && typeof c === "object" && !Array.isArray(c) ? c : {}))
-      .catch(() => setCounters({}));
-  }, [pathname, user]);
 
   const [closedOn, setClosedOn] = useState(pathname);
   if (closedOn !== pathname) {
@@ -228,7 +219,14 @@ export default function Layout({ children }: { children?: ReactNode }) {
           <div className="app-header__user">
             {user && (
               <>
-                <NotificationBell />
+                <NotificationBell
+                  counts={{
+                    unread: counters.notifications ?? 0,
+                    unread_work: counters.notifications_work,
+                    unread_manage: counters.notifications_manage,
+                  }}
+                  onCountsChange={setUnread}
+                />
                 <UserMenu
                   name={user.full_name}
                   onLogout={handleLogout}

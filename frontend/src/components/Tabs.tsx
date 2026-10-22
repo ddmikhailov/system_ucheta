@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 
 export interface TabItem {
@@ -83,7 +83,8 @@ export function TabBar({
 }
 
 /** Панель вкладки. Создаётся при первом открытии и дальше только прячется — несохранённый
- * ввод в формах не теряется при переходе между вкладками, а данные не грузятся заново. */
+ * ввод в формах не теряется при переходе между вкладками, а данные не грузятся заново.
+ * Своя граница Suspense: пока подгружается код ленивой вкладки, остальная страница остаётся на месте. */
 export function TabPanel({
   idPrefix,
   tabKey,
@@ -107,7 +108,7 @@ export function TabPanel({
       hidden={!isActive}
       className="tabpanel"
     >
-      {children}
+      <Suspense fallback={<p className="hint">Загрузка…</p>}>{children}</Suspense>
     </div>
   );
 }

@@ -80,7 +80,7 @@ textarea {
 
 /* Таблицы: заголовки — одним стилем, без лишних рамок между строками. */
 .dash-table th {
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--muted);

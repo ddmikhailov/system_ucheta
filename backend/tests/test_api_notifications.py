@@ -153,6 +153,11 @@ def test_notifications_split_into_work_and_manage_tabs(client, db, dept_head_use
 
     counts = client.get("/notifications/unread-count", headers=dept_head_headers).json()
     assert (counts["unread"], counts["unread_work"], counts["unread_manage"]) == (3, 1, 2)
+    # Колокольчик берёт те же числа из общего опроса счётчиков меню и из проверки сроков.
+    nav = client.get("/my-day/counters", headers=dept_head_headers).json()
+    assert (nav["notifications"], nav["notifications_work"], nav["notifications_manage"]) == (3, 1, 2)
+    checked = client.post("/notifications/check", headers=dept_head_headers).json()
+    assert (checked["unread_work"], checked["unread_manage"]) == (1, 2)
 
     # «Прочитать все» во вкладке «Управление» не трогает рабочие.
     assert client.post("/notifications/read-all?category=manage", headers=dept_head_headers).status_code == 200

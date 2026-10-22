@@ -254,9 +254,10 @@ def build_signature_pdf(
     ]
 
     data = [["№", "ФИО", "Дней отсутствия (расчёт за период)"]]
+    # Пакетный расчёт: раньше на каждого студента шёл отдельный compute_period_stats (несколько запросов).
+    absent = stats_service.absent_totals_by_student(db, students, date_from, date_to)
     for idx, student in enumerate(students, start=1):
-        student_stats = stats_service.compute_period_stats(db, date_from, date_to, student_id=student.id)
-        data.append([idx, student.full_name, student_stats.absent_total])
+        data.append([idx, student.full_name, absent.get(student.id, 0)])
 
     table = Table(data, colWidths=[1.5 * cm, 12 * cm, 6 * cm])
     table.setStyle(

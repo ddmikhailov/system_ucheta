@@ -23,7 +23,7 @@ from app.schemas.my_day import (
 )
 from app.core.modules import module_enabled
 from app.services import attendance_service, calendar_service, individual_work_service
-from app.services import task_service
+from app.services import in_app_notification_service, task_service
 from app.services.access_service import get_curator_group_ids
 
 DUE_SOON_DAYS = 3
@@ -250,7 +250,8 @@ def build_my_day(db: Session, user: User, today: datetime.date | None = None) ->
 
 
 def nav_counters(db: Session, user: User, today: datetime.date | None = None) -> dict[str, int]:
-    """Числа на пунктах меню: дела на сегодня («Мой день»), горящие задачи куратора, ответы на проверке.
+    """Числа на пунктах меню: дела на сегодня («Мой день»), горящие задачи куратора, ответы на проверке,
+    а также непрочитанные уведомления колокольчика — меню и колокольчик обновляются одним запросом.
     Только подсчёт по уже имеющимся данным, без досье и без посещаемости по студентам."""
     today = today or today_local()
     groups = _my_groups(db, user, today)
@@ -263,9 +264,11 @@ def nav_counters(db: Session, user: User, today: datetime.date | None = None) ->
         }
         calendar = calendar_service.study_days_by_group(db, today, today, groups)
         pending_days = sum(1 for g in groups if g.id not in submitted and today in calendar[g.id])
+    unread, unread_manage = in_app_notification_service.unread_counts(db, user)
     return {
         "my_day": pending_days + tasks, "my_tasks": tasks, "review": review_count(db, user),
         "journal_changes": journal_change_count(db, user),
+        "notifications": unread, "notifications_work": unread - unread_manage, "notifications_manage": unread_manage,
     }
 
 

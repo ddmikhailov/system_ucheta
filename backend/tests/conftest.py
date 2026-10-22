@@ -1,5 +1,6 @@
 import datetime
 import os
+import shutil
 
 # Должно быть выставлено раньше первого импорта из app.* — иначе Settings()
 # (через lru_cache) закэширует значение до того, как мы его зададим (см.
@@ -39,8 +40,79 @@ DEPT_HEAD_PASSWORD = "Rubin#58xQzw"
 CURATOR_PASSWORD = "CuraTest#58x!"
 
 
+# Каким образцом заполнена база текущего теста (см. `test_engine`); на MySQL записи нет.
+_prefilled: dict = {}
+
+
+def _sqlite_engine(db_path):
+    # check_same_thread=False: синхронные эндпоинты FastAPI выполняются в пуле
+    # потоков — в проде это MySQL и потоки его не смущают, но SQLite по
+    # умолчанию запрещает использовать соединение не из того потока, где
+    # оно создано.
+    engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
+
+    # SQLite не проверяет внешние ключи по умолчанию — в проде (MySQL/InnoDB)
+    # они enforced, и на этом строится безопасное удаление (см. admin.py:
+    # DELETE .../{id} ловит IntegrityError и обезличивает вместо удаления).
+    # Без этого тесты не заметили бы, если проверка вообще перестанет работать.
+    @event.listens_for(engine, "connect")
+    def _enable_sqlite_fk(dbapi_connection, _record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
+    return engine
+
+
+def _use_engine(engine) -> None:
+    db_base.engine = engine
+    db_base.SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+
+
+def _run_seed() -> None:
+    import scripts.seed as seed_script
+
+    seed_script.run()
+
+
+IMPORT_FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures", "import")
+
+
+def _run_import() -> None:
+    """Синтетический набор той же формы, что реальный «Диджитал» (см. фикстуру `imported`)."""
+    import scripts.import_source_data as import_script
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(import_script, "DATA_DIR", IMPORT_FIXTURES_DIR)
+        import_script.run()
+
+
+@pytest.fixture(scope="session")
+def _sqlite_templates(tmp_path_factory):
+    """Базы-образцы SQLite, собранные один раз за прогон: пустая схема, схема + справочники, схема + справочники
+    + импорт. Раньше каждый тест сам создавал таблицы и заново импортировал 989 студентов — 1,5–2 с подготовки
+    на тест; теперь тест получает копию готового файла. Содержимое то же, что дают `seeded` и `imported`."""
+    root = tmp_path_factory.mktemp("db-templates")
+    saved = db_base.engine, db_base.SessionLocal
+    paths = {}
+    engine = _sqlite_engine(root / "build.db")
+    try:
+        _use_engine(engine)
+        db_base.Base.metadata.create_all(engine)
+        for name, step in (("empty", None), ("seeded", _run_seed), ("imported", _run_import)):
+            if step is not None:
+                step()
+            engine.dispose()
+            paths[name] = root / f"{name}.db"
+            shutil.copyfile(root / "build.db", paths[name])
+    finally:
+        engine.dispose()
+        db_base.engine, db_base.SessionLocal = saved
+    return paths
+
+
 @pytest.fixture()
-def test_engine(tmp_path):
+def test_engine(tmp_path, request):
     """Изолированная БД на каждый тест — никакого общего состояния между
     тестами. По умолчанию SQLite (быстро, без внешних сервисов); если задан
     TEST_DATABASE_URL — настоящий MySQL (см. TODO.md 5: ENUM/strict mode/
@@ -59,8 +131,7 @@ def test_engine(tmp_path):
         # HTTP-запрос), а в тестах превращалось в ложные падения на ровном
         # месте (см. TODO.md 5, найдено этим самым прогоном на MySQL).
         engine = create_engine(mysql_url, pool_pre_ping=True, isolation_level="READ COMMITTED")
-        db_base.engine = engine
-        db_base.SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+        _use_engine(engine)
         db_base.Base.metadata.drop_all(engine)
         db_base.Base.metadata.create_all(engine)
         yield engine
@@ -68,27 +139,18 @@ def test_engine(tmp_path):
         engine.dispose()
         return
 
+    # Копия базы-образца: если тесту (прямо или через другие фикстуры) нужны `imported` или `seeded`, файл
+    # приходит уже с этими данными, и сами фикстуры ничего не делают.
+    templates = request.getfixturevalue("_sqlite_templates")
+    names = request.fixturenames
+    level = "imported" if "imported" in names else "seeded" if "seeded" in names else "empty"
     db_path = tmp_path / "test.db"
-    # check_same_thread=False: синхронные эндпоинты FastAPI выполняются в пуле
-    # потоков — в проде это MySQL и потоки его не смущают, но SQLite по
-    # умолчанию запрещает использовать соединение не из того потока, где
-    # оно создано.
-    engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
-
-    # SQLite не проверяет внешние ключи по умолчанию — в проде (MySQL/InnoDB)
-    # они enforced, и на этом строится безопасное удаление (см. admin.py:
-    # DELETE .../{id} ловит IntegrityError и обезличивает вместо удаления).
-    # Без этого тесты не заметили бы, если проверка вообще перестанет работать.
-    @event.listens_for(engine, "connect")
-    def _enable_sqlite_fk(dbapi_connection, _record):
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
-
-    db_base.engine = engine
-    db_base.SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
-    db_base.Base.metadata.create_all(engine)
+    shutil.copyfile(templates[level], db_path)
+    engine = _sqlite_engine(db_path)
+    _prefilled[engine] = level
+    _use_engine(engine)
     yield engine
+    _prefilled.pop(engine, None)
     engine.dispose()
 
 
@@ -163,10 +225,10 @@ def client(test_engine):
 
 @pytest.fixture()
 def seeded(test_engine):
-    """Справочники (роли, коды отметок, отделение «Диджитал», admin) — без импорта данных."""
-    import scripts.seed as seed_script
-
-    seed_script.run()
+    """Справочники (роли, коды отметок, отделение «Диджитал», admin) — без импорта данных.
+    На SQLite они уже в копии базы-образца (`_sqlite_templates`)."""
+    if _prefilled.get(test_engine) not in ("seeded", "imported"):
+        _run_seed()
     return test_engine
 
 
@@ -176,12 +238,14 @@ def imported(seeded, db, monkeypatch):
     (44 группы, 989 студентов, 24 куратора, 3 вакансии) — коды/курсы/кол-во
     взяты из реальной выгрузки, а ФИО целиком выдуманы (см. TODO.md 5:
     раньше тесты читали backend/scripts/import/data/*.csv с настоящими ФИО,
-    которых нет в репозитории — на чистом клоне/в CI это падало)."""
+    которых нет в репозитории — на чистом клоне/в CI это падало).
+    На SQLite набор уже в копии базы-образца (`_sqlite_templates`)."""
     import scripts.import_source_data as import_script
 
-    fixtures_dir = os.path.join(os.path.dirname(__file__), "fixtures", "import")
-    monkeypatch.setattr(import_script, "DATA_DIR", fixtures_dir)
-    import_script.run()
+    # Каталог синтетики остаётся подменённым на весь тест: повторный импорт внутри теста читает тот же набор.
+    monkeypatch.setattr(import_script, "DATA_DIR", IMPORT_FIXTURES_DIR)
+    if _prefilled.get(seeded) != "imported":
+        import_script.run()
     # commit(), а не только expire_all(): import_script делает всё через
     # свою собственную сессию. Если что-то через `db` уже читало раньше
     # (например, dept_head_user/edu_department_user — pytest не гарантирует
