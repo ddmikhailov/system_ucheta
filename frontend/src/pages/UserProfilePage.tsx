@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
+import { toast } from "../utils/feedback";
 import { useAuth } from "../auth/useAuth";
 import { MODULE } from "../constants/modules";
 import { isModuleOn } from "../utils/modules";
@@ -50,7 +51,10 @@ export default function UserProfilePage() {
   useEffect(load, [load]);
   useEffect(() => {
     if (!canManage || passwordOnly) return;
-    api.get<DepartmentAdmin[]>("/admin/departments").then(setDepartments).catch(() => {});
+    api
+      .get<DepartmentAdmin[]>("/admin/departments")
+      .then(setDepartments)
+      .catch(() => toast("Не удалось загрузить список отделений", "error"));
   }, [canManage, passwordOnly]);
 
   const back = (

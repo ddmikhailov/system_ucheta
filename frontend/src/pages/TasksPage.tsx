@@ -4,6 +4,7 @@ import { useGoBack } from "../hooks/useGoBack";
 import { usePatchSearch, useUrlParam } from "../hooks/useUrlState";
 import { useTabParam } from "../hooks/useTabParam";
 import { api, ApiError } from "../api/client";
+import { toast } from "../utils/feedback";
 import { useAuth } from "../auth/useAuth";
 import TaskCreateForm from "../components/TaskCreateForm";
 import type { AfterTask } from "../components/TaskCreateForm";
@@ -148,7 +149,10 @@ export default function TasksPage() {
           queue={queue}
           onDecided={(id) => {
             setQueue((q) => q.filter((x) => x.id !== id));
-            api.get<TaskListRow[]>("/tasks").then(setList).catch(() => undefined);
+            api
+              .get<TaskListRow[]>("/tasks")
+              .then(setList)
+              .catch(() => toast("Не удалось обновить список задач — обновите страницу", "error"));
           }}
         />
       )}

@@ -155,11 +155,15 @@ export default function DayJournal({
 
   useEffect(() => {
     loadGroups();
-    api.get<MarkCodeOption[]>("/curator/mark-codes").then(setMarkCodes);
+    api
+      .get<MarkCodeOption[]>("/curator/mark-codes")
+      .then(setMarkCodes)
+      .catch(() => toast("Не удалось загрузить коды отметок — обновите страницу", "error"));
     api
       .get<{ risk_unexcused_percent: number; risk_attendance_percent: number }>("/curator/settings")
       .then((s) => setThresholds({ risk_unexcused_percent: s.risk_unexcused_percent, risk_attendance_percent: s.risk_attendance_percent }))
-      .catch(() => {});
+      // Без настроек подсветка риска идёт по порогам по умолчанию — журнал работает.
+      .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
@@ -8,6 +8,7 @@ import { STUDENT_STATUS_LABELS } from "../constants/studentStatus";
 import AbsenceMessageButton from "../components/AbsenceMessageButton";
 import AbsenceSheetButton from "../components/AbsenceSheetButton";
 import { DossierSection } from "../components/StudentDossier";
+import { useApi } from "../hooks/useApi";
 import { useDossier } from "../hooks/useDossier";
 import StudentMonthAttendanceView from "../components/StudentMonthAttendance";
 import { Kpi, ProfileHero } from "../components/ProfileHero";
@@ -19,7 +20,7 @@ import type { DeleteResult, StudentCard, StudyGroupAdmin } from "../api/types";
 import { formatDateRu, todayIso } from "../utils/date";
 import SearchSelect from "../components/SearchSelect";
 import StudentDeletionRequestBox from "../components/StudentDeletionRequestBox";
-import { dialogs } from "../utils/feedback";
+import { dialogs, toast } from "../utils/feedback";
 import { MODULE } from "../constants/modules";
 import { isModuleOn } from "../utils/modules";
 
@@ -36,9 +37,11 @@ export default function StudentCardPage() {
   const { user } = useAuth();
   const canManage = inRoles(user?.role, STRUCTURE_EDITOR_ROLES);
 
-  const [card, setCard] = useState<StudentCard | null>(null);
+  // Отменяемая загрузка: при переходе от студента к студенту поздний ответ по прежнему не подменит карточку.
+  const { data: card, error: loadError, reload: load } = useApi<StudentCard>(`/students/${studentId}`, "Не удалось загрузить карточку");
   const [groups, setGroups] = useState<StudyGroupAdmin[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setError] = useState<string | null>(null);
+  const error = actionError ?? loadError;
   const [notice, setNotice] = useState<string | null>(null);
   useScrollToTopOnChange(error, notice);
   const [tab, setTab] = useTabParam(STUDENT_TABS, "overview");
@@ -46,24 +49,12 @@ export default function StudentCardPage() {
   const workOn = dossierOn && isModuleOn(user, MODULE.INDIVIDUAL_WORK);
   const dossierState = useDossier(Number(studentId), dossierOn);
 
-  const load = useCallback(() => {
-    api
-      .get<StudentCard>(`/students/${studentId}`)
-      .then((c) => {
-        setCard(c);
-        setError(null);
-      })
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Не удалось загрузить карточку"));
-  }, [studentId]);
-
-  useEffect(load, [load]);
-
   useEffect(() => {
     if (!canManage) return;
     api
       .get<StudyGroupAdmin[]>("/admin/groups")
       .then((all) => setGroups(all.filter((g) => g.is_active)))
-      .catch(() => {});
+      .catch(() => toast("Не удалось загрузить список групп для перевода", "error"));
   }, [canManage]);
 
   // Администрация возвращается в список студентов, куратор — в свой кабинет.

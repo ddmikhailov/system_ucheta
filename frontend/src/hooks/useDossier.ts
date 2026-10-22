@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
-import { api, ApiError } from "../api/client";
+import { useState } from "react";
 import type { Dossier } from "../api/types";
+import { useApi } from "./useApi";
 
 export type DossierSectionKey = "profile" | "guardians" | "notes" | "log";
 
@@ -18,21 +18,12 @@ export interface DossierState {
  * работа» берут его отсюда, и просмотр пишется в журнал один раз, а не на каждую вкладку.
  * `enabled=false` (модуль выключен) — досье не запрашивается. */
 export function useDossier(studentId: number, enabled = true): DossierState {
-  const [dossier, setDossier] = useState<Dossier | null>(null);
+  const { data, error: loadError, setData, reload } = useApi<Dossier>(
+    enabled ? `/students/${studentId}/dossier` : null,
+    "Не удалось загрузить досье",
+  );
+  // Ошибки сохранения разделов; ошибка загрузки — своя, из useApi, и уходит с успешной перезагрузкой.
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-
-  const load = useCallback(() => {
-    if (!enabled) return; // модуль «Досье» выключен — запроса нет
-    api
-      .get<Dossier>(`/students/${studentId}/dossier`)
-      .then((d) => {
-        setDossier(d);
-        setError(null);
-      })
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Не удалось загрузить досье"));
-  }, [studentId, enabled]);
-
-  useEffect(load, [load]);
-  return { dossier, error, notice, setDossier, setError, setNotice, load };
+  return { dossier: data, error: error ?? loadError, notice, setDossier: setData, setError, setNotice, load: reload };
 }
