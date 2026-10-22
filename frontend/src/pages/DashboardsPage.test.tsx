@@ -322,6 +322,22 @@ describe("DashboardsPage — экспорт и отделение", () => {
     await waitFor(() => expect(apiCalls("/dashboards/day").filter((p) => p === `/dashboards/day?date=${todayIso()}`).length).toBe(2));
   });
 
+  it("смена отделения сбрасывает фильтры вкладки, но не сортировку", async () => {
+    const user = userEvent.setup();
+    open("admin");
+    await screen.findByText("СА172");
+    await user.type(screen.getByLabelText("Поиск по группе или ответственному"), "ИИ");
+    expect(screen.queryByText("СА172")).not.toBeInTheDocument();
+    const groupHeader = () => screen.getByRole("columnheader", { name: /^Группа/ });
+    await user.click(within(groupHeader()).getByRole("button"));
+
+    await user.selectOptions(await screen.findByTitle("Отделение: данные на вкладках и экспорт"), "2");
+
+    expect(await screen.findByText("СА172")).toBeInTheDocument();
+    expect(screen.getByLabelText("Поиск по группе или ответственному")).toHaveValue("");
+    expect(groupHeader()).toHaveAttribute("aria-sort", "ascending");
+  });
+
   it("кнопка «Обновить» запрашивает день заново", async () => {
     const user = userEvent.setup();
     open("admin");

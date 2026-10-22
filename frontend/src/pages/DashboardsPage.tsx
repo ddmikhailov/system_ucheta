@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { downloadFile } from "../api/client";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/useAuth";
@@ -13,25 +13,17 @@ import {
   summaryExportParams,
 } from "../utils/summaryFilters";
 import type { SummaryFilters } from "../utils/summaryFilters";
-import CuratorDaysModal from "../components/CuratorDaysModal";
-import type {
-  CuratorDisciplineRow,
-  DayOverviewRow,
-  DepartmentAdmin,
-  DynamicsPoint,
-  RiskStudentRow,
-  StudyGroupAdmin,
-  UserAdmin,
-} from "../api/types";
+import type { DepartmentAdmin, StudyGroupAdmin, UserAdmin } from "../api/types";
 import { COLLEGE_WIDE_ROLES, CURATOR_CAPABLE_ROLES, DEPARTMENT_SCOPED_ROLES, DOSSIER_STAFF_ROLES, inRoles } from "../constants/roles";
 import { formatDateRu, toIso, todayIso } from "../utils/date";
-import { formatPercent } from "../utils/percent";
-import { filterByQuery } from "../utils/searchMatch";
-import { nextSort, sortRows } from "../utils/tableView";
-import type { SortState } from "../utils/tableView";
+import { setEntryStateValue } from "../utils/navMemory";
 import { useEntryState } from "../hooks/useEntryState";
-import ResultsBar from "../components/dashboards/ResultsBar";
-import SortHeader from "../components/dashboards/SortHeader";
+import DayTab from "../components/dashboards/DayTab";
+import DynamicsTab from "../components/dashboards/DynamicsTab";
+import RiskTab from "../components/dashboards/RiskTab";
+import DisciplineTab from "../components/dashboards/DisciplineTab";
+import { DAY_FILTERS, DISCIPLINE_FILTERS, DYNAMICS_FILTERS, RISK_FILTERS } from "../components/dashboards/dashboardFilters";
+import VacantTab from "../components/dashboards/VacantTab";
 
 function daysAgoIso(n: number): string {
   const d = new Date();
@@ -39,21 +31,14 @@ function daysAgoIso(n: number): string {
   return toIso(d);
 }
 
-type DayKey = "code" | "course" | "responsible" | "in_list" | "present" | "late" | "excused" | "unexcused" | "percent" | "submitted";
-type DynKey = "date" | "in_list" | "present" | "percent";
-type RiskKey = "name" | "group" | "percent" | "unexcused" | "absent";
-type DiscKey = "code" | "course" | "responsible" | "on_time" | "late" | "missed" | "total";
-type VacantKey = "code" | "course";
-type DayStatus = "all" | "missing" | "on_time" | "late";
-
-const NO_CURATOR = "нет куратора";
-
 type Tab = "day" | "summary" | "dynamics" | "risk" | "discipline" | "vacant";
 const TABS: Tab[] = ["day", "summary", "dynamics", "risk", "discipline", "vacant"];
 
+// Вкладки сами грузят свои строки и держат свои фильтры и сортировки (components/dashboards/*Tab);
+// здесь — общее: вкладка, день и период, отделение, экспорт, группы для «Свода» и вакантных групп.
 export default function DashboardsPage() {
   const { user } = useAuth();
-  const navigate = useNavigate();
+  const location = useLocation();
   // Зав. отделением и тьютор видят только своё отделение.
   const isDeptHead = inRoles(user?.role, DEPARTMENT_SCOPED_ROLES);
   // Админ/тьютор/учебный отдел видят весь колледж и могут сузить экспорт до
@@ -67,59 +52,22 @@ export default function DashboardsPage() {
   const tabFromUrl = searchParams.get("tab") as Tab | null;
   const [tab, setTab] = useState<Tab>(tabFromUrl && TABS.includes(tabFromUrl) ? tabFromUrl : "day");
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
   const [date, setDate] = useEntryState("date", todayIso());
   // Счётчик перезагрузки: кнопка «Обновить» и возврат на вкладку браузера заново
   // запрашивают данные — статусы сдачи дня меняются, пока страница открыта.
   const [reloadKey, setReloadKey] = useState(0);
-  const [dayRows, setDayRows] = useState<DayOverviewRow[]>([]);
 
   const [dateFrom, setDateFrom] = useEntryState("dateFrom", daysAgoIso(14));
   const [dateTo, setDateTo] = useEntryState("dateTo", todayIso());
-  const [dynamicsPoints, setDynamicsPoints] = useState<DynamicsPoint[]>([]);
-
-  const [riskRows, setRiskRows] = useState<RiskStudentRow[]>([]);
-  const [disciplineRows, setDisciplineRows] = useState<CuratorDisciplineRow[]>([]);
-
-  // Выбранный день, период, фильтры и сортировки помнятся за записью истории: из карточки
-  // студента или группы «Назад» возвращает витрину в том же виде (см. useEntryState).
-  const [courseFilter, setCourseFilter] = useEntryState<number | "all">("courseFilter", "all");
-  // Фильтры и сортировки таблиц: считаются на странице по уже загруженным строкам.
-  const [dayQuery, setDayQuery] = useEntryState("dayQuery", "");
-  const [dayStatus, setDayStatus] = useEntryState<DayStatus>("dayStatus", "all");
-  const [dayOnlyAbsent, setDayOnlyAbsent] = useEntryState("dayOnlyAbsent", false);
-  const [daySort, setDaySort] = useEntryState<SortState<DayKey> | null>("daySort", null);
-  const [dynOnlyData, setDynOnlyData] = useEntryState("dynOnlyData", false);
-  const [dynBelow, setDynBelow] = useEntryState("dynBelow", "");
-  const [dynSort, setDynSort] = useEntryState<SortState<DynKey> | null>("dynSort", null);
-  const [riskQuery, setRiskQuery] = useEntryState("riskQuery", "");
-  const [riskGroup, setRiskGroup] = useEntryState<number | "all">("riskGroup", "all");
-  const [riskBelow, setRiskBelow] = useEntryState("riskBelow", "");
-  // Группа риска и «Восполнить пропуски» приходят одним списком; по умолчанию — только группа риска.
-  const [riskCategory, setRiskCategory] = useEntryState<RiskStudentRow["category"] | "all">("riskCategory", "risk");
-  const [riskSort, setRiskSort] = useEntryState<SortState<RiskKey> | null>("riskSort", null);
-  const [discQuery, setDiscQuery] = useEntryState("discQuery", "");
-  const [discCourse, setDiscCourse] = useEntryState<number | "all">("discCourse", "all");
-  const [discOnlyMissed, setDiscOnlyMissed] = useEntryState("discOnlyMissed", false);
-  const [discSort, setDiscSort] = useEntryState<SortState<DiscKey> | null>("discSort", null);
-  const [vacantQuery, setVacantQuery] = useEntryState("vacantQuery", "");
-  const [vacantCourse, setVacantCourse] = useEntryState<number | "all">("vacantCourse", "all");
-  const [vacantSort, setVacantSort] = useEntryState<SortState<VacantKey> | null>("vacantSort", null);
-  const [openDisciplineGroupId, setOpenDisciplineGroupId] = useState<number | null>(null);
+  // Смена отделения сбрасывает фильтры вкладок: новое значение пишется в память записи истории,
+  // а открытая вкладка пересоздаётся и читает его.
+  const [filtersEpoch, setFiltersEpoch] = useState(0);
 
   const [groups, setGroups] = useState<StudyGroupAdmin[]>([]);
   const [curators, setCurators] = useState<UserAdmin[]>([]);
   const [assigningGroupId, setAssigningGroupId] = useState<number | null>(null);
   const vacantGroups = useMemo(() => groups.filter((g) => g.is_active && !g.curator_name), [groups]);
-  const vacantCourses = useMemo(() => Array.from(new Set(vacantGroups.map((g) => g.course))).sort((a, b) => a - b), [vacantGroups]);
-  const vacantFiltered = vacantQuery.trim() !== "" || vacantCourse !== "all";
-  const visibleVacant = useMemo(() => {
-    let rows = vacantGroups;
-    if (vacantCourse !== "all") rows = rows.filter((g) => g.course === vacantCourse);
-    rows = filterByQuery(rows, vacantQuery, (g) => g.code);
-    return sortRows(rows, vacantSort, { code: (g) => g.code, course: (g) => g.course });
-  }, [vacantGroups, vacantCourse, vacantQuery, vacantSort]);
 
   const [departments, setDepartments] = useState<DepartmentAdmin[]>([]);
   // Выбранное отделение (для админа/тьютора/учебного отдела) сужает все вкладки и экспорт.
@@ -155,185 +103,12 @@ export default function DashboardsPage() {
     }
   }, [tab, summaryFilters, setSearchParams]);
 
-  const courses = useMemo(
-    () => Array.from(new Set(dayRows.map((r) => r.course))).sort((a, b) => a - b),
-    [dayRows],
-  );
-  const dayFiltered = courseFilter !== "all" || dayQuery.trim() !== "" || dayStatus !== "all" || dayOnlyAbsent;
-  const visibleDayRows = useMemo(() => {
-    let rows = dayRows;
-    if (courseFilter !== "all") rows = rows.filter((r) => r.course === courseFilter);
-    if (dayStatus === "missing") rows = rows.filter((r) => !r.is_submitted);
-    else if (dayStatus === "on_time") rows = rows.filter((r) => r.is_submitted && r.is_on_time);
-    else if (dayStatus === "late") rows = rows.filter((r) => r.is_submitted && !r.is_on_time);
-    if (dayOnlyAbsent) rows = rows.filter((r) => (r.absent_unexcused ?? 0) > 0);
-    rows = filterByQuery(rows, dayQuery, (r) => `${r.code} ${r.responsible_name ?? NO_CURATOR}`);
-    return sortRows(rows, daySort, {
-      code: (r) => r.code, course: (r) => r.course, responsible: (r) => r.responsible_name,
-      in_list: (r) => r.in_list, present: (r) => r.present, late: (r) => r.late,
-      excused: (r) => r.absent_excused, unexcused: (r) => r.absent_unexcused, percent: (r) => r.percent,
-      submitted: (r) => (!r.is_submitted ? 0 : r.is_on_time ? 2 : 1),
-    });
-  }, [dayRows, courseFilter, dayQuery, dayStatus, dayOnlyAbsent, daySort]);
-  function resetDayFilters() {
-    setCourseFilter("all");
-    setDayQuery("");
-    setDayStatus("all");
-    setDayOnlyAbsent(false);
-  }
-
-  const dynBelowNum = dynBelow.trim() === "" ? null : Number(dynBelow);
-  const dynFiltered = dynOnlyData || dynBelowNum !== null;
-  const visibleDynamics = useMemo(() => {
-    let rows = dynamicsPoints;
-    if (dynOnlyData) rows = rows.filter((p) => p.percent !== null);
-    if (dynBelowNum !== null && !Number.isNaN(dynBelowNum)) rows = rows.filter((p) => p.percent !== null && p.percent < dynBelowNum);
-    return sortRows(rows, dynSort, {
-      date: (p) => p.date, in_list: (p) => p.in_list, present: (p) => p.present, percent: (p) => p.percent,
-    });
-  }, [dynamicsPoints, dynOnlyData, dynBelowNum, dynSort]);
-
-  const riskBelowNum = riskBelow.trim() === "" ? null : Number(riskBelow);
-  const riskFiltered = riskQuery.trim() !== "" || riskGroup !== "all" || riskBelowNum !== null;
-  const riskGroups = useMemo(() => {
-    const byId = new Map<number, string>();
-    for (const r of riskRows) byId.set(r.study_group_id, r.group_code);
-    return [...byId].sort((a, b) => a[1].localeCompare(b[1], "ru", { numeric: true }));
-  }, [riskRows]);
-  const riskInCategory = useMemo(
-    () => (riskCategory === "all" ? riskRows : riskRows.filter((r) => r.category === riskCategory)),
-    [riskRows, riskCategory]
-  );
-  const visibleRisk = useMemo(() => {
-    let rows = riskInCategory;
-    if (riskGroup !== "all") rows = rows.filter((r) => r.study_group_id === riskGroup);
-    if (riskBelowNum !== null && !Number.isNaN(riskBelowNum)) rows = rows.filter((r) => r.attendance_percent < riskBelowNum);
-    rows = filterByQuery(rows, riskQuery, (r) => `${r.full_name} ${r.group_code}`);
-    return sortRows(rows, riskSort, {
-      name: (r) => r.full_name, group: (r) => r.group_code, percent: (r) => r.attendance_percent,
-      unexcused: (r) => r.unexcused_percent, absent: (r) => r.absent,
-    });
-  }, [riskInCategory, riskGroup, riskBelowNum, riskQuery, riskSort]);
-
-  const discCourses = useMemo(
-    () => Array.from(new Set(disciplineRows.map((r) => r.course))).sort((a, b) => a - b),
-    [disciplineRows],
-  );
-  const discFiltered = discQuery.trim() !== "" || discCourse !== "all" || discOnlyMissed;
-  const visibleDiscipline = useMemo(() => {
-    let rows = disciplineRows;
-    if (discCourse !== "all") rows = rows.filter((r) => r.course === discCourse);
-    if (discOnlyMissed) rows = rows.filter((r) => r.missed > 0);
-    rows = filterByQuery(rows, discQuery, (r) => `${r.code} ${r.responsible_name ?? NO_CURATOR}`);
-    return sortRows(rows, discSort, {
-      code: (r) => r.code, course: (r) => r.course, responsible: (r) => r.responsible_name,
-      on_time: (r) => r.on_time, late: (r) => r.late, missed: (r) => r.missed, total: (r) => r.total_study_days,
-    });
-  }, [disciplineRows, discCourse, discOnlyMissed, discQuery, discSort]);
-
   function resetAllFilters() {
-    resetDayFilters();
-    setDynOnlyData(false);
-    setDynBelow("");
-    setRiskQuery("");
-    setRiskGroup("all");
-    setRiskBelow("");
-    setDiscQuery("");
-    setDiscCourse("all");
-    setDiscOnlyMissed(false);
+    for (const [name, value] of Object.entries({ ...DAY_FILTERS, ...DYNAMICS_FILTERS, ...RISK_FILTERS, ...DISCIPLINE_FILTERS })) {
+      setEntryStateValue(location.key, name, value);
+    }
+    setFiltersEpoch((n) => n + 1);
   }
-
-  useEffect(() => {
-    if (tab !== "day") return;
-    let cancelled = false;
-    setLoading(true);
-    api
-      .get<DayOverviewRow[]>(`/dashboards/day?date=${date}${deptQuery}`)
-      .then((rows) => {
-        if (cancelled) return;
-        setDayRows(rows);
-        setError(null);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err instanceof ApiError ? err.message : "Ошибка загрузки");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-      setLoading(false);
-    };
-  }, [tab, date, deptQuery, reloadKey]);
-
-  useEffect(() => {
-    if (tab !== "dynamics") return;
-    let cancelled = false;
-    setLoading(true);
-    api
-      .get<DynamicsPoint[]>(`/dashboards/dynamics?date_from=${dateFrom}&date_to=${dateTo}${deptQuery}`)
-      .then((points) => {
-        if (cancelled) return;
-        setDynamicsPoints(points);
-        setError(null);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err instanceof ApiError ? err.message : "Ошибка загрузки");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-      setLoading(false);
-    };
-  }, [tab, dateFrom, dateTo, deptQuery, reloadKey]);
-
-  useEffect(() => {
-    if (tab !== "risk") return;
-    let cancelled = false;
-    setLoading(true);
-    api
-      .get<RiskStudentRow[]>(`/dashboards/risk-students?as_of_date=${date}${deptQuery}`)
-      .then((rows) => {
-        if (cancelled) return;
-        setRiskRows(rows);
-        setError(null);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err instanceof ApiError ? err.message : "Ошибка загрузки");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-      setLoading(false);
-    };
-  }, [tab, date, deptQuery, reloadKey]);
-
-  useEffect(() => {
-    if (tab !== "discipline") return;
-    let cancelled = false;
-    setLoading(true);
-    api
-      .get<CuratorDisciplineRow[]>(`/dashboards/curator-discipline?date_from=${dateFrom}&date_to=${dateTo}${deptQuery}`)
-      .then((rows) => {
-        if (cancelled) return;
-        setDisciplineRows(rows);
-        setError(null);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err instanceof ApiError ? err.message : "Ошибка загрузки");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-      setLoading(false);
-    };
-  }, [tab, dateFrom, dateTo, deptQuery, reloadKey]);
 
   function loadVacantGroups() {
     api
@@ -406,7 +181,6 @@ export default function DashboardsPage() {
             onChange={(e) => {
               setExportDepartmentId(e.target.value === "all" ? "all" : Number(e.target.value));
               resetAllFilters();
-              setOpenDisciplineGroupId(null);
             }}
             title="Отделение: данные на вкладках и экспорт"
           >
@@ -425,7 +199,6 @@ export default function DashboardsPage() {
 
       {exportError && <div className="error-text">{exportError}</div>}
       {error && <div className="error-text">{error}</div>}
-      {loading && <p className="hint">Загрузка…</p>}
 
       {(tab === "day" || tab === "risk") && (
         <div className="toolbar">
@@ -443,81 +216,7 @@ export default function DashboardsPage() {
           <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} aria-label="Период по" />
         </div>
       )}
-
-      {tab === "day" && (
-        <>
-          <div className="toolbar toolbar--filters">
-            <input type="search" value={dayQuery} onChange={(e) => setDayQuery(e.target.value)} placeholder="Группа или ответственный" aria-label="Поиск по группе или ответственному" />
-            <select aria-label="Курс" value={courseFilter} onChange={(e) => setCourseFilter(e.target.value === "all" ? "all" : Number(e.target.value))}>
-              <option value="all">Все курсы</option>
-              {courses.map((c) => (
-                <option key={c} value={c}>
-                  Курс {c}
-                </option>
-              ))}
-            </select>
-            <select aria-label="Статус сдачи" value={dayStatus} onChange={(e) => setDayStatus(e.target.value as DayStatus)}>
-              <option value="all">Любой статус сдачи</option>
-              <option value="missing">Не сдано</option>
-              <option value="on_time">Сдано вовремя</option>
-              <option value="late">Сдано задним числом</option>
-            </select>
-            <label className="check-inline">
-              <input type="checkbox" checked={dayOnlyAbsent} onChange={(e) => setDayOnlyAbsent(e.target.checked)} /> Только с пропусками без причины
-            </label>
-          </div>
-          <ResultsBar shown={visibleDayRows.length} total={dayRows.length} filtered={dayFiltered} onReset={resetDayFilters} />
-        </>
-      )}
-
-      {tab === "day" && (
-        <div className="table-scroll"><table className="dash-table">
-          <thead>
-            <tr>
-              <SortHeader label="Группа" sortKey="code" sort={daySort} onSort={(k) => setDaySort((s) => nextSort(s, k))} />
-              <SortHeader label="Курс" sortKey="course" sort={daySort} onSort={(k) => setDaySort((s) => nextSort(s, k))} />
-              <SortHeader label="Ответственный" sortKey="responsible" sort={daySort} onSort={(k) => setDaySort((s) => nextSort(s, k))} />
-              <SortHeader label="В списке" sortKey="in_list" sort={daySort} onSort={(k) => setDaySort((s) => nextSort(s, k))} />
-              <SortHeader label="Пришло" sortKey="present" sort={daySort} onSort={(k) => setDaySort((s) => nextSort(s, k))} />
-              <SortHeader label="Опоздало" sortKey="late" sort={daySort} onSort={(k) => setDaySort((s) => nextSort(s, k))} />
-              <SortHeader label="Отс. уваж." sortKey="excused" sort={daySort} onSort={(k) => setDaySort((s) => nextSort(s, k))} />
-              <SortHeader label="Отс. неуваж." sortKey="unexcused" sort={daySort} onSort={(k) => setDaySort((s) => nextSort(s, k))} />
-              <SortHeader label="%" sortKey="percent" sort={daySort} onSort={(k) => setDaySort((s) => nextSort(s, k))} />
-              <SortHeader label="Сдано" sortKey="submitted" sort={daySort} onSort={(k) => setDaySort((s) => nextSort(s, k))} />
-            </tr>
-          </thead>
-          <tbody>
-            {visibleDayRows.map((r) => (
-              <tr
-                key={r.study_group_id}
-                className={!r.is_submitted ? "not-submitted-row clickable-row" : "clickable-row"}
-                onClick={() =>
-                  navigate(isStaff ? `/students?group=${r.study_group_id}` : `/admin?tab=journal&group=${r.study_group_id}&date=${date}`)
-                }
-                title={isStaff ? "Показать студентов группы" : "Открыть журнал группы на эту дату"}
-              >
-                <td>{r.code}</td>
-                <td>{r.course}</td>
-                <td>{r.responsible_name ?? "нет куратора"}</td>
-                <td>{r.in_list ?? "—"}</td>
-                <td>{r.present ?? "—"}</td>
-                <td>{r.late ?? "—"}</td>
-                <td>{r.absent_excused ?? "—"}</td>
-                <td>{r.absent_unexcused ?? "—"}</td>
-                <td>
-                  <PercentBar value={r.percent} />
-                </td>
-                <td>{r.is_submitted ? (r.is_on_time ? "вовремя" : "задним числом") : "не сдано"}</td>
-              </tr>
-            ))}
-            {visibleDayRows.length === 0 && (
-              <tr>
-                <td colSpan={10}>{dayRows.length === 0 ? "Нет данных на выбранную дату." : "Под выбранные фильтры ничего не подошло."}</td>
-              </tr>
-            )}
-          </tbody>
-        </table></div>
-      )}
+      {tab === "day" && <DayTab key={filtersEpoch} date={date} deptQuery={deptQuery} reloadKey={reloadKey} isStaff={isStaff} />}
 
       {tab === "summary" && (
         <AttendanceSummaryView
@@ -528,225 +227,17 @@ export default function DashboardsPage() {
           groups={groups}
         />
       )}
-
       {tab === "dynamics" && (
-        <>
-          <DynamicsChart points={dynamicsPoints} />
-          <div className="toolbar toolbar--filters">
-            <label className="check-inline">
-              <input type="checkbox" checked={dynOnlyData} onChange={(e) => setDynOnlyData(e.target.checked)} /> Только дни с данными
-            </label>
-            <input type="number" min={0} max={100} value={dynBelow} onChange={(e) => setDynBelow(e.target.value)} placeholder="Посещаемость ниже, %" aria-label="Посещаемость ниже, %" />
-          </div>
-          <ResultsBar shown={visibleDynamics.length} total={dynamicsPoints.length} filtered={dynFiltered} onReset={() => { setDynOnlyData(false); setDynBelow(""); }} />
-          <div className="table-scroll"><table className="dash-table">
-            <thead>
-              <tr>
-                <SortHeader label="Дата" sortKey="date" sort={dynSort} onSort={(k) => setDynSort((s) => nextSort(s, k))} />
-                <SortHeader label="В списке" sortKey="in_list" sort={dynSort} onSort={(k) => setDynSort((s) => nextSort(s, k))} />
-                <SortHeader label="Присутствовало" sortKey="present" sort={dynSort} onSort={(k) => setDynSort((s) => nextSort(s, k))} />
-                <SortHeader label="%" sortKey="percent" sort={dynSort} onSort={(k) => setDynSort((s) => nextSort(s, k))} />
-              </tr>
-            </thead>
-            <tbody>
-              {visibleDynamics.map((p) => (
-                <tr key={p.date}>
-                  <td>{formatDateRu(p.date)}</td>
-                  <td>{p.in_list ?? "—"}</td>
-                  <td>{p.present ?? "—"}</td>
-                  <td>
-                    <PercentBar value={p.percent} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table></div>
-        </>
+        <DynamicsTab key={filtersEpoch} dateFrom={dateFrom} dateTo={dateTo} deptQuery={deptQuery} reloadKey={reloadKey} />
       )}
 
-      {tab === "risk" && (
-        <>
-          <div className="toolbar toolbar--filters">
-            <select aria-label="Список" value={riskCategory} onChange={(e) => setRiskCategory(e.target.value as RiskStudentRow["category"] | "all")}>
-              <option value="risk">Группа риска ({riskRows.filter((r) => r.category === "risk").length})</option>
-              <option value="compensation">Восполнить пропуски ({riskRows.filter((r) => r.category === "compensation").length})</option>
-              <option value="all">Все ({riskRows.length})</option>
-            </select>
-            <input type="search" value={riskQuery} onChange={(e) => setRiskQuery(e.target.value)} placeholder="Студент или группа" aria-label="Поиск по студенту или группе" />
-            <select aria-label="Группа" value={riskGroup} onChange={(e) => setRiskGroup(e.target.value === "all" ? "all" : Number(e.target.value))}>
-              <option value="all">Все группы</option>
-              {riskGroups.map(([id, code]) => (
-                <option key={id} value={id}>{code}</option>
-              ))}
-            </select>
-            <input type="number" min={0} max={100} value={riskBelow} onChange={(e) => setRiskBelow(e.target.value)} placeholder="Посещаемость ниже, %" aria-label="Посещаемость ниже, %" />
-          </div>
-          <p className="hint">
-            Группа риска — пропусков без уважительной причины больше 40 % с начала семестра: нужна индивидуальная работа.
-            «Восполнить пропуски» — пропущен учебный процесс по уважительной причине (практика и ИУП не в счёт): куратор
-            закрывает, когда студент догнал программу.
-          </p>
-          <ResultsBar shown={visibleRisk.length} total={riskInCategory.length} filtered={riskFiltered} onReset={() => { setRiskQuery(""); setRiskGroup("all"); setRiskBelow(""); }} />
-        </>
-      )}
-
-      {tab === "risk" && (
-        <div className="table-scroll"><table className="dash-table">
-          <thead>
-            <tr>
-              <SortHeader label="Студент" sortKey="name" sort={riskSort} onSort={(k) => setRiskSort((s) => nextSort(s, k))} />
-              <SortHeader label="Группа" sortKey="group" sort={riskSort} onSort={(k) => setRiskSort((s) => nextSort(s, k))} />
-              <th>Статус</th>
-              <SortHeader label="Посещаемость с начала семестра" sortKey="percent" sort={riskSort} onSort={(k) => setRiskSort((s) => nextSort(s, k))} />
-              <SortHeader label="Без уважительной причины" sortKey="unexcused" sort={riskSort} onSort={(k) => setRiskSort((s) => nextSort(s, k))} />
-              <SortHeader label="Пропущено дней" sortKey="absent" sort={riskSort} onSort={(k) => setRiskSort((s) => nextSort(s, k))} />
-            </tr>
-          </thead>
-          <tbody>
-            {visibleRisk.map((r) => (
-              <tr key={r.student_id} className={r.category === "risk" ? "risk-row" : ""}>
-                <td>
-                  <Link to={`/students/${r.student_id}`} className="link-btn">
-                    {r.full_name}
-                  </Link>
-                </td>
-                <td>{r.group_code}</td>
-                <td>
-                  {r.category === "risk" ? (
-                    <span className="risk-badge">группа риска</span>
-                  ) : (
-                    <span className="compensate-badge">восполнить пропуски</span>
-                  )}
-                </td>
-                <td>{formatPercent(r.attendance_percent)}</td>
-                <td>{formatPercent(r.unexcused_percent)}</td>
-                <td>
-                  {r.absent} из {r.days}
-                </td>
-              </tr>
-            ))}
-            {visibleRisk.length === 0 && (
-              <tr>
-                <td colSpan={6}>{riskInCategory.length === 0 ? "Нет таких студентов на выбранную дату." : "Под выбранные фильтры ничего не подошло."}</td>
-              </tr>
-            )}
-          </tbody>
-        </table></div>
-      )}
-
-      {tab === "discipline" && isDeptHead && (
-        <p className="hint">Нажмите на строку, чтобы увидеть по дням, во сколько сдавался день и кем.</p>
-      )}
+      {tab === "risk" && <RiskTab key={filtersEpoch} date={date} deptQuery={deptQuery} reloadKey={reloadKey} />}
 
       {tab === "discipline" && (
-        <>
-          <div className="toolbar toolbar--filters">
-            <input type="search" value={discQuery} onChange={(e) => setDiscQuery(e.target.value)} placeholder="Группа или ответственный" aria-label="Поиск по группе или ответственному" />
-            <select aria-label="Курс" value={discCourse} onChange={(e) => setDiscCourse(e.target.value === "all" ? "all" : Number(e.target.value))}>
-              <option value="all">Все курсы</option>
-              {discCourses.map((c) => (
-                <option key={c} value={c}>Курс {c}</option>
-              ))}
-            </select>
-            <label className="check-inline">
-              <input type="checkbox" checked={discOnlyMissed} onChange={(e) => setDiscOnlyMissed(e.target.checked)} /> Только с несданными днями
-            </label>
-          </div>
-          <ResultsBar shown={visibleDiscipline.length} total={disciplineRows.length} filtered={discFiltered} onReset={() => { setDiscQuery(""); setDiscCourse("all"); setDiscOnlyMissed(false); }} />
-        </>
+        <DisciplineTab key={filtersEpoch} dateFrom={dateFrom} dateTo={dateTo} deptQuery={deptQuery} reloadKey={reloadKey} isDeptHead={isDeptHead} />
       )}
 
-      {tab === "discipline" && (
-        <div className="table-scroll"><table className="dash-table">
-          <thead>
-            <tr>
-              <SortHeader label="Группа" sortKey="code" sort={discSort} onSort={(k) => setDiscSort((s) => nextSort(s, k))} />
-              <SortHeader label="Курс" sortKey="course" sort={discSort} onSort={(k) => setDiscSort((s) => nextSort(s, k))} />
-              <SortHeader label="Ответственный" sortKey="responsible" sort={discSort} onSort={(k) => setDiscSort((s) => nextSort(s, k))} />
-              <SortHeader label="Вовремя" sortKey="on_time" sort={discSort} onSort={(k) => setDiscSort((s) => nextSort(s, k))} />
-              <SortHeader label="С опозданием" sortKey="late" sort={discSort} onSort={(k) => setDiscSort((s) => nextSort(s, k))} />
-              <SortHeader label="Не сдано" sortKey="missed" sort={discSort} onSort={(k) => setDiscSort((s) => nextSort(s, k))} />
-              <SortHeader label="Всего учебных дней" sortKey="total" sort={discSort} onSort={(k) => setDiscSort((s) => nextSort(s, k))} />
-            </tr>
-          </thead>
-          <tbody>
-            {visibleDiscipline.map((r) => (
-              <tr
-                key={r.study_group_id}
-                className={`${r.missed > 0 ? "not-submitted-row" : ""}${isDeptHead ? " clickable-row" : ""}`}
-                onClick={isDeptHead ? () => setOpenDisciplineGroupId(r.study_group_id) : undefined}
-                title={isDeptHead ? "Показать по дням: во сколько сдавали" : undefined}
-              >
-                <td>{r.code}</td>
-                <td>{r.course}</td>
-                <td>{r.responsible_name ?? "нет куратора"}</td>
-                <td>{r.on_time}</td>
-                <td>{r.late}</td>
-                <td>{r.missed}</td>
-                <td>{r.total_study_days}</td>
-              </tr>
-            ))}
-            {visibleDiscipline.length === 0 && (
-              <tr>
-                <td colSpan={7}>{disciplineRows.length === 0 ? "Нет данных за выбранный период." : "Под выбранные фильтры ничего не подошло."}</td>
-              </tr>
-            )}
-          </tbody>
-        </table></div>
-      )}
-
-      {tab === "vacant" && (
-        <>
-          <p className="hint">
-            Пока куратор не назначен, отмечать посещаемость в группе некому: в витринах она будет значиться как
-            «не сдано». Назначьте куратора или заместителя, чтобы группа заработала как обычно.
-          </p>
-          <div className="toolbar toolbar--filters">
-            <input type="search" value={vacantQuery} onChange={(e) => setVacantQuery(e.target.value)} placeholder="Код группы" aria-label="Поиск по коду группы" />
-            <select aria-label="Курс" value={vacantCourse} onChange={(e) => setVacantCourse(e.target.value === "all" ? "all" : Number(e.target.value))}>
-              <option value="all">Все курсы</option>
-              {vacantCourses.map((c) => (
-                <option key={c} value={c}>Курс {c}</option>
-              ))}
-            </select>
-          </div>
-          <ResultsBar shown={visibleVacant.length} total={vacantGroups.length} filtered={vacantFiltered} onReset={() => { setVacantQuery(""); setVacantCourse("all"); }} />
-          <div className="table-scroll"><table className="dash-table">
-            <thead>
-              <tr>
-                <SortHeader label="Группа" sortKey="code" sort={vacantSort} onSort={(k) => setVacantSort((s) => nextSort(s, k))} />
-                <SortHeader label="Курс" sortKey="course" sort={vacantSort} onSort={(k) => setVacantSort((s) => nextSort(s, k))} />
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleVacant.map((g) => (
-                <tr key={g.id} className="not-submitted-row">
-                  <td>{g.code}</td>
-                  <td>{g.course}</td>
-                  <td>
-                    <button onClick={() => setAssigningGroupId(g.id)}>Назначить куратора</button>
-                  </td>
-                </tr>
-              ))}
-              {visibleVacant.length === 0 && (
-                <tr>
-                  <td colSpan={3}>{vacantGroups.length === 0 ? "Вакантных групп нет — у каждой есть куратор." : "Под выбранные фильтры ничего не подошло."}</td>
-                </tr>
-              )}
-            </tbody>
-          </table></div>
-        </>
-      )}
-
-      {openDisciplineGroupId !== null && (
-        <CuratorDaysModal
-          studyGroupId={openDisciplineGroupId}
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          onClose={() => setOpenDisciplineGroupId(null)}
-        />
-      )}
+      {tab === "vacant" && <VacantTab vacantGroups={vacantGroups} onAssign={setAssigningGroupId} />}
 
       {assigningGroupId !== null && (
         <AssignCuratorModal
@@ -759,62 +250,6 @@ export default function DashboardsPage() {
           }}
         />
       )}
-    </div>
-  );
-}
-
-// "Динамика" была таблицей без наглядности — среднее и график по точкам
-// (см. TODO.md 4). Своя лёгкая SVG-полоска вместо графической библиотеки.
-function DynamicsChart({ points }: { points: DynamicsPoint[] }) {
-  const withValue = points.filter((p): p is DynamicsPoint & { percent: number } => p.percent !== null && p.percent !== undefined);
-  if (withValue.length === 0) return null;
-  const average = withValue.reduce((sum, p) => sum + p.percent, 0) / withValue.length;
-  const barWidth = 100 / points.length;
-  return (
-    <div className="dynamics-chart">
-      <p>
-        Среднее за период: <b>{average.toFixed(1)}%</b>
-      </p>
-      <svg viewBox="0 0 100 40" preserveAspectRatio="none" className="dynamics-chart__svg">
-        {points.map((p, i) => {
-          if (p.percent === null || p.percent === undefined) return null;
-          const height = (Math.min(p.percent, 100) / 100) * 40;
-          const color = p.percent >= 95 ? "var(--ok)" : p.percent >= 85 ? "var(--warn)" : "var(--danger)";
-          return (
-            <rect
-              key={p.date}
-              x={i * barWidth}
-              y={40 - height}
-              width={Math.max(barWidth - 0.5, 0.5)}
-              height={height}
-              fill={color}
-            >
-              <title>
-                {formatDateRu(p.date)}: {p.percent.toFixed(1)}%
-              </title>
-            </rect>
-          );
-        })}
-      </svg>
-    </div>
-  );
-}
-
-function PercentBar({ value }: { value: number | null | undefined }) {
-  if (value === null || value === undefined) {
-    // День не сдан — раньше это молча считалось за 100% (см. TODO.md 3).
-    return <span className="hint">—</span>;
-  }
-  const color = value >= 95 ? "var(--ok)" : value >= 85 ? "var(--warn)" : "var(--danger)";
-  const textColor = value >= 95 ? "var(--ok)" : value >= 85 ? "var(--warn-ink)" : "var(--danger)";
-  return (
-    <div className="percent-bar">
-      <div className="percent-bar__track">
-        <div className="percent-bar__fill" style={{ width: `${Math.min(value, 100)}%`, background: color }} />
-      </div>
-      <span className="percent-bar__value" style={{ color: textColor }}>
-        {value.toFixed(1)}%
-      </span>
     </div>
   );
 }

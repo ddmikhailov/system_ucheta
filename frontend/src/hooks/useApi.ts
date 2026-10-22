@@ -38,7 +38,6 @@ export function useApi<T>(path: string | null, errorText = "Не удалось 
   useEffect(() => {
     if (path === null) return;
     const controller = new AbortController();
-    setLoading(true);
     api
       .get<T>(path, controller.signal)
       .then((d) => {
@@ -57,6 +56,10 @@ export function useApi<T>(path: string | null, errorText = "Не удалось 
     return () => controller.abort();
   }, [path, nonce, errorText]);
 
-  const reload = useCallback(() => setNonce((n) => n + 1), []);
+  // Признак загрузки ставится здесь и при смене адреса (выше), а не в эффекте — без лишней отрисовки.
+  const reload = useCallback(() => {
+    setLoading(true);
+    setNonce((n) => n + 1);
+  }, []);
   return { data, error, loading, reload, setData };
 }
