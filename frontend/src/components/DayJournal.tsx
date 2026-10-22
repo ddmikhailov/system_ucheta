@@ -70,6 +70,8 @@ function pendingFrom(r: RosterResponse): Record<number, PendingMark> {
   return result;
 }
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 /** Общий журнал дня: выбор группы и дня, календарь месяца, итоги сданного дня или форма отметок.
  * Сданный день показывается итогами; «Редактировать» открывает форму. Правка куратором уже сданного
  * прошлого дня уходит на проверку зав. отделением (запрос с причиной), а не сразу в журнал. */
@@ -96,7 +98,7 @@ export default function DayJournal({
   const [groupId, setGroupId] = useState<number | null>(fixedGroupId ?? (deepLinkGroupId ? Number(deepLinkGroupId) : null));
   const [listOpen, setListOpen] = useState(false);
   const [cardsOpen, setCardsOpen] = useState(false);
-  const [date, setDate] = useState(deepLinkDate && deepLinkDate <= today ? deepLinkDate : today);
+  const [date, setDate] = useState(deepLinkDate && ISO_DATE.test(deepLinkDate) ? deepLinkDate : today);
   const [roster, setRoster] = useState<RosterResponse | null>(null);
   const [markCodes, setMarkCodes] = useState<MarkCodeOption[]>([]);
   const [pending, setPending] = useState<Record<number, PendingMark>>({});
@@ -118,8 +120,9 @@ export default function DayJournal({
   const draftKey = useRef<string | null>(null);
   const restoredKey = useRef<string | null>(null);
 
-  // Группа и день — в адресе (день — только прошедший, сегодняшний не пишем): из карточки студента
-  // и после обновления страницы журнал открывается там же. Браузерная «Назад» и ссылка из списка
+  // Группа и день — в адресе (сегодняшний день не пишем): из карточки студента и после обновления страницы
+  // журнал открывается там же. Будущий день (план отсутствий) тоже в адресе: иначе адрес без даты тут же
+  // возвращал журнал на сегодня, и «Сохранить план» сдавал сегодняшний день. Браузерная «Назад» и ссылка из списка
   // исправлений меняют адрес — журнал переходит к этой группе и дню.
   const patchSearch = usePatchSearch();
   useEffect(() => {
@@ -131,7 +134,7 @@ export default function DayJournal({
   }, [groupId, date]);
   useEffect(() => {
     if (!fixedGroupId && deepLinkGroupId && Number(deepLinkGroupId) !== groupId) setGroupId(Number(deepLinkGroupId));
-    const urlDate = deepLinkDate && deepLinkDate <= today ? deepLinkDate : today;
+    const urlDate = deepLinkDate && ISO_DATE.test(deepLinkDate) ? deepLinkDate : today;
     if (urlDate !== date) setDate(urlDate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deepLinkGroupId, deepLinkDate]);
