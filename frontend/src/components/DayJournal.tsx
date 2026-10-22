@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useBlocker, useSearchParams } from "react-router-dom";
+import { useBlocker, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/useAuth";
 import { MODULE } from "../constants/modules";
 import { isModuleOn } from "../utils/modules";
 import AbsencePeriodModal from "./AbsencePeriodModal";
 import DayActionsBar from "./DayActionsBar";
-import MarkCodeButtons from "./MarkCodeButtons";
 import MarkCommentModal from "./MarkCommentModal";
 import { scrollToTop } from "../utils/scroll";
 import { usePatchSearch } from "../hooks/useUrlState";
@@ -19,18 +18,13 @@ import { clearJournalDraft, journalDraftKey, readJournalDraft, saveJournalDraft 
 import GroupListModal from "./GroupListModal";
 import StudentCardModal from "./StudentCardModal";
 import GroupRhythm from "./GroupRhythm";
-import { formatPercent } from "../utils/percent";
 import DayNavigator from "./journal/DayNavigator";
 import DaySummary from "./journal/DaySummary";
 import ChangeCard from "./journal/ChangeCard";
+import RosterTable from "./journal/RosterTable";
+import type { PendingMark } from "./journal/RosterTable";
 
 const NON_WORKING = ["weekend", "holiday", "vacation"];
-
-interface PendingMark {
-  mark_code: string;
-  comment: string;
-  basis_reference: string;
-}
 
 /** Группа в выпадающем списке журнала: подпись формирует вызывающая сторона. */
 export interface JournalGroup {
@@ -584,86 +578,19 @@ export default function DayJournal({
                 ))}
               </p>
 
-              <table className="roster-table compact-cards journal-roster">
-                <thead>
-                  <tr>
-                    <th>№</th>
-                    <th>ФИО</th>
-                    <th>Статус</th>
-                    <th>Комментарий</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {roster.entries.map((entry, index) => {
-                    const current = pending[entry.student_id];
-                    const code = current?.mark_code ?? null;
-                    const risky = entry.is_risk;
-                    const hasComment = Boolean(current?.comment || current?.basis_reference);
-                    return (
-                      <tr key={entry.student_id} className={risky ? "risk-row" : ""}>
-                        <td data-label="№">{index + 1}</td>
-                        <td data-label="ФИО">
-                          <Link to={`/students/${entry.student_id}`} className="link-btn">
-                            {entry.full_name}
-                          </Link>
-                        </td>
-                        <td data-label="Статус">
-                          {entry.is_locked ? (
-                            <span className="locked-badge" title={entry.basis_reference ?? ""}>
-                              {entry.mark_name}
-                            </span>
-                          ) : (
-                            <MarkCodeButtons value={code} markCodes={markCodes} onChange={(c) => setStudentMark(entry.student_id, c)} />
-                          )}
-                          {entry.is_draft_suggestion && !entry.is_locked && <span className="draft-badge">черновик со вчера</span>}
-                          {risky && (
-                            <span
-                              className="risk-badge"
-                              title={`Группа риска: пропусков без уважительной причины с начала семестра больше ${thresholds.risk_unexcused_percent} %`}
-                            >
-                              риск: без уважительной причины {formatPercent(entry.unexcused_percent)}
-                            </span>
-                          )}
-                          {entry.needs_compensation && (
-                            <span
-                              className="compensate-badge"
-                              title={`Посещаемость с начала семестра ${formatPercent(entry.attendance_percent)}: без практики и ИУП ниже ${thresholds.risk_attendance_percent} %. Закрыть — на вкладке «Студенты».`}
-                            >
-                              восполнить пропуски
-                            </span>
-                          )}
-                        </td>
-                        <td data-label="Комментарий">
-                          {!entry.is_locked && code && (
-                            <button className="comment-btn" onClick={() => setShowCommentFor(entry.student_id)}>
-                              {hasComment ? "Комментарий добавлен" : "Добавить комментарий"}
-                            </button>
-                          )}
-                        </td>
-                        <td>
-                          {!entry.is_locked && !reviewMode && (
-                            <button className="link-btn" onClick={() => setShowPeriodForm(entry.student_id)}>
-                              Период
-                            </button>
-                          )}
-                          {entry.is_locked && entry.absence_period && (
-                            <button
-                              className="link-btn"
-                              onClick={() => {
-                                setEditPeriod(entry.absence_period ?? null);
-                                setShowPeriodForm(entry.student_id);
-                              }}
-                            >
-                              Редактировать
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <RosterTable
+                roster={roster}
+                pending={pending}
+                markCodes={markCodes}
+                thresholds={thresholds}
+                reviewMode={reviewMode}
+                onMark={setStudentMark}
+                onComment={setShowCommentFor}
+                onPeriod={(studentId, period) => {
+                  setEditPeriod(period);
+                  setShowPeriodForm(studentId);
+                }}
+              />
             </>
           )}
         </div>
