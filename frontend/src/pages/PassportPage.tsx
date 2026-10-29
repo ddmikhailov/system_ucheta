@@ -144,6 +144,9 @@ export function GroupPassportPanel({ groupId }: { groupId: number }) {
           passport={shown}
           onExport={() => exportFile(`/passport/export?group_id=${groupId}`, "social_passport.xlsx")}
           onExportWord={() => exportFile(`/passport/group/${groupId}/docx`, `Социальный_паспорт_${shown.group_code}.docx`)}
+          onExportScholarships={(format) =>
+            exportFile(`/passport/group/${groupId}/scholarships?format=${format}`, `Стипендии_${shown.group_code}.${format}`)
+          }
         />
       )}
     </>
@@ -336,7 +339,11 @@ export default function PassportPage() {
   );
 }
 
-function GroupView({ passport: p, onExport, onExportWord }: { passport: GroupPassport; onExport: () => void; onExportWord: () => void }) {
+function GroupView({
+  passport: p, onExport, onExportWord, onExportScholarships,
+}: {
+  passport: GroupPassport; onExport: () => void; onExportWord: () => void; onExportScholarships: (format: "xlsx" | "docx") => void;
+}) {
   const { user } = useAuth();
   const technical = inRoles(user?.role, DOSSIER_AUDIT_ROLES);
   const [part, setPart] = useEntryState("part", "info");
@@ -365,6 +372,12 @@ function GroupView({ passport: p, onExport, onExportWord }: { passport: GroupPas
           </button>
           <button className="btn-secondary" onClick={onExport}>
             Экспорт в Excel
+          </button>
+          <button className="btn-secondary" onClick={() => onExportScholarships("xlsx")} title="Студенты группы с видом стипендии из досье, по видам">
+            Стипендии: Excel
+          </button>
+          <button className="btn-secondary" onClick={() => onExportScholarships("docx")} title="Студенты группы с видом стипендии из досье, по видам">
+            Стипендии: Word
           </button>
         </div>
       </div>
