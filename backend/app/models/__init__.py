@@ -11,7 +11,7 @@ from app.models.enums import (
     RoleCode,
     StudentStatus,
 )
-from app.models.marks import AbsenceCompensation, AbsencePeriod, AttendanceChangeRequest, AttendanceMark, DaySubmission, MarkCode
+from app.models.marks import AbsenceCompensation, AbsencePeriod, AttendanceChangeRequest, AttendanceMark, DaySubmission, GroupPractice, MarkCode
 from app.models.notifications import InAppNotification
 from app.models.password_reset import PasswordResetRequest
 from app.models.tasks import Task, TaskAssignment, TaskComment, TaskRow, TaskTemplate
@@ -27,6 +27,7 @@ from app.models.people import CuratorAssignment, Student, StudentGroupMembership
 __all__ = [
     "AbsenceCompensation",
     "AbsencePeriod",
+    "GroupPractice",
     "AcademicCalendarDay",
     "AssignmentRole",
     "AttendanceChangeRequest",
