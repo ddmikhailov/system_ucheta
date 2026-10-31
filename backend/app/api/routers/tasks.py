@@ -1,9 +1,12 @@
 """Задачи от администрации (этап 3). Ставят задачи: администратор и
 воспитательный отдел — по колледжу, зав. отделением и тьютор — по своему
 отделению. Куратор выполняет («Мои задачи»), проверяющий принимает или возвращает."""
+import datetime
 import json
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload, selectinload
 
@@ -17,7 +20,7 @@ from app.schemas.tasks import (
 )
 from app.services import attendance_service
 from app.services.access_service import get_curator_group_ids
-from app.services import task_dossier, task_schedule
+from app.services import task_dossier, task_schedule, task_starter_service
 from app.services import task_service as svc
 from app.services.audit_service import log_action
 
@@ -52,6 +55,27 @@ def create_task(payload: TaskCreate, user: User = Depends(require_task_manager),
     log_action(db, user, "task.create", "task", str(task.id), new_value=task.title)
     db.commit()
     return _detail(db, user, task)
+
+
+class FirstYearLaunch(BaseModel):
+    start_date: datetime.date
+    reviewer_rule: Literal["dept_head", "edu_department", "author"] = "dept_head"
+
+
+@router.get("/starter-sets/first-year")
+def first_year_set(start_date: datetime.date | None = None, user: User = Depends(require_task_manager)):
+    """Состав набора «Адаптация первого курса»: шесть задач по неделям от даты начала (по умолчанию — сегодня)."""
+    return task_starter_service.descriptor(start_date)
+
+
+@router.post("/starter-sets/first-year", status_code=status.HTTP_201_CREATED)
+def launch_first_year_set(payload: FirstYearLaunch, user: User = Depends(require_task_manager), db: Session = Depends(get_db)):
+    """Ставит шесть задач «Адаптация первого курса» всем группам 1 курса, которые видит ставящий."""
+    tasks = task_starter_service.launch_first_year(db, user, payload.start_date, payload.reviewer_rule)
+    log_action(db, user, "task.starter_set", "task", ",".join(str(t.id) for t in tasks), new_value=task_starter_service.FIRST_YEAR)
+    result = task_starter_service.tasks_payload(tasks)
+    db.commit()
+    return result
 
 
 @router.post("/scope-preview", response_model=ScopePreview)

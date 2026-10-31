@@ -11,6 +11,8 @@ vi.mock("../api/client", async (importOriginal) => {
   return { ...actual, api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn() } };
 });
 
+vi.mock("./StarterSetCard", () => ({ default: () => null }));
+
 const get = vi.mocked(api.get);
 const put = vi.mocked(api.put);
 const del = vi.mocked(api.delete);

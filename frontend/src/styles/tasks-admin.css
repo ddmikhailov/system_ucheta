@@ -754,3 +754,19 @@ button.yesno__btn--no.is-active {
     width: 100%;
   }
 }
+
+.starter-set {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.starter-set h3 {
+  margin: 0 0 4px;
+}
+
+.starter-set__list {
+  margin: 8px 0;
+  padding-left: 20px;
+}

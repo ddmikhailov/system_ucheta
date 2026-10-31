@@ -143,16 +143,16 @@ describe("StudentCardPage — просмотр", () => {
     expect(within(followUps).getByText("1")).toBeInTheDocument();
   });
 
-  it("в карточке есть кнопка «Сообщение родителям о пропусках» — она запрашивает текст по этому студенту", async () => {
+  it("в карточке есть кнопка «Подготовить сообщение» — она запрашивает текст родителям по этому студенту", async () => {
     const user = userEvent.setup();
     open("curator");
-    const button = await screen.findByRole("button", { name: "Сообщение родителям о пропусках" });
+    const button = await screen.findByRole("button", { name: "Подготовить сообщение" });
     get.mockImplementation(async (path: string) => {
-      if (path === "/students/10/absence-message?days=14") return { days: 14, absences: [], text: "" };
+      if (path === "/students/10/parent-message?kind=absences&days=14") return { kind: "absences", text: "", empty_reason: "Сообщать нечего." };
       throw new Error(`неожиданный запрос ${path}`);
     });
     await user.click(button);
-    expect(await screen.findByText(/сообщать нечего/)).toBeInTheDocument();
+    expect(await screen.findByText(/Сообщать нечего/)).toBeInTheDocument();
   });
 
   it("нет сданных дней — пояснение вместо цифр; нет отметок — тоже", async () => {

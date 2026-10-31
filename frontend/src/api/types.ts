@@ -141,10 +141,10 @@ export interface MyDay {
   review_waiting: { count: number; oldest_submitted_at: string | null } | null;
 }
 
-export interface AbsenceMessage {
-  days: number;
-  absences: { date: string; code: string; name: string }[];
+export interface ParentMessage {
+  kind: string;
   text: string;
+  empty_reason: string | null;
 }
 
 export interface Dossier {
@@ -1132,4 +1132,10 @@ export interface AuditEntry {
 export interface AuditPage {
   items: AuditEntry[];
   next_before_id: number | null;
+}
+
+export interface StarterTask {
+  week: number;
+  title: string;
+  due_date: string;
 }
