@@ -20,6 +20,7 @@ import type { DeleteResult, StudentCard, StudyGroupAdmin } from "../api/types";
 import { formatDateRu, todayIso } from "../utils/date";
 import SearchSelect from "../components/SearchSelect";
 import StudentDeletionRequestBox from "../components/StudentDeletionRequestBox";
+import UrgentReportBox from "../components/UrgentReportBox";
 import { dialogs, toast } from "../utils/feedback";
 import { MODULE } from "../constants/modules";
 import { isModuleOn } from "../utils/modules";
@@ -150,6 +151,7 @@ export default function StudentCardPage() {
           <AbsenceMessageButton studentId={card.id} />
           <AbsenceSheetButton studentId={card.id} lastName={card.last_name} groupCode={card.group.code} />
         </div>
+        {inRoles(user?.role, TEACHER_ROLES) && <UrgentReportBox studentId={card.id} />}
       </TabPanel>
 
       {dossierOn && (

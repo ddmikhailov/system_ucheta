@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.models import (
     AbsenceCompensation, AbsencePeriod, AttendanceChangeRequest, AttendanceMark, DossierAccessLog, GroupEventAttendee, LessonMark,
-    ParentMeetingAttendee, Student, StudentDeletionRequest, StudentGroupMembership, StudentGuardian, StudentMeal,
+    ParentMeetingAttendee, Student, StudentDeletionRequest, StudentGroupMembership, UrgentReport, StudentGuardian, StudentMeal,
     StudentMyId, StudentNote, StudentProfile, TaskComment, TaskRow, User,
 )
 from app.services.audit_service import log_action, redact_audit_history
@@ -27,6 +27,7 @@ def erase_student_personal_data(db: Session, student_ids: list[int], include_acc
         db.query(TaskRow).filter(TaskRow.student_id.in_(chunk)).delete(synchronize_session=False)
         db.query(StudentNote).filter(StudentNote.student_id.in_(chunk)).delete(synchronize_session=False)
         db.query(StudentDeletionRequest).filter(StudentDeletionRequest.student_id.in_(chunk)).delete(synchronize_session=False)
+        db.query(UrgentReport).filter(UrgentReport.student_id.in_(chunk)).delete(synchronize_session=False)
         db.query(StudentMeal).filter(StudentMeal.student_id.in_(chunk)).delete(synchronize_session=False)
         db.query(StudentMyId).filter(StudentMyId.student_id.in_(chunk)).delete(synchronize_session=False)
         db.query(LessonMark).filter(LessonMark.student_id.in_(chunk)).delete(synchronize_session=False)

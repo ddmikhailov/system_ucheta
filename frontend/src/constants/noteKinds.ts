@@ -5,6 +5,7 @@ export const NOTE_KINDS: Record<string, string> = {
   parent_invited: "Вызов родителей",
   prevention_council: "Совет профилактики",
   home_visit: "Визит домой",
+  reconciliation: "Служба примирения",
   incident: "Инцидент",
   agreement: "Договорённость",
   other: "Другое",

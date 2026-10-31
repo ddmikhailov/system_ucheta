@@ -11,7 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.api.routers import admin, attendance_changes, student_deletions, auth, curator, dashboards, dossier, dossier_import, export, individual_work, my_day, notifications, passport, students, support, tasks, events, meetings, reports, my_id, meals, contingent_import, group_subjects, journal, folder, assemblies, instructions
+from app.api.routers import admin, attendance_changes, student_deletions, auth, curator, dashboards, dossier, dossier_import, export, individual_work, my_day, notifications, passport, students, support, tasks, events, meetings, reports, my_id, meals, contingent_import, group_subjects, journal, folder, assemblies, instructions, urgent_reports
 from app.core.config import get_settings
 from app.core.modules import enabled_modules
 from app.core.observability import init_sentry
@@ -105,6 +105,7 @@ MODULE_ROUTERS = (
     (curator.router, None),
     (attendance_changes.router, None),
     (student_deletions.router, None),
+    (urgent_reports.router, None),
     (dashboards.router, None),
     (admin.router, None),
     (export.router, None),

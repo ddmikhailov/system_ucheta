@@ -224,6 +224,18 @@ def assert_can_review_student_deletion(user: User, group: StudyGroup) -> None:
     raise HTTPException(status.HTTP_403_FORBIDDEN, "Решать запросы на удаление студентов может админ или зав. отделением")
 
 
+URGENT_REPORT_READERS = (RoleCode.ADMIN, RoleCode.DEPT_HEAD, RoleCode.TUTOR, RoleCode.EDU_DEPARTMENT)
+
+
+def assert_can_read_urgent_report(user: User, group: StudyGroup) -> None:
+    """Срочное сообщение о студенте читают админ, зав. отделением, тьютор и воспитательный отдел — в своём отделении."""
+    role = RoleCode(user.role.code)
+    if role not in URGENT_REPORT_READERS:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Срочные сообщения читает администрация отделения")
+    if role != RoleCode.ADMIN and not scope_of(user).within(group.department_id):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Студент не из вашего отделения")
+
+
 def assert_can_assign_role(admin: User, new_role_code: str) -> None:
     admin_role = RoleCode(admin.role.code)
     if admin_role == RoleCode.ADMIN:

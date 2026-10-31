@@ -284,3 +284,14 @@ class UserJournalOverview(BaseModel):
     last_activity_at: datetime.datetime | None
     activity_30d: list[UserActivityDay]
     months: list[UserActivityMonth]
+
+
+class PdChangeRead(BaseModel):
+    """Строка списка «Изменение ПДн за месяц»: кто и когда менял данные студента (значений не содержит)."""
+
+    created_at: datetime.datetime
+    student_id: int
+    student_name: str
+    group_code: str
+    changed_by_name: str | None
+    changes: list[str]

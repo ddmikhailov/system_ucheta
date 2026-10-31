@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-NoteKind = Literal["conversation", "call", "parent_invited", "prevention_council", "home_visit", "incident", "agreement", "other"]
+NoteKind = Literal["conversation", "call", "parent_invited", "prevention_council", "home_visit", "reconciliation", "incident", "agreement", "other"]
 
 
 class ProfileFields(BaseModel):

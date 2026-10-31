@@ -90,6 +90,12 @@ export default function NotificationBell({
       setOpen(false);
       return;
     }
+    if (n.entity_type === "urgent_report") {
+      // Срочное сообщение: текст в колокольчике не показываем, он в списке «Срочные сообщения» журнала группы.
+      navigate("/admin?tab=journal");
+      setOpen(false);
+      return;
+    }
     if (n.entity_type === "password_reset" && n.entity_id) {
       // Запрос «Восстановить пароль»: сразу на вкладку управления этим человеком, где выдаётся временный пароль.
       navigate(`/admin/users/${n.entity_id}?tab=manage`);
