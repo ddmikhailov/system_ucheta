@@ -1,7 +1,7 @@
 """журнал инструктажа по охране труда
 
 Revision ID: c0d1e2f3a4b5
-Revises: r1a2b3c4d5e6
+Revises: a8b9c0d1e2f3
 Create Date: 2026-10-29 19:00:00.000000
 
 """
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = 'c0d1e2f3a4b5'
-down_revision = 'r1a2b3c4d5e6'
+down_revision = 'a8b9c0d1e2f3'
 branch_labels = None
 depends_on = None
 

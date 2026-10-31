@@ -1,7 +1,7 @@
 """общие собрания группы: протокол п. 5.1.10 положения о кураторе («Папка куратора»)
 
 Revision ID: e2f3a4b5c6d7
-Revises: r1a2b3c4d5e6
+Revises: d1e2f3a4b5c6
 Create Date: 2026-10-29 19:00:00.000000
 
 """
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = 'e2f3a4b5c6d7'
-down_revision = 'r1a2b3c4d5e6'
+down_revision = 'd1e2f3a4b5c6'
 branch_labels = None
 depends_on = None
 

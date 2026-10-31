@@ -1,7 +1,7 @@
 """group_subjects: дисциплины группы и преподаватели
 
 Revision ID: d1e2f3a4b5c6
-Revises: r1a2b3c4d5e6
+Revises: c0d1e2f3a4b5
 Create Date: 2026-10-29 00:00:00.000000
 
 """
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = 'd1e2f3a4b5c6'
-down_revision = 'r1a2b3c4d5e6'
+down_revision = 'c0d1e2f3a4b5'
 branch_labels = None
 depends_on = None
 
