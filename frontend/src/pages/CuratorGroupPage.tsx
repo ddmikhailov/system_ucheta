@@ -24,10 +24,11 @@ const IndividualWorkPage = lazy(() => import("./IndividualWorkPage"));
 const GroupPassportPanel = lazy(() => import("./PassportPage").then((m) => ({ default: m.GroupPassportPanel })));
 const PlanPage = lazy(() => import("./PlanPage"));
 const ReportPage = lazy(() => import("./ReportPage"));
+const PracticePanel = lazy(() => import("../components/PracticePanel"));
 const MyIdPanel = lazy(() => import("../components/MyIdPanel"));
 const GroupMealsPanel = lazy(() => import("../components/meals/GroupMealsPanel"));
 
-const TABS = ["journal", "students", "meals", "work", "passport", "plan", "report", "my-id"] as const;
+const TABS = ["journal", "students", "meals", "work", "passport", "plan", "practice", "report", "my-id"] as const;
 type GroupTab = (typeof TABS)[number];
 // Вкладки, которые есть только при включённом модуле (релиз 3.5.0: «Журнал» и «Студенты» — посещаемость, всегда).
 const TAB_MODULE: Partial<Record<GroupTab, ModuleName>> = {
@@ -137,6 +138,7 @@ export default function CuratorGroupPage() {
           { key: "work", label: "Индивидуальная работа" },
           { key: "passport", label: "Соц. паспорт" },
           { key: "plan", label: "План группы" },
+          { key: "practice", label: "Практика" },
           { key: "report", label: "Отчёт" },
           { key: "my-id", label: "Мой ID" },
         ].filter((t) => (visibleTabs as readonly string[]).includes(t.key))}
@@ -177,6 +179,9 @@ export default function CuratorGroupPage() {
       </TabPanel>
       <TabPanel idPrefix="group" tabKey="plan" active={tab}>
         <PlanPage fixedGroupId={groupId} />
+      </TabPanel>
+      <TabPanel idPrefix="group" tabKey="practice" active={tab}>
+        <PracticePanel groupId={groupId} />
       </TabPanel>
       <TabPanel idPrefix="group" tabKey="report" active={tab}>
         <ReportPage fixedGroupId={groupId} />

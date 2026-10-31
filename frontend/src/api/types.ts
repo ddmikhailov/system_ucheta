@@ -188,6 +188,8 @@ export interface RosterAbsencePeriod {
   date_from: string;
   date_to: string;
   basis_reference: string | null;
+  /** Период создала практика группы: правится только на вкладке «Практика». */
+  group_practice_id?: number | null;
 }
 
 export interface RosterEntry {
@@ -1132,4 +1134,50 @@ export interface AuditEntry {
 export interface AuditPage {
   items: AuditEntry[];
   next_before_id: number | null;
+}
+
+export type PracticeKind = "educational" | "production" | "pre_diploma";
+/** Состояние для напоминания: идёт, скоро начнётся, закончилась без характеристики; null — ничего не требуется. */
+export type PracticeState = "active" | "soon" | "no_review" | null;
+
+export interface GroupPractice {
+  id: number;
+  study_group_id: number;
+  kind: PracticeKind;
+  kind_name: string;
+  date_from: string;
+  date_to: string;
+  base: string | null;
+  college_supervisor: string | null;
+  base_supervisor: string | null;
+  phone: string | null;
+  review_received: boolean;
+  review_received_on: string | null;
+  note: string | null;
+  state: PracticeState;
+  /** Сколько уже стоявших отметок заменила практика — только в ответе на сохранение. */
+  replaced_marks: number;
+}
+
+export interface GroupPractices {
+  group_id: number;
+  can_edit: boolean;
+  practices: GroupPractice[];
+}
+
+export interface CurrentPracticeRow {
+  id: number;
+  study_group_id: number;
+  group_code: string;
+  course: number;
+  department: string;
+  kind_name: string;
+  date_from: string;
+  date_to: string;
+  base: string | null;
+  college_supervisor: string | null;
+  base_supervisor: string | null;
+  phone: string | null;
+  review_received: boolean;
+  state: "active" | "soon" | "no_review";
 }

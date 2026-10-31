@@ -21,6 +21,7 @@ import { useEntryState } from "../hooks/useEntryState";
 import DayTab from "../components/dashboards/DayTab";
 import DynamicsTab from "../components/dashboards/DynamicsTab";
 import RiskTab from "../components/dashboards/RiskTab";
+import PracticeTab from "../components/dashboards/PracticeTab";
 import DisciplineTab from "../components/dashboards/DisciplineTab";
 import { DAY_FILTERS, DISCIPLINE_FILTERS, DYNAMICS_FILTERS, RISK_FILTERS } from "../components/dashboards/dashboardFilters";
 import VacantTab from "../components/dashboards/VacantTab";
@@ -31,8 +32,8 @@ function daysAgoIso(n: number): string {
   return toIso(d);
 }
 
-type Tab = "day" | "summary" | "dynamics" | "risk" | "discipline" | "vacant";
-const TABS: Tab[] = ["day", "summary", "dynamics", "risk", "discipline", "vacant"];
+type Tab = "day" | "summary" | "dynamics" | "risk" | "practice" | "discipline" | "vacant";
+const TABS: Tab[] = ["day", "summary", "dynamics", "risk", "practice", "discipline", "vacant"];
 
 // Вкладки сами грузят свои строки и держат свои фильтры и сортировки (components/dashboards/*Tab);
 // здесь — общее: вкладка, день и период, отделение, экспорт, группы для «Свода» и вакантных групп.
@@ -165,6 +166,9 @@ export default function DashboardsPage() {
         <button className={tab === "risk" ? "active" : ""} onClick={() => setTab("risk")}>
           Группа риска
         </button>
+        <button className={tab === "practice" ? "active" : ""} onClick={() => setTab("practice")}>
+          Практика
+        </button>
         {!isStaff && (
           <button className={tab === "discipline" ? "active" : ""} onClick={() => setTab("discipline")}>
             Дисциплина кураторов
@@ -192,9 +196,11 @@ export default function DashboardsPage() {
             ))}
           </select>
         )}
-        <button className="link-btn" onClick={handleExport}>
-          Экспорт в Excel ({formatDateRu(exportDateFrom)}–{formatDateRu(exportDateTo)})
-        </button>
+        {tab !== "practice" && (
+          <button className="link-btn" onClick={handleExport}>
+            Экспорт в Excel ({formatDateRu(exportDateFrom)}–{formatDateRu(exportDateTo)})
+          </button>
+        )}
       </div>
 
       {exportError && <div className="error-text">{exportError}</div>}
@@ -232,6 +238,8 @@ export default function DashboardsPage() {
       )}
 
       {tab === "risk" && <RiskTab key={filtersEpoch} date={date} deptQuery={deptQuery} reloadKey={reloadKey} />}
+
+      {tab === "practice" && <PracticeTab key={filtersEpoch} deptQuery={deptQuery} reloadKey={reloadKey} />}
 
       {tab === "discipline" && (
         <DisciplineTab key={filtersEpoch} dateFrom={dateFrom} dateTo={dateTo} deptQuery={deptQuery} reloadKey={reloadKey} isDeptHead={isDeptHead} />

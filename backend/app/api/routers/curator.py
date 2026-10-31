@@ -389,6 +389,8 @@ def _period_or_404(db: Session, user: User, period_id: int) -> tuple[AbsencePeri
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Период не найден")
     # Правит тот, у кого есть доступ к группе студента, а не только автор периода.
     assert_can_access_group(db, user, student.study_group_id, period.date_from)
+    if period.group_practice_id is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Период создан практикой группы — измените практику на вкладке «Практика»")
     return period, student
 
 

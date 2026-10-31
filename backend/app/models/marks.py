@@ -105,6 +105,10 @@ class AbsencePeriod(Base):
     date_from: Mapped[datetime.date] = mapped_column(Date, nullable=False)
     date_to: Mapped[datetime.date] = mapped_column(Date, nullable=False)
     basis_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Период создан практикой группы (GroupPractice) и меняется только вместе с ней.
+    group_practice_id: Mapped[int | None] = mapped_column(
+        ForeignKey("group_practices.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, default=utcnow, nullable=False
@@ -115,6 +119,28 @@ class AbsencePeriod(Base):
     generated_marks: Mapped[list["AttendanceMark"]] = relationship(
         back_populates="absence_period"
     )
+
+
+class GroupPractice(Base):
+    """Период практики группы: на его учебные дни всем студентам группы платформа ставит отметку практики («р»)
+    через длительные периоды отсутствия. Характеристику с места практики не хранит — только факт получения."""
+
+    __tablename__ = "group_practices"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    study_group_id: Mapped[int] = mapped_column(ForeignKey("study_groups.id"), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)  # educational / production / pre_diploma
+    date_from: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    date_to: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    base: Mapped[str | None] = mapped_column(String(255), nullable=True)  # организация — база практики
+    college_supervisor: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    base_supervisor: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    review_received: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    review_received_on: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
 
 
 class AbsenceCompensation(Base):

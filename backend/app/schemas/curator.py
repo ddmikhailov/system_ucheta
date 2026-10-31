@@ -11,6 +11,7 @@ class RosterAbsencePeriod(BaseModel):
     date_from: datetime.date
     date_to: datetime.date
     basis_reference: str | None
+    group_practice_id: int | None = None  # период создала практика группы: правится только на вкладке «Практика»
 
 
 class RosterEntry(BaseModel):
