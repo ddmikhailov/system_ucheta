@@ -21,8 +21,9 @@ import { useEntryState } from "../hooks/useEntryState";
 import DayTab from "../components/dashboards/DayTab";
 import DynamicsTab from "../components/dashboards/DynamicsTab";
 import RiskTab from "../components/dashboards/RiskTab";
+import CuratorCardTab from "../components/dashboards/CuratorCardTab";
 import DisciplineTab from "../components/dashboards/DisciplineTab";
-import { DAY_FILTERS, DISCIPLINE_FILTERS, DYNAMICS_FILTERS, RISK_FILTERS } from "../components/dashboards/dashboardFilters";
+import { CARD_FILTERS, DAY_FILTERS, DISCIPLINE_FILTERS, DYNAMICS_FILTERS, RISK_FILTERS } from "../components/dashboards/dashboardFilters";
 import VacantTab from "../components/dashboards/VacantTab";
 
 function daysAgoIso(n: number): string {
@@ -31,8 +32,8 @@ function daysAgoIso(n: number): string {
   return toIso(d);
 }
 
-type Tab = "day" | "summary" | "dynamics" | "risk" | "discipline" | "vacant";
-const TABS: Tab[] = ["day", "summary", "dynamics", "risk", "discipline", "vacant"];
+type Tab = "day" | "summary" | "dynamics" | "risk" | "discipline" | "card" | "vacant";
+const TABS: Tab[] = ["day", "summary", "dynamics", "risk", "discipline", "card", "vacant"];
 
 // Вкладки сами грузят свои строки и держат свои фильтры и сортировки (components/dashboards/*Tab);
 // здесь — общее: вкладка, день и период, отделение, экспорт, группы для «Свода» и вакантных групп.
@@ -104,7 +105,7 @@ export default function DashboardsPage() {
   }, [tab, summaryFilters, setSearchParams]);
 
   function resetAllFilters() {
-    for (const [name, value] of Object.entries({ ...DAY_FILTERS, ...DYNAMICS_FILTERS, ...RISK_FILTERS, ...DISCIPLINE_FILTERS })) {
+    for (const [name, value] of Object.entries({ ...DAY_FILTERS, ...DYNAMICS_FILTERS, ...RISK_FILTERS, ...DISCIPLINE_FILTERS, ...CARD_FILTERS })) {
       setEntryStateValue(location.key, name, value);
     }
     setFiltersEpoch((n) => n + 1);
@@ -171,6 +172,11 @@ export default function DashboardsPage() {
           </button>
         )}
         {!isStaff && (
+          <button className={tab === "card" ? "active" : ""} onClick={() => setTab("card")}>
+            Карточка куратора
+          </button>
+        )}
+        {!isStaff && (
           <button className={tab === "vacant" ? "active" : ""} onClick={() => setTab("vacant")}>
             Вакантные группы{vacantGroups.length > 0 ? ` (${vacantGroups.length})` : ""}
           </button>
@@ -209,7 +215,7 @@ export default function DashboardsPage() {
         </div>
       )}
 
-      {(tab === "dynamics" || tab === "discipline") && (
+      {(tab === "dynamics" || tab === "discipline" || tab === "card") && (
         <div className="toolbar">
           <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} aria-label="Период с" />
           <span>—</span>
@@ -236,6 +242,8 @@ export default function DashboardsPage() {
       {tab === "discipline" && (
         <DisciplineTab key={filtersEpoch} dateFrom={dateFrom} dateTo={dateTo} deptQuery={deptQuery} reloadKey={reloadKey} isDeptHead={isDeptHead} />
       )}
+
+      {tab === "card" && <CuratorCardTab key={filtersEpoch} dateFrom={dateFrom} dateTo={dateTo} deptQuery={deptQuery} reloadKey={reloadKey} />}
 
       {tab === "vacant" && <VacantTab vacantGroups={vacantGroups} onAssign={setAssigningGroupId} />}
 

@@ -53,6 +53,32 @@ class CuratorDisciplineRow(BaseModel):
     total_study_days: int
 
 
+class ContingentMovement(BaseModel):
+    joined: int
+    left: int
+    transferred_in: int
+    transferred_out: int
+    academic_leave: int  # сейчас в академическом отпуске
+
+
+class CuratorCardRow(BaseModel):
+    study_group_id: int
+    code: str
+    course: int
+    department_id: int
+    responsible_name: str | None = None
+    students_count: int
+    attendance_percent: float | None  # за период по сданным дням; None — сданных дней нет
+    absent_unexcused_percent: float | None
+    risk_count: int  # с начала семестра по конец периода
+    compensation_count: int
+    contingent: ContingentMovement
+    on_time: int
+    late: int
+    missed: int
+    total_study_days: int
+
+
 class StudentMarkHistoryEntry(BaseModel):
     date: datetime.date
     mark_code: str

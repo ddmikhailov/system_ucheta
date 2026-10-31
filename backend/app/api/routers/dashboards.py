@@ -8,6 +8,7 @@ from app.core import policies
 from app.db.session import get_db
 from app.models import AttendanceMark, RoleCode, Student, StudyGroup, User
 from app.schemas.dashboards import (
+    CuratorCardRow,
     CuratorDaysRead,
     CuratorDisciplineRow,
     DayOverviewRow,
@@ -20,7 +21,7 @@ from app.schemas.dashboards import (
     SummaryLineRead,
     SummaryRead,
 )
-from app.services import stats_service, summary_service
+from app.services import curator_card_service, stats_service, summary_service
 
 router = APIRouter(prefix="/dashboards", tags=["dashboards"])
 
@@ -126,6 +127,20 @@ def curator_discipline(
     scope = scope_department_id(user, department_id)
     rows = stats_service.curator_discipline(db, date_from, date_to, scope)
     return [CuratorDisciplineRow(**r) for r in rows]
+
+
+@router.get("/curator-card", response_model=list[CuratorCardRow])
+def curator_card(
+    date_from: datetime.date,
+    date_to: datetime.date,
+    department_id: int | None = None,
+    user: User = Depends(require_management),
+    db: Session = Depends(get_db),
+):
+    """Карточка работы куратора по каждой группе. Куратору недоступна; зав. отделением и тьютор — своё отделение."""
+    validate_date_range(date_from, date_to)
+    scope = scope_department_id(user, department_id)
+    return [CuratorCardRow(**r) for r in curator_card_service.curator_cards(db, date_from, date_to, scope)]
 
 
 @router.get("/curator-discipline/{study_group_id}/days", response_model=CuratorDaysRead)
