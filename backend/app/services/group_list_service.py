@@ -202,7 +202,6 @@ def column_widths(columns: list[Field], total: int) -> list[int]:
     widths[-1] += total - sum(widths)  # остаток округления — в последний столбец
     return widths
 
-
 def build_docx(
     group_code: str, department_name: str, curator_name: str | None, on_date: datetime.date,
     fields: list[Field], rows: list[dict[str, str]], numbering: bool = True, title: str | None = None,
@@ -261,7 +260,6 @@ def build_docx(
     )
 
     return pack_docx(document)
-
 
 def pack_docx(document: str) -> bytes:
     """Минимальный .docx из готового `word/document.xml` (им же собирается ИВПР в `ivpr_service`)."""

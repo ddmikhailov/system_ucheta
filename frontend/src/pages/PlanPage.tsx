@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, downloadFile } from "../api/client";
-import type { GroupEvent, GroupMeetings, GroupPlan, ParentMeeting } from "../api/types";
+import type { GroupEvent, GroupInstructions, GroupMeetings, GroupPlan, ParentMeeting, SafetyInstruction } from "../api/types";
 import AttendanceModal from "../components/AttendanceModal";
 import EventForm from "../components/EventForm";
+import InstructionForm from "../components/InstructionForm";
 import MeetingForm from "../components/MeetingForm";
 import ParentsAttendanceModal from "../components/ParentsAttendanceModal";
 import SearchSelect from "../components/SearchSelect";
@@ -32,8 +33,11 @@ export default function PlanPage({ fixedGroupId }: { fixedGroupId?: number } = {
   const [meetings, setMeetings] = useState<GroupMeetings | null>(null);
   const [meetingForm, setMeetingForm] = useState<{ meeting: ParentMeeting | null } | null>(null);
   const [parentsOf, setParentsOf] = useState<ParentMeeting | null>(null);
+  const [instructions, setInstructions] = useState<GroupInstructions | null>(null);
+  const [instructionForm, setInstructionForm] = useState<{ record: SafetyInstruction | null } | null>(null);
   const year = searchParams.get("year");
-  const part = searchParams.get("part") === "meetings" ? "meetings" : "events";
+  const partParam = searchParams.get("part");
+  const part = partParam === "meetings" || partParam === "instructions" ? partParam : "events";
   const sectionFilter = searchParams.get("section") ?? "all";
 
   useEffect(() => {
@@ -76,6 +80,26 @@ export default function PlanPage({ fixedGroupId }: { fixedGroupId?: number } = {
   }, [groupId, year]);
 
   useEffect(loadMeetings, [loadMeetings]);
+
+  const loadInstructions = useCallback(() => {
+    if (!groupId) return;
+    api
+      .get<GroupInstructions>(`/instructions/groups/${groupId}${year ? `?year=${year}` : ""}`)
+      .then(setInstructions)
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Не удалось загрузить журнал инструктажа"));
+  }, [groupId, year]);
+
+  useEffect(loadInstructions, [loadInstructions]);
+
+  async function removeInstruction(r: SafetyInstruction) {
+    if (!(await dialogs.confirm(`Удалить запись инструктажа от ${formatDateRu(r.instruction_date)}?`, { confirmLabel: "Удалить", danger: true }))) return;
+    try {
+      await api.delete(`/instructions/${r.id}`);
+      loadInstructions();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не удалось удалить запись инструктажа");
+    }
+  }
 
   function download(path: string, filename: string) {
     downloadFile(path, filename).catch((err) => setError(err instanceof ApiError ? err.message : "Не удалось сформировать документ"));
@@ -164,6 +188,7 @@ export default function PlanPage({ fixedGroupId }: { fixedGroupId?: number } = {
             tabs={[
               { key: "events", label: "Мероприятия", badge: current.events.length || undefined },
               { key: "meetings", label: "Родительские собрания", badge: meetings?.meetings.length || undefined },
+              { key: "instructions", label: "Инструктаж по охране труда", badge: instructions?.instructions.length || undefined },
             ]}
             active={part}
             onChange={(key) => update({ part: key === "events" ? null : key }, { replace: true })}
@@ -383,6 +408,88 @@ export default function PlanPage({ fixedGroupId }: { fixedGroupId?: number } = {
               </>
             )}
           </section>
+          )}
+          {part === "instructions" && (
+            <section className="plan-section">
+              <h3 className="student-card__section">
+                Журнал инструктажа по охране труда <span className="hint">({instructions?.instructions.length ?? 0})</span>
+              </h3>
+              <p className="hint">
+                Запишите инструктаж и скачайте бланк: в нём весь список группы с местом для подписи. Подписи студенты ставят на бумаге.
+              </p>
+              {instructions && instructions.school_year === current.school_year && (
+                <>
+                  {instructions.instructions.length === 0 ? (
+                    <p className="hint">В этом учебном году инструктажей ещё нет.</p>
+                  ) : (
+                    <div className="table-scroll">
+                      <table className="dash-table roster-table">
+                        <thead>
+                          <tr>
+                            <th>Дата</th>
+                            <th>Вид</th>
+                            <th>Тема</th>
+                            <th>Провёл</th>
+                            <th></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {instructions.instructions.map((r) => (
+                            <tr key={r.id}>
+                              <td data-label="Дата">{formatDateRu(r.instruction_date)}</td>
+                              <td data-label="Вид">{r.kind_label}</td>
+                              <td data-label="Тема" style={{ whiteSpace: "pre-wrap" }}>
+                                {r.topic}
+                                {r.note && <div className="hint">{r.note}</div>}
+                              </td>
+                              <td data-label="Провёл">{r.conducted_by ?? "—"}</td>
+                              <td data-label="Действия">
+                                <button
+                                  type="button"
+                                  className="link-btn"
+                                  onClick={() => download(`/instructions/${r.id}/blank.docx`, `Инструктаж_${current.group_code}_${r.instruction_date}.docx`)}
+                                >
+                                  Бланк для подписей в Word
+                                </button>{" "}
+                                {instructions.can_edit && (
+                                  <button type="button" className="link-btn" onClick={() => setInstructionForm({ record: r })}>
+                                    Изменить
+                                  </button>
+                                )}{" "}
+                                {instructions.can_edit && (
+                                  <button type="button" className="link-btn" onClick={() => removeInstruction(r)}>
+                                    Удалить запись
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {instructions.can_edit && (
+                    <p>
+                      <button type="button" className="link-btn" onClick={() => setInstructionForm({ record: null })}>
+                        + Добавить запись инструктажа
+                      </button>
+                    </p>
+                  )}
+                </>
+              )}
+            </section>
+          )}
+          {instructionForm && instructions && (
+            <InstructionForm
+              groupId={current.group_id}
+              kinds={instructions.kinds}
+              record={instructionForm.record}
+              onSaved={() => {
+                setInstructionForm(null);
+                loadInstructions();
+              }}
+              onClose={() => setInstructionForm(null)}
+            />
           )}
           {meetingForm && (
             <MeetingForm

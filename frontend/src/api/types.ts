@@ -876,6 +876,26 @@ export interface GroupMeetings {
   guardians: MeetingGuardian[];
 }
 
+export interface SafetyInstruction {
+  id: number;
+  study_group_id: number;
+  school_year: string;
+  instruction_date: string;
+  kind: string;
+  kind_label: string;
+  topic: string;
+  conducted_by: string | null;
+  note: string | null;
+}
+
+export interface GroupInstructions {
+  group_id: number;
+  school_year: string;
+  instructions: SafetyInstruction[];
+  kinds: Record<string, string>;
+  can_edit: boolean;
+}
+
 export interface ReportField {
   key: string;
   label: string;
