@@ -7,3 +7,5 @@ export const DYNAMICS_FILTERS = { dynOnlyData: false, dynBelow: "" };
 export const RISK_FILTERS = { riskQuery: "", riskGroup: "all", riskBelow: "" };
 
 export const DISCIPLINE_FILTERS = { discQuery: "", discCourse: "all", discOnlyMissed: false };
+
+export const CARD_FILTERS = { cardQuery: "", cardCourse: "all", cardOnlyAttention: false };

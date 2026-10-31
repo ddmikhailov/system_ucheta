@@ -336,6 +336,32 @@ export interface CuratorDisciplineRow {
   total_study_days: number;
 }
 
+export interface ContingentMovement {
+  joined: number;
+  left: number;
+  transferred_in: number;
+  transferred_out: number;
+  academic_leave: number;
+}
+
+export interface CuratorCardRow {
+  study_group_id: number;
+  code: string;
+  course: number;
+  department_id: number;
+  responsible_name: string | null;
+  students_count: number;
+  attendance_percent: number | null;
+  absent_unexcused_percent: number | null;
+  risk_count: number;
+  compensation_count: number;
+  contingent: ContingentMovement;
+  on_time: number;
+  late: number;
+  missed: number;
+  total_study_days: number;
+}
+
 // --- Admin ---
 
 export interface DepartmentAdmin {

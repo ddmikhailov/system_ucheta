@@ -56,6 +56,12 @@ function mockApi() {
         { student_id: 8, full_name: "Борисова Мария", group_code: "СА172", category: "compensation", streak: 0, attendance_percent: 72.5, days: 40, absent: 11, absent_unexcused: 0, unexcused_percent: 0 },
       ];
     }
+    if (path.startsWith("/dashboards/curator-card")) {
+      return [
+        { study_group_id: 1, code: "СА172", course: 1, department_id: 1, responsible_name: "Иванова А.", students_count: 25, attendance_percent: 91.5, absent_unexcused_percent: 3, risk_count: 0, compensation_count: 2, contingent: { joined: 1, left: 0, transferred_in: 0, transferred_out: 0, academic_leave: 0 }, on_time: 9, late: 0, missed: 0, total_study_days: 9 },
+        { study_group_id: 2, code: "ИИ212", course: 2, department_id: 1, responsible_name: null, students_count: 20, attendance_percent: null, absent_unexcused_percent: null, risk_count: 3, compensation_count: 0, contingent: { joined: 0, left: 2, transferred_in: 1, transferred_out: 0, academic_leave: 1 }, on_time: 3, late: 2, missed: 4, total_study_days: 9 },
+      ];
+    }
     if (path.startsWith("/dashboards/curator-discipline")) {
       return [
         { study_group_id: 1, code: "СА172", course: 1, responsible_name: "Иванова А.", on_time: 8, late: 1, missed: 0, total_study_days: 9 },
@@ -103,7 +109,7 @@ describe("DashboardsPage — вкладки по ролям", () => {
     await screen.findByText("СА172");
     await waitFor(() => expect(tabNames()).toContain("Вакантные группы (1)"));
     expect(tabNames().slice(0, 7)).toEqual([
-      "День по колледжу", "Свод", "Динамика", "Группа риска", "Практика", "Дисциплина кураторов", "Вакантные группы (1)",
+      "День по колледжу", "Свод", "Динамика", "Группа риска", "Практика", "Дисциплина кураторов", "Карточка куратора", "Вакантные группы (1)",
     ]);
     expect(tabNames()[7]).toMatch(/^Экспорт в Excel/);
   });
@@ -117,6 +123,7 @@ describe("DashboardsPage — вкладки по ролям", () => {
     open("psychologist");
     await screen.findByText("СА172");
     expect(screen.queryByRole("button", { name: "Дисциплина кураторов" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Карточка куратора" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Вакантные группы/ })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Группа риска" })).toBeInTheDocument();
   });
@@ -521,5 +528,20 @@ describe("DashboardsPage — фильтры и сортировка", () => {
     await screen.findByText("ИИ212");
     await user.type(screen.getByLabelText("Поиск по коду группы"), "ск");
     expect(screen.getByText("Под выбранные фильтры ничего не подошло.")).toBeInTheDocument();
+  });
+});
+
+describe("DashboardsPage — карточка куратора", () => {
+  it("показывает карточки групп и фильтр «только требующие внимания»", async () => {
+    const user = userEvent.setup();
+    open("admin", "/dashboards?tab=card");
+    const quiet = await screen.findByRole("region", { name: "Карточка группы СА172" });
+    expect(within(quiet).getByText("91,5 %")).toBeInTheDocument();
+    expect(quiet).not.toHaveClass("curator-card--attention");
+    const alert = screen.getByRole("region", { name: "Карточка группы ИИ212" });
+    expect(alert).toHaveClass("curator-card--attention");
+    expect(within(alert).getByText(/выбыло 2/)).toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: /Только требующие внимания/ }));
+    expect(screen.queryByRole("region", { name: "Карточка группы СА172" })).not.toBeInTheDocument();
   });
 });
