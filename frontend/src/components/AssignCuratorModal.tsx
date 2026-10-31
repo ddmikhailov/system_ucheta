@@ -22,6 +22,7 @@ export default function AssignCuratorModal({
   const [userId, setUserId] = useState<number | null>(curators[0]?.id ?? null);
   const [roleType, setRoleType] = useState<string>(initialRole);
   const [startDate, setStartDate] = useState(todayIso());
+  const [endDate, setEndDate] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   useEscapeKey(onClose);
@@ -36,6 +37,7 @@ export default function AssignCuratorModal({
         user_id: userId,
         role_type: roleType,
         start_date: startDate,
+        ...(roleType === "deputy" && endDate ? { end_date: endDate } : {}),
       });
       onSaved();
     } catch (err) {
@@ -66,13 +68,20 @@ export default function AssignCuratorModal({
               Роль
               <select value={roleType} onChange={(e) => setRoleType(e.target.value)}>
                 <option value="curator">Основной куратор</option>
-                <option value="deputy">Заместитель</option>
+                <option value="deputy">Заместитель (замена на даты)</option>
               </select>
             </label>
             <label>
               С даты
               <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
             </label>
+            {roleType === "deputy" && (
+              <label>
+                По дату (включительно)
+                <input type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} />
+                <span className="hint">Пусто — пока заместителя не снимут. Куратор и заместитель получат уведомление.</span>
+              </label>
+            )}
           </>
         )}
         {error && <div className="error-text">{error}</div>}

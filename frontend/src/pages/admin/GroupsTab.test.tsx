@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "../../api/client";
@@ -249,6 +249,28 @@ describe("GroupsTab — назначение куратора и замести�
     });
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Назначить куратора" })).not.toBeInTheDocument());
     await waitFor(() => expect(get.mock.calls.filter((c) => c[0] === "/admin/groups").length).toBe(loadsBefore + 1));
+  });
+
+  it("замена на даты: поле «По дату» есть только у заместителя и уходит в запрос", async () => {
+    const { u, dialog } = await openGroup("ИИ112");
+    post.mockResolvedValue({});
+    await u.click(within(dialog).getByRole("button", { name: "Назначить заместителя" }));
+    const modal = await screen.findByRole("dialog", { name: "Назначить куратора" });
+    await chooseOption(u, within(modal).getByLabelText("Куратор"), "Психолог Павел");
+    await u.selectOptions(within(modal).getByLabelText("Роль"), "curator");
+    expect(within(modal).queryByLabelText(/По дату/)).not.toBeInTheDocument();
+    await u.selectOptions(within(modal).getByLabelText("Роль"), "deputy");
+    fireEvent.change(within(modal).getByLabelText(/По дату/), { target: { value: "2099-03-14" } });
+    await u.click(within(modal).getByRole("button", { name: "Сохранить" }));
+    expect(post).toHaveBeenCalledWith("/admin/curator-assignments", {
+      study_group_id: 2, user_id: 12, role_type: "deputy", start_date: todayIso(), end_date: "2099-03-14",
+    });
+  });
+
+  it("у заместителя виден период замены", async () => {
+    groups[0] = { ...groups[0], deputy_start_date: "2099-03-10", deputy_end_date: "2099-03-14" };
+    const { dialog } = await openGroup("СА172");
+    expect(within(dialog).getByText(/Заместов З\. \(с 10\.03\.2099 по 14\.03\.2099\)/)).toBeInTheDocument();
   });
 
   it("ошибка назначения показывается в окне назначения", async () => {

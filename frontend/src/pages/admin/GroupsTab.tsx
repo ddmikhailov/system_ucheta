@@ -11,12 +11,20 @@ import { useUrlFlag, useUrlNumber, useUrlParam, useUrlSort } from "../../hooks/u
 import type { DeleteResult, DepartmentAdmin, StudyGroupAdmin, UserAdmin } from "../../api/types";
 import ResultsBar from "../../components/dashboards/ResultsBar";
 import SortHeader from "../../components/dashboards/SortHeader";
+import { formatDateRu, todayIso } from "../../utils/date";
 import { dialogs } from "../../utils/feedback";
 import { filterByQuery } from "../../utils/searchMatch";
 import { nextSort, sortRows } from "../../utils/tableView";
 
 const GROUP_SORT_KEYS = ["code", "course", "form", "students", "curator", "active"] as const;
 type GroupSortKey = (typeof GROUP_SORT_KEYS)[number];
+
+/** Период замены для подписи: « (с 10.03.2031 по 14.03.2031)»; пусто, если дат нет. */
+function deputyPeriod(group: StudyGroupAdmin): string {
+  if (!group.deputy_start_date) return "";
+  const from = `с ${formatDateRu(group.deputy_start_date)}`;
+  return group.deputy_end_date ? ` (${from} по ${formatDateRu(group.deputy_end_date)})` : ` (${from})`;
+}
 
 export default function GroupsTab({ canEdit, canCreate }: { canEdit: boolean; canCreate: boolean }) {
   const { user: me } = useAuth();
@@ -337,7 +345,11 @@ function GroupDetailModal({
   // TODO.md 3).
   async function endDeputyAssignment() {
     if (group.deputy_assignment_id === null) return;
-    if (!(await dialogs.confirm(`Снять ${group.deputy_name} с замещения в группе «${group.code}»?`, { confirmLabel: "Снять" }))) return;
+    const upcoming = !!group.deputy_start_date && group.deputy_start_date > todayIso();
+    const question = upcoming
+      ? `Отменить будущую замену (${group.deputy_name}) в группе «${group.code}»?`
+      : `Снять ${group.deputy_name} с замещения в группе «${group.code}»?`;
+    if (!(await dialogs.confirm(question, { confirmLabel: upcoming ? "Отменить замену" : "Снять" }))) return;
     setLocalError(null);
     try {
       await api.post(`/admin/curator-assignments/${group.deputy_assignment_id}/end`);
@@ -391,7 +403,7 @@ function GroupDetailModal({
           )}
         </div>
 
-        <p className="hint">Заместитель: {group.deputy_name ?? "нет заместителя"}</p>
+        <p className="hint">Заместитель: {group.deputy_name ? `${group.deputy_name}${deputyPeriod(group)}` : "нет заместителя"}</p>
         <div className="admin-row-actions">
           <button className="link-btn" onClick={() => setAssigning("deputy")}>
             {group.deputy_name ? "Сменить заместителя" : "Назначить заместителя"}
