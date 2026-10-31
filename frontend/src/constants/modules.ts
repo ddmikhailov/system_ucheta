@@ -10,6 +10,7 @@ export const MODULE = {
   DOSSIER: "dossier",
   PASSPORT: "passport",
   INDIVIDUAL_WORK: "individual_work",
+  JOURNALS: "journals",
   PLAN: "plan",
   MEETINGS: "meetings",
   REPORTS: "reports",
@@ -25,4 +26,5 @@ export const RELEASE_MODULES: readonly ModuleName[] = [
   MODULE.MEALS,
   MODULE.DOSSIER,
   MODULE.INDIVIDUAL_WORK,
+  MODULE.JOURNALS,
 ];

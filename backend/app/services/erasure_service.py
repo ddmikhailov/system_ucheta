@@ -8,7 +8,7 @@ import json
 from sqlalchemy.orm import Session
 
 from app.models import (
-    AbsenceCompensation, AbsencePeriod, AttendanceChangeRequest, AttendanceMark, DossierAccessLog, GroupEventAttendee,
+    AbsenceCompensation, AbsencePeriod, AttendanceChangeRequest, AttendanceMark, DossierAccessLog, GroupEventAttendee, LessonMark,
     ParentMeetingAttendee, Student, StudentDeletionRequest, StudentGroupMembership, StudentGuardian, StudentMeal,
     StudentMyId, StudentNote, StudentProfile, TaskComment, TaskRow, User,
 )
@@ -29,6 +29,7 @@ def erase_student_personal_data(db: Session, student_ids: list[int], include_acc
         db.query(StudentDeletionRequest).filter(StudentDeletionRequest.student_id.in_(chunk)).delete(synchronize_session=False)
         db.query(StudentMeal).filter(StudentMeal.student_id.in_(chunk)).delete(synchronize_session=False)
         db.query(StudentMyId).filter(StudentMyId.student_id.in_(chunk)).delete(synchronize_session=False)
+        db.query(LessonMark).filter(LessonMark.student_id.in_(chunk)).delete(synchronize_session=False)
         db.query(AbsenceCompensation).filter(AbsenceCompensation.student_id.in_(chunk)).delete(synchronize_session=False)
         db.query(GroupEventAttendee).filter(GroupEventAttendee.student_id.in_(chunk)).delete(synchronize_session=False)
         guardian_ids = [g for (g,) in db.query(StudentGuardian.id).filter(StudentGuardian.student_id.in_(chunk))]
