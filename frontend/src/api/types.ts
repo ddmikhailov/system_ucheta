@@ -1133,3 +1133,19 @@ export interface AuditPage {
   items: AuditEntry[];
   next_before_id: number | null;
 }
+
+export interface GroupSubject {
+  id: number;
+  study_group_id: number;
+  code: string | null;
+  name: string;
+  teacher_name: string | null;
+  teacher_phone: string | null;
+  note: string | null;
+  updated_at: string;
+}
+
+export interface GroupSubjects {
+  can_edit: boolean;
+  subjects: GroupSubject[];
+}

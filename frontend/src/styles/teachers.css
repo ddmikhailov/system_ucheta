@@ -1,0 +1,75 @@
+/* Дисциплины и преподаватели группы (раздел «Успеваемость»): карточки, на телефоне — в один столбец. */
+.teachers__bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.teachers__bar input[type="search"] {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.teachers__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.teachers-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+}
+
+.teachers-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.teachers-card__name {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.teachers-card__code {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.teachers-card__teacher {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.teachers-card__phone {
+  align-self: flex-start;
+  min-height: var(--control-h);
+  display: inline-flex;
+  align-items: center;
+}
+
+.teachers-card__note {
+  margin: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.teachers-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: auto;
+}
