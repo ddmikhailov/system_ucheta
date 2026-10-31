@@ -4,6 +4,7 @@ import datetime
 from app.models import AbsencePeriod, AttendanceMark, GroupPractice, Student
 from app.services import attendance_service, calendar_service, group_membership_service
 
+from app.core.time import today_local
 from tests.conftest import _login
 
 
@@ -105,7 +106,8 @@ def test_review_flag_sets_date_and_state(client, curator_headers, curator_group,
     practice = _create(client, curator_headers, curator_group, today, **past)
     assert practice["state"] == "no_review" and practice["review_received"] is False
     r = client.put(f"/practice/{practice['id']}", headers=curator_headers, json=_body(today, review_received=True, **past))
-    assert r.json()["review_received_on"] == today.isoformat() and r.json()["state"] is None
+    # Дата получения — календарный «сегодня» сервера, а фикстура `today` в выходные даёт прошлый учебный день.
+    assert r.json()["review_received_on"] == today_local().isoformat() and r.json()["state"] is None
 
 
 def test_validation(client, curator_headers, curator_group, today):

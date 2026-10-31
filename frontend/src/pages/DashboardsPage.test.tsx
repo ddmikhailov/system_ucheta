@@ -108,10 +108,10 @@ describe("DashboardsPage — вкладки по ролям", () => {
     open("admin");
     await screen.findByText("СА172");
     await waitFor(() => expect(tabNames()).toContain("Вакантные группы (1)"));
-    expect(tabNames().slice(0, 7)).toEqual([
+    expect(tabNames().slice(0, 8)).toEqual([
       "День по колледжу", "Свод", "Динамика", "Группа риска", "Практика", "Дисциплина кураторов", "Карточка куратора", "Вакантные группы (1)",
     ]);
-    expect(tabNames()[7]).toMatch(/^Экспорт в Excel/);
+    expect(tabNames()[8]).toMatch(/^Экспорт в Excel/);
   });
 
   it("зав. отделением и тьютор: «День по отделению»", async () => {
