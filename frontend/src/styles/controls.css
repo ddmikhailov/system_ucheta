@@ -240,6 +240,15 @@ textarea {
   overflow-y: auto;
 }
 
+/* На телефоне нижняя навигация лежит выше окон: оставляем ей место, иначе кнопки внизу длинной формы не нажать. */
+.modal-backdrop {
+  padding-bottom: calc(16px + var(--bottom-nav-offset, 0px));
+}
+
+.modal {
+  max-height: calc(100vh - 32px - var(--bottom-nav-offset, 0px));
+}
+
 /* Вторичная кнопка отправки формы остаётся вторичной (старое правило красит любую submit-кнопку градиентом). */
 form button.btn-secondary[type="submit"]:not(.link-btn),
 .actions button.btn-secondary:last-child:not(.link-btn),

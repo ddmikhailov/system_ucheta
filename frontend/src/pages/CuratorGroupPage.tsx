@@ -26,10 +26,11 @@ const PlanPage = lazy(() => import("./PlanPage"));
 const ReportPage = lazy(() => import("./ReportPage"));
 const JournalsPanel = lazy(() => import("../components/JournalsPanel"));
 const MyIdPanel = lazy(() => import("../components/MyIdPanel"));
+const CuratorFolderPanel = lazy(() => import("../components/CuratorFolderPanel"));
 const GroupMealsPanel = lazy(() => import("../components/meals/GroupMealsPanel"));
 const TeachersPanel = lazy(() => import("../components/TeachersPanel"));
 
-const TABS = ["journal", "students", "journals", "performance", "meals", "work", "passport", "plan", "report", "my-id"] as const;
+const TABS = ["journal", "students", "journals", "performance", "meals", "work", "passport", "plan", "report", "folder", "my-id"] as const;
 type GroupTab = (typeof TABS)[number];
 // Вкладки, которые есть только при включённом модуле (релиз 3.5.0: «Журнал» и «Студенты» — посещаемость, всегда).
 const TAB_MODULE: Partial<Record<GroupTab, ModuleName>> = {
@@ -45,9 +46,9 @@ const TAB_MODULE: Partial<Record<GroupTab, ModuleName>> = {
 const TAB_SCOPED_PARAMS = ["part", "section", "year", "semester", "date"];
 
 /** Страница группы куратора (интерфейс 3.2): всё, что относится к группе, — во вкладках, а не отдельными
- * разделами меню. «Журнал» (посещаемость по дням), «Студенты» (весь список, карточка — по клику), «Успеваемость»
- * (дисциплины и преподаватели группы),
- * «Индивидуальная работа», «Соц. паспорт», «План группы», «Отчёт», «Мой ID». Вкладка — в адресе (?tab=…). */
+ * разделами меню. «Журнал» (посещаемость по дням), «Студенты» (весь список, карточка — по клику), «Журналы» (выгрузки
+ * электронного журнала), «Успеваемость» (дисциплины и преподаватели группы),
+ * «Индивидуальная работа», «Соц. паспорт», «План группы», «Отчёт», «Папка куратора», «Мой ID». Вкладка — в адресе (?tab=…). */
 export default function CuratorGroupPage() {
   const { groupId: raw } = useParams();
   const groupId = Number(raw);
@@ -144,6 +145,7 @@ export default function CuratorGroupPage() {
           { key: "passport", label: "Соц. паспорт" },
           { key: "plan", label: "План группы" },
           { key: "report", label: "Отчёт" },
+          { key: "folder", label: "Папка куратора" },
           { key: "my-id", label: "Мой ID" },
         ].filter((t) => (visibleTabs as readonly string[]).includes(t.key))}
         active={tab}
@@ -192,6 +194,9 @@ export default function CuratorGroupPage() {
       </TabPanel>
       <TabPanel idPrefix="group" tabKey="report" active={tab}>
         <ReportPage fixedGroupId={groupId} />
+      </TabPanel>
+      <TabPanel idPrefix="group" tabKey="folder" active={tab}>
+        <CuratorFolderPanel groupId={groupId} />
       </TabPanel>
       <TabPanel idPrefix="group" tabKey="my-id" active={tab}>
         <MyIdPanel fixedGroupId={groupId} />

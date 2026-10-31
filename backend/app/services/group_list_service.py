@@ -260,6 +260,11 @@ def build_docx(
         f"{table}{section}</w:body></w:document>"
     )
 
+    return pack_docx(document)
+
+
+def pack_docx(document: str) -> bytes:
+    """Минимальный .docx из готового `word/document.xml` (им же собирается ИВПР в `ivpr_service`)."""
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("[Content_Types].xml", _CONTENT_TYPES)

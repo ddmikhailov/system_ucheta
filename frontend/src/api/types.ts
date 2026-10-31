@@ -1211,3 +1211,52 @@ export interface JournalDiscrepancy {
   curator_code: string | null;
   kind: "no_mark" | "present";
 }
+
+// «Папка куратора» (backend: api/routers/folder.py): документы п. 5.1 положения и ссылки на их выгрузку.
+export interface FolderDownload {
+  label: string;
+  path: string;
+  filename: string;
+}
+
+export type FolderItemState = "filled" | "blank" | "outside" | "off";
+
+export interface FolderItem {
+  code: string;
+  title: string;
+  state: FolderItemState;
+  note: string;
+  downloads: FolderDownload[];
+  open_tab: string | null;
+  open_part: string | null;
+  can_add: "assembly" | null;
+}
+
+export interface CuratorFolder {
+  group_id: number;
+  group_code: string;
+  school_year: string;
+  items: FolderItem[];
+}
+
+// Общие собрания группы (backend: api/routers/assemblies.py), протокол п. 5.1.10.
+export interface GroupAssembly {
+  id: number;
+  study_group_id: number;
+  school_year: string;
+  number: number;
+  assembly_date: string | null;
+  chair: string | null;
+  secretary: string | null;
+  present_count: number | null;
+  agenda: string | null;
+  listened: string | null;
+  resolved: string | null;
+}
+
+export interface GroupAssemblies {
+  group_id: number;
+  school_year: string;
+  students_count: number;
+  assemblies: GroupAssembly[];
+}
