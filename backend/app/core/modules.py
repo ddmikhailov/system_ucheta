@@ -1,6 +1,6 @@
 """Выключаемые модули платформы (релиз 3.5.0).
 
-К релизу нужны посещаемость, задачи, «Мой ID», питание, досье и индивидуальная работа; остальное (соц. паспорт,
+К релизу нужны посещаемость, задачи, «Мой ID», питание, досье, индивидуальная работа и журналы дисциплин; остальное (соц. паспорт,
 план, собрания, отчёт) скрыто, но код и данные остаются. Набор задаёт переменная `ENABLED_MODULES`
 (имена через запятую или `all`); без неё включён релизный набор. Выключенный модуль: его роутеры не подключены
 (404), а сквозные связи в сервисах проверяют `module_enabled(...)`.
@@ -10,7 +10,7 @@
 from app.core.config import get_settings
 
 ALWAYS_ON = "attendance"
-RELEASE_MODULES = ("attendance", "tasks", "my_id", "meals", "dossier", "individual_work")
+RELEASE_MODULES = ("attendance", "tasks", "my_id", "meals", "dossier", "individual_work", "journals")
 HIDDEN_IN_RELEASE = ("passport", "plan", "meetings", "reports")
 ALL_MODULES = RELEASE_MODULES + HIDDEN_IN_RELEASE
 

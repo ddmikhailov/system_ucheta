@@ -1149,3 +1149,65 @@ export interface GroupSubjects {
   can_edit: boolean;
   subjects: GroupSubject[];
 }
+
+// --- Журналы дисциплин (загрузка выгрузки электронного журнала преподавателя) ---
+
+export interface JournalImportReport {
+  subject_code: string;
+  subject_name: string;
+  period_from: string | null;
+  period_to: string | null;
+  counts: Record<string, number>;
+  warnings: string[];
+  not_found: string[];
+  ambiguous: string[];
+  out_of_scope: string[];
+  blocked: string | null;
+  applied: boolean;
+}
+
+export interface JournalSubject {
+  code: string;
+  name: string;
+  lessons: number;
+  first_on: string;
+  last_on: string;
+}
+
+export interface JournalLesson {
+  /** «2026-09-01#1» — ключ ячейки в `cells`. */
+  key: string;
+  date: string;
+  slot: number;
+  topic: string | null;
+  homework: string | null;
+}
+
+export interface JournalGridStudent {
+  student_id: number;
+  full_name: string;
+  cells: Record<string, string>;
+  average: number | null;
+  absent_hours: number;
+  /** Оценок «2» — задолженность. */
+  twos: number;
+  /** Средняя оценка ниже 4 — куратору помочь студенту исправить. */
+  low_average: boolean;
+}
+
+export interface JournalGrid {
+  code: string;
+  name: string;
+  lessons: JournalLesson[];
+  students: JournalGridStudent[];
+}
+
+export interface JournalDiscrepancy {
+  student_id: number;
+  full_name: string;
+  date: string;
+  hours: number;
+  subjects: string[];
+  curator_code: string | null;
+  kind: "no_mark" | "present";
+}

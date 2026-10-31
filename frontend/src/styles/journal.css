@@ -680,3 +680,100 @@
     justify-content: flex-end;
   }
 }
+
+/* «Журналы дисциплин»: журнал преподавателя — часы по столбцам; таблица прокручивается внутри своей рамки,
+   страница вбок не едет (в том числе при 375 px). */
+.jr {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.jr__subjects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.jr__scroll {
+  overflow-x: auto;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+}
+
+.jr-grid {
+  border-collapse: collapse;
+  font-size: 13px;
+  width: max-content;
+  min-width: 100%;
+}
+
+.jr-grid caption {
+  caption-side: top;
+  text-align: left;
+  padding: 8px 12px;
+}
+
+.jr-grid th,
+.jr-grid td {
+  padding: 6px 8px;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.jr-grid thead th {
+  color: var(--muted);
+  background: var(--sunken);
+}
+
+.jr-grid .jr-grid__name {
+  position: sticky;
+  left: 0;
+  text-align: left;
+  background: var(--card-bg);
+  font-weight: 500;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jr-grid thead .jr-grid__name {
+  background: var(--sunken);
+}
+
+.jr-grid td.jr-absent {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.jr-grid td.jr-low {
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+  font-weight: 600;
+}
+
+.jr-grid td.jr-grade {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.jr__topics {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+}
+
+.jr__attention {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+}
+
+.jr-grid tr.jr-weak .jr-grid__name {
+  box-shadow: inset 3px 0 0 var(--warn-ink);
+}

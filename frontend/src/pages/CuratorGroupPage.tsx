@@ -24,14 +24,16 @@ const IndividualWorkPage = lazy(() => import("./IndividualWorkPage"));
 const GroupPassportPanel = lazy(() => import("./PassportPage").then((m) => ({ default: m.GroupPassportPanel })));
 const PlanPage = lazy(() => import("./PlanPage"));
 const ReportPage = lazy(() => import("./ReportPage"));
+const JournalsPanel = lazy(() => import("../components/JournalsPanel"));
 const MyIdPanel = lazy(() => import("../components/MyIdPanel"));
 const GroupMealsPanel = lazy(() => import("../components/meals/GroupMealsPanel"));
 const TeachersPanel = lazy(() => import("../components/TeachersPanel"));
 
-const TABS = ["journal", "students", "meals", "performance", "work", "passport", "plan", "report", "my-id"] as const;
+const TABS = ["journal", "students", "journals", "performance", "meals", "work", "passport", "plan", "report", "my-id"] as const;
 type GroupTab = (typeof TABS)[number];
 // Вкладки, которые есть только при включённом модуле (релиз 3.5.0: «Журнал» и «Студенты» — посещаемость, всегда).
 const TAB_MODULE: Partial<Record<GroupTab, ModuleName>> = {
+  journals: MODULE.JOURNALS,
   meals: MODULE.MEALS,
   work: MODULE.INDIVIDUAL_WORK,
   passport: MODULE.PASSPORT,
@@ -135,6 +137,7 @@ export default function CuratorGroupPage() {
         tabs={[
           { key: "journal", label: "Журнал" },
           { key: "students", label: "Студенты", badge: summary.students_count || undefined },
+          { key: "journals", label: "Журналы" },
           { key: "meals", label: "Питание" },
           { key: "performance", label: "Успеваемость" },
           { key: "work", label: "Индивидуальная работа" },
@@ -168,6 +171,9 @@ export default function CuratorGroupPage() {
           documents={isModuleOn(user, MODULE.DOSSIER)}
           onChanged={loadSummary}
         />
+      </TabPanel>
+      <TabPanel idPrefix="group" tabKey="journals" active={tab}>
+        <JournalsPanel groupId={groupId} />
       </TabPanel>
       <TabPanel idPrefix="group" tabKey="meals" active={tab}>
         <GroupMealsPanel groupId={groupId} />

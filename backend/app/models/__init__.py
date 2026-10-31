@@ -16,6 +16,7 @@ from app.models.notifications import InAppNotification
 from app.models.password_reset import PasswordResetRequest
 from app.models.tasks import Task, TaskAssignment, TaskComment, TaskRow, TaskTemplate
 from app.models.meals import MealDayOverride, MealSubmission, StudentMeal
+from app.models.journal import JournalLesson, LessonMark
 from app.models.my_id import StudentMyId
 from app.models.org import Department, StudyGroup
 from app.models.subjects import GroupSubject
@@ -40,6 +41,8 @@ __all__ = [
     "GroupCalendarOverride",
     "GroupEvent",
     "GroupSubject",
+    "JournalLesson",
+    "LessonMark",
     "GroupEventAttendee",
     "InAppNotification",
     "PasswordResetRequest",
