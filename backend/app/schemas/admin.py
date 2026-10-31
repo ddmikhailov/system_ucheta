@@ -35,6 +35,8 @@ class StudyGroupRead(BaseModel):
     curator_assignment_id: int | None = None
     deputy_name: str | None = None
     deputy_assignment_id: int | None = None
+    deputy_start_date: datetime.date | None = None
+    deputy_end_date: datetime.date | None = None
     students_count: int = 0  # учатся сейчас (без академического отпуска и отчисленных)
 
 

@@ -75,12 +75,10 @@ def _group_read(g: StudyGroup, today: datetime.date | None = None, students_coun
     # Раньше замещающего вообще не было видно в админке (см. TODO.md 3) —
     # значит его нельзя было ни увидеть, ни снять, и он "навсегда" оставался
     # ответственным за группу в глазах интерфейса.
-    deputy_assignment = next(
-        (
-            a for a in g.curator_assignments
-            if a.is_active_on(today) and a.role_type.value == "deputy" and a.user.is_active
-        ),
-        None,
+    # Если заместитель сейчас не работает, показываем ближайшего запланированного — его можно отменить.
+    deputies = [a for a in g.curator_assignments if a.role_type.value == "deputy" and a.user.is_active]
+    deputy_assignment = next((a for a in deputies if a.is_active_on(today)), None) or next(
+        iter(sorted((a for a in deputies if a.start_date > today), key=lambda a: a.start_date)), None,
     )
     return StudyGroupRead(
         id=g.id, code=g.code, course=g.course, department_id=g.department_id,
@@ -89,6 +87,8 @@ def _group_read(g: StudyGroup, today: datetime.date | None = None, students_coun
         curator_assignment_id=curator_assignment.id if curator_assignment else None,
         deputy_name=deputy_assignment.user.full_name if deputy_assignment else None,
         deputy_assignment_id=deputy_assignment.id if deputy_assignment else None,
+        deputy_start_date=deputy_assignment.start_date if deputy_assignment else None,
+        deputy_end_date=deputy_assignment.end_date if deputy_assignment else None,
         students_count=students_count,
     )
 

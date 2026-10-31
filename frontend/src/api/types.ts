@@ -355,6 +355,9 @@ export interface StudyGroupAdmin {
   curator_assignment_id: number | null;
   deputy_name: string | null;
   deputy_assignment_id: number | null;
+  /** Период замены: у запланированного заместителя начало в будущем, конец может быть пустым. */
+  deputy_start_date?: string | null;
+  deputy_end_date?: string | null;
   /** Сколько студентов учится в группе сейчас (без академического отпуска и отчисленных). */
   students_count?: number;
 }
