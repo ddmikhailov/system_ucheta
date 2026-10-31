@@ -19,6 +19,7 @@ from app.models.meals import MealDayOverride, MealSubmission, StudentMeal
 from app.models.my_id import StudentMyId
 from app.models.org import Department, StudyGroup
 from app.models.student_deletion import StudentDeletionRequest
+from app.models.urgent_report import UrgentReport
 from app.models.people import CuratorAssignment, Student, StudentGroupMembership
 
 __all__ = [
@@ -56,6 +57,7 @@ __all__ = [
     "StudentNote",
     "StudentProfile",
     "StudentDeletionRequest",
+    "UrgentReport",
     "StudentGroupMembership",
     "StudentStatus",
     "StudyGroup",

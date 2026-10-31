@@ -115,6 +115,8 @@ def update_student(
         data["status"] = StudentStatus(data["status"])
 
     new_group_id = data.get("study_group_id")
+    # Какие поля действительно изменились — для списка «Изменение ПДн» (значения в журнал не пишем: там ФИО).
+    changed = [f for f, v in data.items() if getattr(student, f) != v]
     for field, value in data.items():
         setattr(student, field, value)
     if is_group_transfer:
@@ -124,7 +126,7 @@ def update_student(
         # форм/списков "текущая группа", а кто отвечал за какой день —
         # смотрит student_group_memberships.
         group_membership_service.transfer_student(db, student, new_group_id, today_local(), user)
-    log_action(db, user, "student.update", "student", str(student.id))
+    log_action(db, user, "student.update", "student", str(student.id), new_value=",".join(changed) or None)
     db.commit()
     db.refresh(student)
     return _student_read(student)

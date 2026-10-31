@@ -16,7 +16,7 @@ from app.models import Student, StudentNote, User
 from app.services import attendance_service, in_app_notification_service
 from app.services.audit_service import log_action
 
-WORK_KINDS = ("conversation", "call", "parent_invited", "prevention_council", "home_visit", "agreement")
+WORK_KINDS = ("conversation", "call", "parent_invited", "prevention_council", "home_visit", "reconciliation", "agreement")
 NO_WORK_DAYS = 14
 
 

@@ -60,6 +60,9 @@ export const STRUCTURE_EDITOR_ROLES: Roles = [ROLE.ADMIN, ROLE.TUTOR, ROLE.DEPT_
 /** Кто решает исправления прошлых сданных дней куратором: админ — любые, зав. отделением и тьютор — своего отделения. */
 export const JOURNAL_REVIEWER_ROLES: Roles = [ROLE.ADMIN, ROLE.TUTOR, ROLE.DEPT_HEAD];
 
+/** Кто читает срочные сообщения кураторов о студентах (backend: policies.URGENT_REPORT_READERS); не админ — только своего отделения. */
+export const URGENT_REPORT_READER_ROLES: Roles = [ROLE.ADMIN, ROLE.TUTOR, ROLE.DEPT_HEAD, ROLE.EDU_DEPARTMENT];
+
 /** Кто правит общий календарь и коды отметок. */
 export const REFERENCE_EDITOR_ROLES: Roles = [ROLE.ADMIN, ROLE.EDU_DEPARTMENT];
 

@@ -7,11 +7,12 @@ import { useScrollToTopOnChange } from "../../hooks/useScrollToTopOnChange";
 import type { StudentAdmin, StudyGroupAdmin } from "../../api/types";
 import { formatDateRu, todayIso } from "../../utils/date";
 import SearchSelect from "../../components/SearchSelect";
+import PdChangesList from "../../components/PdChangesList";
 import { useUrlFlag, useUrlNumber, useUrlParam } from "../../hooks/useUrlState";
 
 // Здесь только список, поиск и добавление. Всё управление конкретным
 // студентом (ФИО, перевод, статус, удаление) — на его личной карточке.
-export default function StudentsTab({ canCreate }: { canEdit?: boolean; canCreate: boolean }) {
+export default function StudentsTab({ canCreate, showPdChanges = false }: { canEdit?: boolean; canCreate: boolean; showPdChanges?: boolean }) {
   const location = useLocation();
   const [groups, setGroups] = useState<StudyGroupAdmin[]>([]);
   // Выбранная группа, поиск и «архив» — в адресе: из карточки студента «Назад» возвращает в ту же группу.
@@ -171,6 +172,7 @@ export default function StudentsTab({ canCreate }: { canEdit?: boolean; canCreat
           </button>
         </p>
       )}
+      {showPdChanges && <PdChangesList />}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -111,3 +112,22 @@ class StudentDeletionRead(BaseModel):
     requested_by_name: str
     created_at: datetime.datetime
     review_comment: str | None = None
+
+
+class UrgentReportCreate(BaseModel):
+    student_id: int
+    category: Literal["misconduct", "offense", "emergency"]
+    text: str = Field(min_length=3, max_length=2000)
+
+
+class UrgentReportRead(BaseModel):
+    id: int
+    student_id: int
+    student_name: str
+    group_code: str
+    category: str
+    text: str | None = None  # None — для автора после отправки текст не нужен; читателю всегда задан
+    author_name: str
+    created_at: datetime.datetime
+    acknowledged_by_name: str | None = None
+    acknowledged_at: datetime.datetime | None = None

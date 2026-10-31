@@ -1090,6 +1090,30 @@ export interface StudentDeletionRequest {
   review_comment: string | null;
 }
 
+/** Срочное сообщение куратора заведующему. Автору текст не возвращается (text = null), читателям отделения — всегда. */
+export interface UrgentReport {
+  id: number;
+  student_id: number;
+  student_name: string;
+  group_code: string;
+  category: "misconduct" | "offense" | "emergency";
+  text: string | null;
+  author_name: string;
+  created_at: string;
+  acknowledged_by_name: string | null;
+  acknowledged_at: string | null;
+}
+
+/** Строка списка «Изменение ПДн за месяц» для администратора: без значений, только названия полей. */
+export interface PdChange {
+  created_at: string;
+  student_id: number;
+  student_name: string;
+  group_code: string;
+  changed_by_name: string | null;
+  changes: string[];
+}
+
 /** «Восполнить пропуски» в группе: кому нужно и что уже закрыто куратором в этом семестре. */
 export interface CompensationStudent {
   student_id: number;
