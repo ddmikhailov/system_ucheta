@@ -71,6 +71,24 @@ class ParentMeetingAttendee(Base):
     guardian_id: Mapped[int] = mapped_column(ForeignKey("student_guardians.id", ondelete="CASCADE"), primary_key=True)
 
 
+class SafetyInstruction(Base):
+    """Запись журнала инструктажа по охране труда (п. 5.1.15 положения): дата, вид, тема, кто провёл. Подписи студентов
+    ставятся на бумаге: платформа печатает бланк с полным списком группы на день печати."""
+
+    __tablename__ = "safety_instructions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    study_group_id: Mapped[int] = mapped_column(ForeignKey("study_groups.id"), nullable=False, index=True)
+    school_year: Mapped[str] = mapped_column(String(9), nullable=False, index=True)
+    instruction_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)  # introductory / primary / repeated / targeted / unplanned
+    topic: Mapped[str] = mapped_column(String(500), nullable=False)
+    conducted_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+
+
 class CuratorReport(Base):
     """Отчёт куратора за семестр (этап 8): то, что куратор внёс или поправил вручную (задолженности, стипендии, ИУП,
     движение контингента, ВКУ …). Остальное платформа считает сама при просмотре и выгрузке; `values_json` — JSON

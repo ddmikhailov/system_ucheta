@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api, downloadFile } from "../api/client";
-import type { GroupEvent, GroupMeetings, GroupPlan, ParentMeeting } from "../api/types";
+import type { GroupEvent, GroupInstructions, GroupMeetings, GroupPlan, ParentMeeting, SafetyInstruction } from "../api/types";
 import { renderPage } from "../test/utils";
 import PlanPage from "./PlanPage";
 
@@ -53,18 +53,30 @@ function meeting(over: Partial<ParentMeeting> = {}): ParentMeeting {
   };
 }
 
+const KINDS = { introductory: "Вводный", primary: "Первичный на рабочем месте", repeated: "Повторный", targeted: "Целевой", unplanned: "Внеплановый" };
+let instructions: GroupInstructions = { group_id: 7, school_year: "2026-2027", instructions: [], kinds: KINDS, can_edit: true };
+
+function instruction(over: Partial<SafetyInstruction> = {}): SafetyInstruction {
+  return {
+    id: 5, study_group_id: 7, school_year: "2026-2027", instruction_date: "2026-09-03", kind: "introductory", kind_label: "Вводный",
+    topic: "Правила поведения в колледже", conducted_by: "Иванов И.И.", note: null, ...over,
+  };
+}
+
 function mock(p: GroupPlan, m: GroupMeetings = { group_id: 7, school_year: p.school_year, meetings: [], guardians: [] }) {
   meetings = m;
   get.mockImplementation(async (path: string) => {
     if (path === "/individual-work/groups") return [{ id: 7, code: "СА172", course: 1 }];
     if (path.startsWith("/events/groups/7")) return p;
     if (path.startsWith("/meetings/groups/7")) return meetings;
+    if (path.startsWith("/instructions/groups/7")) return instructions;
     throw new Error(`неожиданный запрос ${path}`);
   });
 }
 
 beforeEach(() => {
   for (const m of [get, post, put, del, download]) m.mockReset();
+  instructions = { group_id: 7, school_year: "2026-2027", instructions: [], kinds: KINDS, can_edit: true };
   download.mockResolvedValue(undefined);
   del.mockResolvedValue(undefined);
 });
@@ -258,5 +270,60 @@ describe("PlanPage — план воспитательной работы гру
     await user.click(screen.getAllByRole("tab", { name: /Родительские собрания/ })[1]);
     await user.click(await screen.findByRole("button", { name: "Удалить собрание" }));
     expect(del).toHaveBeenCalledWith("/meetings/3");
+  });
+});
+
+describe("PlanPage — журнал инструктажа по охране труда", () => {
+  it("показывает записи, скачивает бланк и добавляет запись", async () => {
+    const user = userEvent.setup();
+    instructions = { ...instructions, instructions: [instruction()] };
+    mock(plan([]));
+    post.mockResolvedValue(instruction());
+    renderPage(<PlanPage />, { role: "curator" });
+    await user.click(await screen.findByRole("tab", { name: /Инструктаж по охране труда/ }));
+
+    const row = (await screen.findByText("Правила поведения в колледже")).closest("tr") as HTMLElement;
+    expect(within(row).getByText("03.09.2026")).toBeInTheDocument();
+    expect(within(row).getByText("Иванов И.И.")).toBeInTheDocument();
+    await user.click(within(row).getByRole("button", { name: "Бланк для подписей в Word" }));
+    expect(download).toHaveBeenCalledWith("/instructions/5/blank.docx", "Инструктаж_СА172_2026-09-03.docx");
+
+    await user.click(screen.getByRole("button", { name: "+ Добавить запись инструктажа" }));
+    const form = await screen.findByRole("dialog", { name: "Инструктаж по охране труда" });
+    await user.type(within(form).getByLabelText("Дата инструктажа"), "2026-10-01");
+    await user.selectOptions(within(form).getByLabelText("Вид инструктажа"), "targeted");
+    await user.type(within(form).getByLabelText("Тема"), "Выезд на экскурсию");
+    await user.click(within(form).getByRole("button", { name: "Сохранить" }));
+    expect(post).toHaveBeenCalledWith("/instructions/groups/7", {
+      instruction_date: "2026-10-01", kind: "targeted", topic: "Выезд на экскурсию", conducted_by: null, note: null,
+    });
+  });
+
+  it("только чтение: бланк есть, правки и удаления нет; удаление после подтверждения", async () => {
+    const user = userEvent.setup();
+    instructions = { ...instructions, instructions: [instruction()], can_edit: false };
+    mock(plan([], { can_edit: false }));
+    renderPage(<PlanPage />, { role: "psychologist" });
+    await user.click(await screen.findByRole("tab", { name: /Инструктаж по охране труда/ }));
+    await screen.findByText("Правила поведения в колледже");
+    expect(screen.getByRole("button", { name: "Бланк для подписей в Word" })).toBeInTheDocument();
+    for (const name of ["+ Добавить запись инструктажа", "Изменить", "Удалить запись"]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
+  });
+
+  it("записей нет — подсказка; удаление записи", async () => {
+    const user = userEvent.setup();
+    mock(plan([]));
+    renderPage(<PlanPage />, { role: "curator" });
+    await user.click(await screen.findByRole("tab", { name: /Инструктаж по охране труда/ }));
+    expect(await screen.findByText("В этом учебном году инструктажей ещё нет.")).toBeInTheDocument();
+
+    instructions = { ...instructions, instructions: [instruction()] };
+    renderPage(<PlanPage />, { role: "curator" });
+    await waitFor(() => expect(screen.getAllByRole("tab", { name: /Инструктаж по охране труда/ })).toHaveLength(2));
+    await user.click(screen.getAllByRole("tab", { name: /Инструктаж по охране труда/ })[1]);
+    await user.click(await screen.findByRole("button", { name: "Удалить запись" }));
+    expect(del).toHaveBeenCalledWith("/instructions/5");
   });
 });

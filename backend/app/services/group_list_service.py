@@ -203,6 +203,18 @@ def column_widths(columns: list[Field], total: int) -> list[int]:
     return widths
 
 
+def package_docx(document: str) -> bytes:
+    """Минимальный .docx вокруг готового `word/document.xml` (используют и другие печатные бланки со своей таблицей)."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", _CONTENT_TYPES)
+        archive.writestr("_rels/.rels", _RELS)
+        archive.writestr("word/document.xml", document)
+        archive.writestr("word/_rels/document.xml.rels", _DOCUMENT_RELS)
+        archive.writestr("word/styles.xml", _STYLES)
+    return buffer.getvalue()
+
+
 def build_docx(
     group_code: str, department_name: str, curator_name: str | None, on_date: datetime.date,
     fields: list[Field], rows: list[dict[str, str]], numbering: bool = True, title: str | None = None,
@@ -260,11 +272,4 @@ def build_docx(
         f"{table}{section}</w:body></w:document>"
     )
 
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr("[Content_Types].xml", _CONTENT_TYPES)
-        archive.writestr("_rels/.rels", _RELS)
-        archive.writestr("word/document.xml", document)
-        archive.writestr("word/_rels/document.xml.rels", _DOCUMENT_RELS)
-        archive.writestr("word/styles.xml", _STYLES)
-    return buffer.getvalue()
+    return package_docx(document)
