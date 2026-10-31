@@ -4,6 +4,7 @@ import { COLLECT_MODE_LABELS, REPEAT_LABELS, scheduleText } from "../constants/t
 import { formatDateRu } from "../utils/date";
 import type { TaskTemplate } from "../api/types";
 import { dialogs } from "../utils/feedback";
+import StarterSetCard from "./StarterSetCard";
 
 // Шаблоны задач и их расписание: очередная задача создаётся при открытии платформы после даты запуска.
 export default function TaskTemplatesTab() {
@@ -35,6 +36,7 @@ export default function TaskTemplatesTab() {
 
   return (
     <div>
+      <StarterSetCard />
       <p className="hint">
         Шаблон создаётся из карточки любой задачи («Сохранить как шаблон»). Здесь можно настроить повторный запуск: новая задача
         появится сама, когда после даты запуска кто-нибудь откроет платформу; если платформу не открывали несколько месяцев,

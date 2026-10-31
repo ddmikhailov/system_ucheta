@@ -141,10 +141,10 @@ export interface MyDay {
   review_waiting: { count: number; oldest_submitted_at: string | null } | null;
 }
 
-export interface AbsenceMessage {
-  days: number;
-  absences: { date: string; code: string; name: string }[];
+export interface ParentMessage {
+  kind: string;
   text: string;
+  empty_reason: string | null;
 }
 
 export interface Dossier {
@@ -1377,4 +1377,10 @@ export interface CurrentPracticeRow {
   phone: string | null;
   review_received: boolean;
   state: "active" | "soon" | "no_review";
+}
+
+export interface StarterTask {
+  week: number;
+  title: string;
+  due_date: string;
 }
