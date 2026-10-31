@@ -133,7 +133,7 @@ jobs:
   mobile:
     # Главные экраны куратора на ширине 375 px без горизонтальной прокрутки (Playwright): настоящий backend
     # на временной SQLite с синтетическими данными + собранный интерфейс (frontend/e2e/server.py).
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # ubuntu-latest уже 26.04: Playwright 1.56 не ставит на неё chromium
     steps:
       - uses: actions/checkout@v4
 
