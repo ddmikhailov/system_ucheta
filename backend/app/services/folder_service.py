@@ -17,7 +17,7 @@ from urllib.parse import quote
 from sqlalchemy.orm import Session
 
 from app.core.modules import module_enabled
-from app.models import CuratorReport, GroupEvent, ParentMeeting, StudentNote, StudyGroup
+from app.models import CuratorReport, GroupEvent, GroupSubject, ParentMeeting, SafetyInstruction, StudentNote, StudyGroup
 from app.services import attendance_service, conversation_protocol_service, individual_work_service
 from app.services import group_assembly_service, parent_meeting_service
 
@@ -133,7 +133,11 @@ def build(db: Session, group: StudyGroup, year: str, today: datetime.date) -> li
     else:
         items.append(_off("5.1.4", "Социальный паспорт группы"))
     # 5.1.5
-    items.append(_outside("5.1.5", "Предметы и преподаватели с телефонами", "Платформа пока не ведёт — храните бумажный экземпляр"))
+    subjects = db.query(GroupSubject).filter(GroupSubject.study_group_id == gid).count()
+    items.append(FolderItem(
+        "5.1.5", "Предметы и преподаватели с телефонами", "filled" if subjects else "blank",
+        f"Дисциплин в справочнике: {subjects}" if subjects else "Справочник пуст — заполните его во вкладке «Успеваемость»",
+        open_tab="performance"))
     # 5.1.6
     if has("dossier"):
         items.append(FolderItem(
@@ -207,7 +211,26 @@ def build(db: Session, group: StudyGroup, year: str, today: datetime.date) -> li
     else:
         items.append(_off("5.1.13", "Отчёт куратора за семестр"))
     # 5.1.14–5.1.16
-    items.append(_outside("5.1.14", "Списки на стипендию", "Платформа пока не ведёт — храните бумажный экземпляр"))
-    items.append(_outside("5.1.15", "Журнал инструктажа по охране труда", "Платформа пока не ведёт — храните бумажный экземпляр"))
+    if has("passport"):
+        items.append(FolderItem(
+            "5.1.14", "Списки на стипендию", "filled" if students else "blank",
+            "Собирается из досье: студенты с указанной стипендией" if students else "В группе нет студентов",
+            [Download("Список в Word", f"/passport/group/{gid}/scholarships?format=docx", f"Стипендии_{code}.docx"),
+             Download("Список в Excel", f"/passport/group/{gid}/scholarships?format=xlsx", f"Стипендии_{code}.xlsx")] if students else [],
+            open_tab="passport"))
+    else:
+        items.append(_off("5.1.14", "Списки на стипендию"))
+    if has("plan"):
+        instructions = db.query(SafetyInstruction).filter(
+            SafetyInstruction.study_group_id == gid, SafetyInstruction.school_year == year,
+        ).order_by(SafetyInstruction.instruction_date.desc(), SafetyInstruction.id.desc()).all()
+        items.append(FolderItem(
+            "5.1.15", "Журнал инструктажа по охране труда", "filled" if instructions else "blank",
+            f"Инструктажей за год: {len(instructions)}" if instructions else "Инструктажей пока нет",
+            [Download(f"{i.instruction_date:%d.%m.%Y} · {i.topic[:60]}", f"/instructions/{i.id}/blank.docx",
+                      f"Инструктаж_{code}_{i.instruction_date:%Y-%m-%d}.docx") for i in instructions],
+            open_tab="plan", open_part="instructions"))
+    else:
+        items.append(_off("5.1.15", "Журнал инструктажа по охране труда"))
     items.append(_outside("5.1.16", "Материалы по трудоустройству", "Платформа не ведёт — храните бумажный экземпляр"))
     return items

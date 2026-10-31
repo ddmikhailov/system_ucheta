@@ -46,8 +46,9 @@ def test_folder_lists_every_document_of_clause_5_1(client, curator_headers, cura
     assert body["group_code"] == curator_group.code and body["school_year"]
     assert [i["code"] for i in body["items"]] == CODES
     states = {i["code"]: i["state"] for i in body["items"]}
-    for code in ("5.1.2", "5.1.5", "5.1.14", "5.1.15", "5.1.16"):
+    for code in ("5.1.2", "5.1.16"):
         assert states[code] == "outside"
+    assert states["5.1.5"] == "blank"  # справочник преподавателей пуст — ведётся во вкладке «Успеваемость»
 
 
 def test_every_download_of_the_folder_opens_for_the_curator(client, curator_headers, curator_user, curator_group, db, today):
@@ -58,7 +59,13 @@ def test_every_download_of_the_folder_opens_for_the_curator(client, curator_head
     client.post(f"/students/{student.id}/dossier/notes", headers=curator_headers,
                 json={"kind": "conversation", "text": "Обсудили пропуски", "occurred_on": today.isoformat()})
     client.post(f"/assemblies/groups/{curator_group.id}", headers=curator_headers, json={"assembly_date": today.isoformat()})
+    r = client.post(f"/instructions/groups/{curator_group.id}", headers=curator_headers,
+                    json={"instruction_date": today.isoformat(), "kind": "introductory", "topic": "Правила поведения в колледже"})
+    assert r.status_code == 201, r.text
+    client.post(f"/groups/{curator_group.id}/subjects", headers=curator_headers, json={"name": "Математика", "teacher_name": "Иванова А. А."})
     items = _items(client, curator_headers, curator_group)
+    assert items["5.1.15"]["state"] == "filled" and len(items["5.1.15"]["downloads"]) == 1
+    assert items["5.1.5"]["state"] == "filled" and items["5.1.5"]["open_tab"] == "performance"
     assert items["5.1.1"]["state"] == "filled" and items["5.1.7"]["state"] == "filled" and items["5.1.8–5.1.9"]["state"] == "filled"
     assert len(items["5.1.7"]["downloads"]) == 1 and len(items["5.1.8–5.1.9"]["downloads"]) == 1
     assert items["5.1.10"]["state"] == "filled" and items["5.1.10"]["can_add"] == "assembly" and len(items["5.1.10"]["downloads"]) == 1
@@ -67,7 +74,7 @@ def test_every_download_of_the_folder_opens_for_the_curator(client, curator_head
         for d in item["downloads"]:
             r = client.get(d["path"], headers=curator_headers)
             assert r.status_code == 200, f"{item['code']} {d['label']}: {r.status_code} {r.text[:200]}"
-            assert d["filename"].endswith((".docx", ".pdf"))
+            assert d["filename"].endswith((".docx", ".pdf", ".xlsx"))
             checked += 1
     assert checked >= 10
 
