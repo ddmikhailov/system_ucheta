@@ -196,7 +196,7 @@ def test_weak_jwt_secret_is_rejected():
 # --- 1.8 "Все присутствуют" не должно молча стирать день ---
 
 
-def test_mark_all_present_requires_confirm_when_marks_exist(client, curator_headers, curator_group, today, db):
+def test_mark_all_present_requires_confirm_when_marks_exist(client, curator_headers, curator_group, today, db, school_day_clock):
     from app.models import MarkCode, Student
 
     student = db.query(Student).filter(Student.study_group_id == curator_group.id).first()
