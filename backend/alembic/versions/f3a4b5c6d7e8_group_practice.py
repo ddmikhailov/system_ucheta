@@ -42,8 +42,8 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     with op.batch_alter_table('absence_periods') as batch:
-        batch.drop_index('ix_absence_periods_group_practice_id')
+        # MySQL не даёт удалить индекс, на который опирается внешний ключ: сначала ключ, потом индекс.
         batch.drop_constraint('fk_absence_periods_group_practice', type_='foreignkey')
+        batch.drop_index('ix_absence_periods_group_practice_id')
         batch.drop_column('group_practice_id')
-    op.drop_index('ix_group_practices_study_group_id', table_name='group_practices')
-    op.drop_table('group_practices')
+    op.drop_table('group_practices')  # индекс по study_group_id уходит вместе с таблицей (его держит внешний ключ)

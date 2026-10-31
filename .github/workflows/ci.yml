@@ -88,8 +88,8 @@ jobs:
           mysql -h 127.0.0.1 -u root -e "CREATE DATABASE kait20_migrate CHARACTER SET utf8mb4"
           alembic upgrade head
           # Откат к голове прошлого релиза и обратно — это шаги отката из памятки к выкладке.
-          # При выпуске следующей версии сюда ставится голова только что выпущенной (3.5.1 — w4f5g6h7i8j9).
-          alembic downgrade w4f5g6h7i8j9
+          # При выпуске следующей версии сюда ставится голова только что выпущенной (3.6.0 — r1a2b3c4d5e6).
+          alembic downgrade r1a2b3c4d5e6
           alembic upgrade head
 
       - name: pytest (MySQL)

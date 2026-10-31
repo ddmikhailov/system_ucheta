@@ -37,6 +37,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index('ix_group_assemblies_school_year', table_name='group_assemblies')
-    op.drop_index('ix_group_assemblies_study_group_id', table_name='group_assemblies')
+    # Индексы уходят вместе с таблицами; удалять их отдельно MySQL не даёт, пока на них опирается внешний ключ.
     op.drop_table('group_assemblies')
