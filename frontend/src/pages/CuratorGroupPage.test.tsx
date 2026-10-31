@@ -420,11 +420,11 @@ describe("CuratorGroupPage — релизный набор модулей (3.5.0
     });
   }
 
-  it("вкладки группы: журнал, студенты, питание, успеваемость и Мой ID", async () => {
+  it("вкладки группы: журнал, студенты, успеваемость, питание и Мой ID", async () => {
     mockApi(roster([entry(1, "Алексеев Пётр")]));
     openRelease();
     await screen.findByText("День ещё не сдан — можно заполнить");
-    expect(screen.getAllByRole("tab").map((t) => t.textContent?.replace(/\d+$/, ""))).toEqual(["Журнал", "Студенты", "Питание", "Успеваемость", "Мой ID"]);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent?.replace(/\d+$/, ""))).toEqual(["Журнал", "Студенты", "Успеваемость", "Питание", "Мой ID"]);
   });
 
   it("ссылка на скрытую вкладку открывает журнал", async () => {
