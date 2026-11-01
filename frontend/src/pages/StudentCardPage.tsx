@@ -5,7 +5,7 @@ import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/useAuth";
 import { DOSSIER_AUDIT_ROLES, DOSSIER_STAFF_ROLES, FORCE_DELETE_ROLES, STRUCTURE_EDITOR_ROLES, TEACHER_ROLES, inRoles } from "../constants/roles";
 import { STUDENT_STATUS_LABELS } from "../constants/studentStatus";
-import AbsenceMessageButton from "../components/AbsenceMessageButton";
+import ParentMessageButton from "../components/ParentMessageButton";
 import AbsenceSheetButton from "../components/AbsenceSheetButton";
 import { DossierSection } from "../components/StudentDossier";
 import { useApi } from "../hooks/useApi";
@@ -20,6 +20,7 @@ import type { DeleteResult, StudentCard, StudyGroupAdmin } from "../api/types";
 import { formatDateRu, todayIso } from "../utils/date";
 import SearchSelect from "../components/SearchSelect";
 import StudentDeletionRequestBox from "../components/StudentDeletionRequestBox";
+import UrgentReportBox from "../components/UrgentReportBox";
 import { dialogs, toast } from "../utils/feedback";
 import { MODULE } from "../constants/modules";
 import { isModuleOn } from "../utils/modules";
@@ -147,9 +148,10 @@ export default function StudentCardPage() {
           <Item label="Дата выбытия" value={card.left_at ? formatDateRu(card.left_at) : "—"} />
         </dl>
         <div className="quick-actions">
-          <AbsenceMessageButton studentId={card.id} />
+          <ParentMessageButton studentId={card.id} />
           <AbsenceSheetButton studentId={card.id} lastName={card.last_name} groupCode={card.group.code} />
         </div>
+        {inRoles(user?.role, TEACHER_ROLES) && <UrgentReportBox studentId={card.id} />}
       </TabPanel>
 
       {dossierOn && (

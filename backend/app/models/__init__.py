@@ -1,7 +1,7 @@
 from app.models.audit import AuditLog
 from app.models.auth import Role, User
 from app.models.calendar import AcademicCalendarDay, GroupCalendarOverride
-from app.models.events import CuratorReport, GroupEvent, GroupEventAttendee, ParentMeeting, ParentMeetingAttendee
+from app.models.events import CuratorReport, GroupAssembly, GroupEvent, GroupEventAttendee, ParentMeeting, ParentMeetingAttendee, SafetyInstruction
 from app.models.dossier import DossierAccessLog, StudentGuardian, StudentNote, StudentProfile
 from app.models.enums import (
     AssignmentRole,
@@ -11,19 +11,23 @@ from app.models.enums import (
     RoleCode,
     StudentStatus,
 )
-from app.models.marks import AbsenceCompensation, AbsencePeriod, AttendanceChangeRequest, AttendanceMark, DaySubmission, MarkCode
+from app.models.marks import AbsenceCompensation, AbsencePeriod, AttendanceChangeRequest, AttendanceMark, DaySubmission, GroupPractice, MarkCode
 from app.models.notifications import InAppNotification
 from app.models.password_reset import PasswordResetRequest
 from app.models.tasks import Task, TaskAssignment, TaskComment, TaskRow, TaskTemplate
 from app.models.meals import MealDayOverride, MealSubmission, StudentMeal
+from app.models.journal import JournalLesson, LessonMark
 from app.models.my_id import StudentMyId
 from app.models.org import Department, StudyGroup
+from app.models.subjects import GroupSubject
 from app.models.student_deletion import StudentDeletionRequest
+from app.models.urgent_report import UrgentReport
 from app.models.people import CuratorAssignment, Student, StudentGroupMembership
 
 __all__ = [
     "AbsenceCompensation",
     "AbsencePeriod",
+    "GroupPractice",
     "AcademicCalendarDay",
     "AssignmentRole",
     "AttendanceChangeRequest",
@@ -37,7 +41,11 @@ __all__ = [
     "Department",
     "DossierAccessLog",
     "GroupCalendarOverride",
+    "GroupAssembly",
     "GroupEvent",
+    "GroupSubject",
+    "JournalLesson",
+    "LessonMark",
     "GroupEventAttendee",
     "InAppNotification",
     "PasswordResetRequest",
@@ -45,6 +53,7 @@ __all__ = [
     "MarkSource",
     "ParentMeeting",
     "ParentMeetingAttendee",
+    "SafetyInstruction",
     "Role",
     "RoleCode",
     "Student",
@@ -56,6 +65,7 @@ __all__ = [
     "StudentNote",
     "StudentProfile",
     "StudentDeletionRequest",
+    "UrgentReport",
     "StudentGroupMembership",
     "StudentStatus",
     "StudyGroup",

@@ -11,7 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.api.routers import admin, attendance_changes, student_deletions, auth, curator, dashboards, dossier, dossier_import, export, individual_work, my_day, notifications, passport, students, support, tasks, events, meetings, reports, my_id, meals, contingent_import
+from app.api.routers import admin, attendance_changes, student_deletions, auth, curator, dashboards, dossier, dossier_import, export, individual_work, my_day, notifications, passport, students, support, tasks, events, meetings, reports, my_id, meals, contingent_import, group_subjects, journal, folder, assemblies, instructions, urgent_reports, practice
 from app.core.config import get_settings
 from app.core.modules import enabled_modules
 from app.core.observability import init_sentry
@@ -41,7 +41,7 @@ app = FastAPI(
     # общий VERSION-файл сюда не даёт выигрыша, см. TODO.md 5), поэтому при
     # бампе версии меняйте все три места;
     # tests/test_versions.py проверяет, что они не разошлись.
-    version="3.6.0",
+    version="4.0.0",
     docs_url="/docs" if _docs_enabled else None,
     redoc_url="/redoc" if _docs_enabled else None,
     openapi_url="/openapi.json" if _docs_enabled else None,
@@ -105,6 +105,7 @@ MODULE_ROUTERS = (
     (curator.router, None),
     (attendance_changes.router, None),
     (student_deletions.router, None),
+    (urgent_reports.router, None),
     (dashboards.router, None),
     (admin.router, None),
     (export.router, None),
@@ -113,6 +114,9 @@ MODULE_ROUTERS = (
     (dossier.router, "dossier"),
     (events.router, "plan"),
     (meetings.router, "meetings"),
+    (assemblies.router, "meetings"),
+    (instructions.router, "plan"),
+    (practice.router, None),
     (reports.router, "reports"),
     (my_id.router, "my_id"),
     (dossier_import.router, "dossier"),
@@ -122,7 +126,10 @@ MODULE_ROUTERS = (
     (tasks.router, "tasks"),
     (meals.router, "meals"),
     (contingent_import.router, None),
+    (group_subjects.router, None),
+    (journal.router, "journals"),
     (support.router, None),
+    (folder.router, None),
 )
 
 

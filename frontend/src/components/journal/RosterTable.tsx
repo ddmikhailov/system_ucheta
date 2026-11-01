@@ -86,7 +86,10 @@ export default function RosterTable({ roster, pending, markCodes, thresholds, re
                     Период
                   </button>
                 )}
-                {entry.is_locked && entry.absence_period && (
+                {entry.is_locked && entry.absence_period?.group_practice_id != null && (
+                  <span className="hint">Практика группы</span>
+                )}
+                {entry.is_locked && entry.absence_period && entry.absence_period.group_practice_id == null && (
                   <button
                     className="link-btn"
                     onClick={() => onPeriod(entry.student_id, entry.absence_period ?? null)}

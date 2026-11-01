@@ -6,6 +6,7 @@
 в журнал просмотров досье запись на каждого студента из категорий; сводка
 по группам — только числа, ей достаточно записи в журнале аудита."""
 import io
+from typing import Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -21,6 +22,7 @@ from app.db.session import get_db
 from app.models import DossierAccessLog, StudyGroup, User
 from app.services import passport_service as svc
 from app.services import passport_sheet_service as sheet
+from app.services import scholarship_list_service as scholarships
 from app.services.audit_service import log_action
 
 router = APIRouter(prefix="/passport", tags=["passport"])
@@ -250,5 +252,32 @@ def group_passport_docx(group_id: int, user: User = Depends(get_current_user), d
     db.commit()
     return Response(
         content=content, media_type=_DOCX,
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    )
+
+
+@router.get("/group/{group_id}/scholarships")
+def group_scholarships(
+    group_id: int, format: Literal["xlsx", "docx"] = "xlsx",
+    user: User = Depends(get_current_user), db: Session = Depends(get_db),
+):
+    """Список группы на стипендии (п. 5.1.14): студенты с видом стипендии из досье, в Excel или простой таблице Word.
+    Читает особые данные досье, поэтому, как поимённый паспорт, пишет в журнал просмотров запись на каждого студента."""
+    group = _group_or_403(db, user, group_id)
+    today = today_local()
+    try:
+        kinds = scholarships.collect(db, group, today)
+    except scholarships.SpecialDataUnavailable:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Список недоступен: на сервере не задан ключ шифрования досье")
+    if format == "docx":
+        content, media_type = scholarships.build_docx(group, today, kinds), _DOCX
+    else:
+        content, media_type = scholarships.build_xlsx(group, today, kinds), _XLSX
+    filename = f"Стипендии_{group.code}_{today.strftime('%d.%m.%Y')}.{format}"
+    db.add_all(DossierAccessLog(student_id=sid, user_id=user.id, included_special=True) for sid in scholarships.student_ids(kinds))
+    log_action(db, user, "passport.scholarships", "study_group", str(group.id))
+    db.commit()
+    return Response(
+        content=content, media_type=media_type,
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
     )

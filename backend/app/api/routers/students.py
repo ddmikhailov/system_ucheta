@@ -20,7 +20,7 @@ from app.models import (
     StudyGroup,
     User,
 )
-from app.schemas.my_day import AbsenceMessage
+from app.schemas.my_day import AbsenceMessage, ParentMessage
 from app.schemas.students import (
     StudentCard,
     StudentCardGroup,
@@ -31,7 +31,9 @@ from app.schemas.students import (
     StudentMonthAttendance,
     StudentMonthSummary,
 )
-from app.services import absence_sheet_service, calendar_service, group_membership_service, my_day_service, stats_service
+from app.services import (
+    absence_sheet_service, calendar_service, group_membership_service, my_day_service, parent_message_service, stats_service,
+)
 from app.services.audit_service import log_action
 
 router = APIRouter(prefix="/students", tags=["students"])
@@ -165,6 +167,19 @@ def get_absence_message(
     """Готовый текст родителям о пропусках за последние дни — куратор копирует его в мессенджер."""
     student = _get_accessible_student(db, user, student_id)
     return my_day_service.absence_message(db, student, user, days)
+
+
+@router.get("/{student_id}/parent-message", response_model=ParentMessage)
+def get_parent_message(
+    student_id: int, kind: str = "absences", days: int = 14,
+    user: User = Depends(get_current_user), db: Session = Depends(get_db),
+):
+    """Готовый текст родителям (пропуски, опоздания, длительное отсутствие, собрание, итог семестра) — куратор правит
+    его и копирует в мессенджер."""
+    if kind not in parent_message_service.KINDS:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Неизвестный вид сообщения")
+    student = _get_accessible_student(db, user, student_id)
+    return parent_message_service.build(db, student, user, kind, days)
 
 
 DOCX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"

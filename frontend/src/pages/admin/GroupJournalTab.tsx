@@ -2,7 +2,8 @@ import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../auth/useAuth";
 import DeletionReviewList from "../../components/DeletionReviewList";
 import ChangeReviewList from "../../components/journal/ChangeReviewList";
-import { JOURNAL_REVIEWER_ROLES, inRoles } from "../../constants/roles";
+import UrgentReportInbox from "../../components/UrgentReportInbox";
+import { JOURNAL_REVIEWER_ROLES, URGENT_REPORT_READER_ROLES, inRoles } from "../../constants/roles";
 import { api } from "../../api/client";
 import DayJournal, { type JournalGroup } from "../../components/DayJournal";
 import type { DepartmentAdmin, StudyGroupAdmin } from "../../api/types";
@@ -36,6 +37,7 @@ export default function GroupJournalTab() {
   const canReview = inRoles(user?.role, JOURNAL_REVIEWER_ROLES);
   return (
     <>
+      {inRoles(user?.role, URGENT_REPORT_READER_ROLES) && <UrgentReportInbox />}
       {canReview && <DeletionReviewList />}
       {canReview && (
         <ChangeReviewList

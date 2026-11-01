@@ -39,7 +39,7 @@ def _change(client, headers, group, day, exceptions, reason="Пришла спр
     )
 
 
-def test_first_late_submission_is_direct_and_today_is_free(client, curator_headers, curator_group, db, today):
+def test_first_late_submission_is_direct_and_today_is_free(client, curator_headers, curator_group, db, today, school_day_clock):
     day = _past_study_day(db, curator_group)
     r = client.get(f"/curator/groups/{curator_group.id}/day?date={day}", headers=curator_headers)
     assert r.json()["edit_requires_review"] is False  # прошлый, но не сданный — сдаётся сразу
@@ -123,7 +123,7 @@ def test_new_request_replaces_pending_and_author_can_cancel(client, curator_head
     assert client.get("/attendance-changes", headers=dept_head_headers).json() == []
 
 
-def test_request_validation(client, curator_headers, curator_group, db, submitted_past, today):
+def test_request_validation(client, school_day_clock, curator_headers, curator_group, db, submitted_past, today):
     assert _change(client, curator_headers, curator_group, submitted_past, [], reason="ok").status_code == 422  # причина короче 3
     assert _change(client, curator_headers, curator_group, submitted_past,
                    [{"student_id": 999999, "mark_code": "н"}]).status_code == 400

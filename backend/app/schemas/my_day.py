@@ -85,3 +85,9 @@ class AbsenceMessage(BaseModel):
     days: int
     absences: list[AbsenceLine]
     text: str
+
+
+class ParentMessage(BaseModel):
+    kind: str
+    text: str
+    empty_reason: str | None = None

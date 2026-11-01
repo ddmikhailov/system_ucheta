@@ -172,6 +172,17 @@ describe("PassportPage — паспорт группы", () => {
     expect(download).toHaveBeenCalledWith("/passport/group/1/docx", "Социальный_паспорт_СА172.docx");
   });
 
+  it("список на стипендии выгружается в Excel и в Word", async () => {
+    const user = userEvent.setup();
+    mockApi();
+    renderPage(<PassportPage />, { route: "/passport?group=1", role: "curator" });
+    await screen.findByRole("heading", { name: /Социальный паспорт группы СА172/ });
+    await user.click(screen.getByRole("button", { name: "Стипендии: Excel" }));
+    expect(download).toHaveBeenCalledWith("/passport/group/1/scholarships?format=xlsx", "Стипендии_СА172.xlsx");
+    await user.click(screen.getByRole("button", { name: "Стипендии: Word" }));
+    expect(download).toHaveBeenCalledWith("/passport/group/1/scholarships?format=docx", "Стипендии_СА172.docx");
+  });
+
   it("не показывает чужой паспорт, пока грузится нужный", async () => {
     mockApi({ group: groupPassport({ group_id: 99, group_code: "ЧУЖАЯ" }) });
     renderPage(<PassportPage />, { route: "/passport?group=1", role: "admin" });

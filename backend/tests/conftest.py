@@ -375,6 +375,22 @@ def today() -> datetime.date:
     return day
 
 
+@pytest.fixture()
+def school_day_clock(monkeypatch, today):
+    """«Сегодня» приложения = фикстура `today` (ближайший учебный день). Нужна тестам, где важно, что день
+    именно сегодняшний (первая сдача без запроса, правка «сегодня» свободна): в выходные `today` — пятница,
+    а приложение считает её прошлым днём. Подменяет `today_local` во всех модулях `app` и `tests`, которые его импортировали."""
+    import sys
+
+    from app.core import time as time_module
+
+    original = time_module.today_local
+    for name, module in list(sys.modules.items()):
+        if name.split(".")[0] in ("app", "tests") and getattr(module, "today_local", None) is original:
+            monkeypatch.setattr(module, "today_local", lambda: today)
+    return today
+
+
 MEAL_MANAGER_PASSWORD = "MealManager#58x!"
 
 

@@ -11,7 +11,7 @@ from app.models import InAppNotification, RoleCode, StudyGroup, User
 # о проблемах). Один человек может быть и куратором, и заведующим — вкладки не смешивают эти потоки. Неизвестный вид считается рабочим.
 MANAGE_KINDS = frozenset({
     "task_submitted", "task_review_waiting", "attendance_change", "late_edit", "password_reset",
-    "student_deletion", "problem_report",
+    "student_deletion", "problem_report", "urgent_report",
 })
 
 

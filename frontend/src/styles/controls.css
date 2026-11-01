@@ -240,6 +240,15 @@ textarea {
   overflow-y: auto;
 }
 
+/* На телефоне нижняя навигация лежит выше окон: оставляем ей место, иначе кнопки внизу длинной формы не нажать. */
+.modal-backdrop {
+  padding-bottom: calc(16px + var(--bottom-nav-offset, 0px));
+}
+
+.modal {
+  max-height: calc(100vh - 32px - var(--bottom-nav-offset, 0px));
+}
+
 /* Вторичная кнопка отправки формы остаётся вторичной (старое правило красит любую submit-кнопку градиентом). */
 form button.btn-secondary[type="submit"]:not(.link-btn),
 .actions button.btn-secondary:last-child:not(.link-btn),
@@ -308,4 +317,50 @@ th[aria-sort="descending"] .sort-btn__arrow {
   gap: 6px;
   min-height: var(--control-h);
   font-size: 14px;
+}
+
+/* Карточка куратора: по одной карточке на группу, на телефоне — в одну колонку. */
+.curator-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: 12px;
+}
+
+.curator-card {
+  border: 1px solid var(--border);
+  border-radius: var(--control-radius);
+  background: var(--card-bg);
+  padding: 12px;
+}
+
+.curator-card--attention {
+  border-left: 4px solid var(--danger, #c0392b);
+}
+
+.curator-card__head h3 {
+  margin: 0;
+}
+
+.curator-card__head span,
+.curator-card__contingent {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.curator-card__metrics {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.curator-card__metrics dt {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.curator-card__metrics dd {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
 }

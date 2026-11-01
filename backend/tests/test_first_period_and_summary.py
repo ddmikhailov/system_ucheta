@@ -23,7 +23,7 @@ def _admin(db):
     return db.query(User).join(Role).filter(Role.code == RoleCode.ADMIN.value).one()
 
 
-def test_submit_day_saves_first_period_and_resubmit_keeps_it(client, curator_headers, curator_group, db, today):
+def test_submit_day_saves_first_period_and_resubmit_keeps_it(client, curator_headers, curator_group, db, today, school_day_clock):
     day = _recent_study_day(db, curator_group, today)
 
     r = client.post(

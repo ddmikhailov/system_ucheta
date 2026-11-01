@@ -141,10 +141,10 @@ export interface MyDay {
   review_waiting: { count: number; oldest_submitted_at: string | null } | null;
 }
 
-export interface AbsenceMessage {
-  days: number;
-  absences: { date: string; code: string; name: string }[];
+export interface ParentMessage {
+  kind: string;
   text: string;
+  empty_reason: string | null;
 }
 
 export interface Dossier {
@@ -188,6 +188,8 @@ export interface RosterAbsencePeriod {
   date_from: string;
   date_to: string;
   basis_reference: string | null;
+  /** Период создала практика группы: правится только на вкладке «Практика». */
+  group_practice_id?: number | null;
 }
 
 export interface RosterEntry {
@@ -334,6 +336,32 @@ export interface CuratorDisciplineRow {
   total_study_days: number;
 }
 
+export interface ContingentMovement {
+  joined: number;
+  left: number;
+  transferred_in: number;
+  transferred_out: number;
+  academic_leave: number;
+}
+
+export interface CuratorCardRow {
+  study_group_id: number;
+  code: string;
+  course: number;
+  department_id: number;
+  responsible_name: string | null;
+  students_count: number;
+  attendance_percent: number | null;
+  absent_unexcused_percent: number | null;
+  risk_count: number;
+  compensation_count: number;
+  contingent: ContingentMovement;
+  on_time: number;
+  late: number;
+  missed: number;
+  total_study_days: number;
+}
+
 // --- Admin ---
 
 export interface DepartmentAdmin {
@@ -355,6 +383,9 @@ export interface StudyGroupAdmin {
   curator_assignment_id: number | null;
   deputy_name: string | null;
   deputy_assignment_id: number | null;
+  /** Период замены: у запланированного заместителя начало в будущем, конец может быть пустым. */
+  deputy_start_date?: string | null;
+  deputy_end_date?: string | null;
   /** Сколько студентов учится в группе сейчас (без академического отпуска и отчисленных). */
   students_count?: number;
 }
@@ -876,6 +907,26 @@ export interface GroupMeetings {
   guardians: MeetingGuardian[];
 }
 
+export interface SafetyInstruction {
+  id: number;
+  study_group_id: number;
+  school_year: string;
+  instruction_date: string;
+  kind: string;
+  kind_label: string;
+  topic: string;
+  conducted_by: string | null;
+  note: string | null;
+}
+
+export interface GroupInstructions {
+  group_id: number;
+  school_year: string;
+  instructions: SafetyInstruction[];
+  kinds: Record<string, string>;
+  can_edit: boolean;
+}
+
 export interface ReportField {
   key: string;
   label: string;
@@ -1090,6 +1141,30 @@ export interface StudentDeletionRequest {
   review_comment: string | null;
 }
 
+/** Срочное сообщение куратора заведующему. Автору текст не возвращается (text = null), читателям отделения — всегда. */
+export interface UrgentReport {
+  id: number;
+  student_id: number;
+  student_name: string;
+  group_code: string;
+  category: "misconduct" | "offense" | "emergency";
+  text: string | null;
+  author_name: string;
+  created_at: string;
+  acknowledged_by_name: string | null;
+  acknowledged_at: string | null;
+}
+
+/** Строка списка «Изменение ПДн за месяц» для администратора: без значений, только названия полей. */
+export interface PdChange {
+  created_at: string;
+  student_id: number;
+  student_name: string;
+  group_code: string;
+  changed_by_name: string | null;
+  changes: string[];
+}
+
 /** «Восполнить пропуски» в группе: кому нужно и что уже закрыто куратором в этом семестре. */
 export interface CompensationStudent {
   student_id: number;
@@ -1132,4 +1207,183 @@ export interface AuditEntry {
 export interface AuditPage {
   items: AuditEntry[];
   next_before_id: number | null;
+}
+
+export interface GroupSubject {
+  id: number;
+  study_group_id: number;
+  code: string | null;
+  name: string;
+  teacher_name: string | null;
+  teacher_phone: string | null;
+  note: string | null;
+  updated_at: string;
+}
+
+export interface GroupSubjects {
+  can_edit: boolean;
+  subjects: GroupSubject[];
+}
+
+// --- Журналы дисциплин (загрузка выгрузки электронного журнала преподавателя) ---
+
+export interface JournalImportReport {
+  subject_code: string;
+  subject_name: string;
+  period_from: string | null;
+  period_to: string | null;
+  counts: Record<string, number>;
+  warnings: string[];
+  not_found: string[];
+  ambiguous: string[];
+  out_of_scope: string[];
+  blocked: string | null;
+  applied: boolean;
+}
+
+export interface JournalSubject {
+  code: string;
+  name: string;
+  lessons: number;
+  first_on: string;
+  last_on: string;
+}
+
+export interface JournalLesson {
+  /** «2026-09-01#1» — ключ ячейки в `cells`. */
+  key: string;
+  date: string;
+  slot: number;
+  topic: string | null;
+  homework: string | null;
+}
+
+export interface JournalGridStudent {
+  student_id: number;
+  full_name: string;
+  cells: Record<string, string>;
+  average: number | null;
+  absent_hours: number;
+  /** Оценок «2» — задолженность. */
+  twos: number;
+  /** Средняя оценка ниже 4 — куратору помочь студенту исправить. */
+  low_average: boolean;
+}
+
+export interface JournalGrid {
+  code: string;
+  name: string;
+  lessons: JournalLesson[];
+  students: JournalGridStudent[];
+}
+
+export interface JournalDiscrepancy {
+  student_id: number;
+  full_name: string;
+  date: string;
+  hours: number;
+  subjects: string[];
+  curator_code: string | null;
+  kind: "no_mark" | "present";
+}
+
+// «Папка куратора» (backend: api/routers/folder.py): документы п. 5.1 положения и ссылки на их выгрузку.
+export interface FolderDownload {
+  label: string;
+  path: string;
+  filename: string;
+}
+
+export type FolderItemState = "filled" | "blank" | "outside" | "off";
+
+export interface FolderItem {
+  code: string;
+  title: string;
+  state: FolderItemState;
+  note: string;
+  downloads: FolderDownload[];
+  open_tab: string | null;
+  open_part: string | null;
+  can_add: "assembly" | null;
+}
+
+export interface CuratorFolder {
+  group_id: number;
+  group_code: string;
+  school_year: string;
+  items: FolderItem[];
+}
+
+// Общие собрания группы (backend: api/routers/assemblies.py), протокол п. 5.1.10.
+export interface GroupAssembly {
+  id: number;
+  study_group_id: number;
+  school_year: string;
+  number: number;
+  assembly_date: string | null;
+  chair: string | null;
+  secretary: string | null;
+  present_count: number | null;
+  agenda: string | null;
+  listened: string | null;
+  resolved: string | null;
+}
+
+export interface GroupAssemblies {
+  group_id: number;
+  school_year: string;
+  students_count: number;
+  assemblies: GroupAssembly[];
+}
+
+export type PracticeKind = "educational" | "production" | "pre_diploma";
+/** Состояние для напоминания: идёт, скоро начнётся, закончилась без характеристики; null — ничего не требуется. */
+export type PracticeState = "active" | "soon" | "no_review" | null;
+
+export interface GroupPractice {
+  id: number;
+  study_group_id: number;
+  kind: PracticeKind;
+  kind_name: string;
+  date_from: string;
+  date_to: string;
+  base: string | null;
+  college_supervisor: string | null;
+  base_supervisor: string | null;
+  phone: string | null;
+  review_received: boolean;
+  review_received_on: string | null;
+  note: string | null;
+  state: PracticeState;
+  /** Сколько уже стоявших отметок заменила практика — только в ответе на сохранение. */
+  replaced_marks: number;
+}
+
+export interface GroupPractices {
+  group_id: number;
+  can_edit: boolean;
+  practices: GroupPractice[];
+}
+
+export interface CurrentPracticeRow {
+  id: number;
+  study_group_id: number;
+  group_code: string;
+  course: number;
+  department: string;
+  kind_name: string;
+  date_from: string;
+  date_to: string;
+  base: string | null;
+  college_supervisor: string | null;
+  base_supervisor: string | null;
+  phone: string | null;
+  review_received: boolean;
+  state: "active" | "soon" | "no_review";
+}
+
+export interface StarterTask {
+  week: number;
+  title: string;
+  due_date: string;
 }

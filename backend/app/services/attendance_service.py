@@ -342,6 +342,9 @@ def count_manual_exceptions(db: Session, study_group_id: int, date: datetime.dat
 
 def get_roster(db: Session, study_group_id: int, date: datetime.date, carry_over: bool = True) -> dict:
     """`carry_over=False` — личная настройка куратора «не подставлять отметки прошлого дня»: журнал открывается пустым."""
+    from app.services import practice_service  # практика сама использует этот модуль
+
+    practice_service.fill_missing(db, study_group_id, date)  # студенты, пришедшие в группу во время практики
     active_students = get_active_students(db, study_group_id, date)
     student_ids = [s.id for s in active_students]
 
@@ -429,6 +432,7 @@ def get_roster(db: Session, study_group_id: int, date: datetime.date, carry_over
                         "date_from": mark.absence_period.date_from,
                         "date_to": mark.absence_period.date_to,
                         "basis_reference": mark.absence_period.basis_reference,
+                        "group_practice_id": mark.absence_period.group_practice_id,
                     }
                     if mark and mark.source == MarkSource.PERIOD and mark.absence_period
                     else None

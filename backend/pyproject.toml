@@ -7,6 +7,6 @@
 # tests/test_versions.py следит, чтобы объявленные версии не разошлись.
 [project]
 name = "kait20-backend"
-version = "3.6.0"
+version = "4.0.0"
 description = "КАИТ-20 — платформа учёта посещаемости (backend)"
 requires-python = ">=3.12,<3.15"

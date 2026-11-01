@@ -35,6 +35,8 @@ class StudyGroupRead(BaseModel):
     curator_assignment_id: int | None = None
     deputy_name: str | None = None
     deputy_assignment_id: int | None = None
+    deputy_start_date: datetime.date | None = None
+    deputy_end_date: datetime.date | None = None
     students_count: int = 0  # учатся сейчас (без академического отпуска и отчисленных)
 
 
@@ -284,3 +286,14 @@ class UserJournalOverview(BaseModel):
     last_activity_at: datetime.datetime | None
     activity_30d: list[UserActivityDay]
     months: list[UserActivityMonth]
+
+
+class PdChangeRead(BaseModel):
+    """Строка списка «Изменение ПДн за месяц»: кто и когда менял данные студента (значений не содержит)."""
+
+    created_at: datetime.datetime
+    student_id: int
+    student_name: str
+    group_code: str
+    changed_by_name: str | None
+    changes: list[str]
